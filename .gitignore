@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+backend/dist/
+frontend/release/
+
+# Python
+__pycache__/
+backend/*.spec
+backend/.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+.pnpm-debug.log*
+
+# Editor / IDE
+.idea/
+.vscode/
+*.sw?
+*~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/
+playwright-report/
+test-results/
+
+# Misc build cache
+*.tsbuildinfo
+*.tgz
+*.map
+.eslintcache
+.turbo/
+.vite/
+stats.html

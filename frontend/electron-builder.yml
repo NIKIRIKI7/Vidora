@@ -1,0 +1,21 @@
+appId: com.vidora.app
+productName: Vidora
+directories:
+  output: release
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+extraResources:
+  - from: ../backend/dist/
+    to: backend/
+    filter: "**/*.exe"
+win:
+  target: nsis
+  icon: null
+mac:
+  target: dmg
+  icon: null
+linux:
+  target: AppImage
+  icon: null
