@@ -49,6 +49,13 @@ export interface Scene {
   remotionCode?: string
 }
 
+export interface CustomVoice {
+  id: string
+  name: string
+  refAudioPath: string
+  refText: string
+}
+
 export interface ProjectSettings {
   name: string
   format: VideoFormat
@@ -56,6 +63,7 @@ export interface ProjectSettings {
   metadata: Metadata
   montage: MontageSettings
   scenes: Scene[]
+  customVoices?: CustomVoice[]
   rawMarkdown: string
-  projectDir?: FileSystemDirectoryHandle
+  projectDir?: any
 }

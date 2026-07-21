@@ -37,3 +37,16 @@ export const useProjectStore = create<ProjectStore>()(
     }
   )
 )
+
+interface NotificationState {
+  notification: { message: string; type: 'success' | 'error' | 'info' } | null
+  showNotification: (message: string, type?: 'success' | 'error' | 'info') => void
+}
+
+export const useNotificationStore = create<NotificationState>((set) => ({
+  notification: null,
+  showNotification: (message, type = 'info') => {
+    set({ notification: { message, type } })
+    setTimeout(() => set({ notification: null }), 3500)
+  }
+}))

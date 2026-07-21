@@ -18,17 +18,24 @@ class AudioService:
             },
         })
 
-        voice_dir = os.path.join(request.project_path, "voice")
+        # Save to assets/voice instead of just voice
+        voice_dir = os.path.join(request.project_path, "assets", "voice")
         os.makedirs(voice_dir, exist_ok=True)
 
-        filename = f"{request.fragment_id}.wav"
+        # Format: Scene_1_Frag_2_abcd12.wav
+        filename = f"{request.file_prefix}_{request.fragment_id[:6]}.wav"
         output_path = os.path.join(voice_dir, filename)
 
         await self.provider.generate_tts(
             text=request.text,
             voice_model=request.voice_model,
-            stability=request.stability,
-            clarity=request.clarity,
+            guidance_scale=request.guidance_scale,
+            num_steps=request.num_steps,
+            speed=request.speed,
+            duration=request.duration,
+            denoise=request.denoise,
+            preprocess_prompt=request.preprocess_prompt,
+            postprocess_output=request.postprocess_output,
             output_path=output_path,
             ref_audio_path=request.ref_audio_path,
             ref_text=request.ref_text,

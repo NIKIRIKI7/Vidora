@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, type ChangeEvent } from 'react'
 import { Badge, SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
-import { generateRemotionPrompt, generateFragmentPrompt } from '../lib/generateRemotionPrompt'
-import { saveSceneCodeToDisk, saveAudioToDisk, saveAssetToDisk } from '@features/file-system'
-import type { ProjectSettings, AppColors, SceneFragment, AppTypography } from '@entities/project'
+import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
+import { useNotificationStore } from '@entities/project'
+import type { ProjectSettings, AppColors, SceneFragment, AppTypography, Scene } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
 
@@ -15,34 +15,59 @@ interface Props {
   onDeleteProject: (id: string) => void
 }
 
+const getProjectPath = (project: ProjectSettings) =>
+  project.projectDir?.name || project.name || 'vidora_projects'
+
 export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProject, onUpdateProject, onDeleteProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
-  const [activeTab, setActiveTab] = useState<'script' | 'code'>('script')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isCopied, setIsCopied] = useState(false)
-  const [copiedFragId, setCopiedFragId] = useState<string | null>(null)
-  const [expandedCodeFrags, setExpandedCodeFrags] = useState<Set<string>>(new Set())
   const [codeInput, setCodeInput] = useState('')
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
-  const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
 
+  const [previewTab, setPreviewTab] = useState<'video' | 'scene' | 'fragment'>('video')
+
+  const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
   const [voiceModel, setVoiceModel] = useState('aria')
-  const [voiceStability, setVoiceStability] = useState(75)
-  const [voiceClarity, setVoiceClarity] = useState(90)
-  const [audioRefName, setAudioRefName] = useState<string | null>(null)
-  const [cloneText, setCloneText] = useState('')
+  const [guidanceScale, setGuidanceScale] = useState(3.0)
+  const [numSteps, setNumSteps] = useState(32)
+  const [speed, setSpeed] = useState(1.0)
+  const [duration, setDuration] = useState(0)
+  const [denoise, setDenoise] = useState(true)
+  const [preprocessPrompt, setPreprocessPrompt] = useState(true)
+  const [postprocessOutput, setPostprocessOutput] = useState(true)
+  const [audioTarget, setAudioTarget] = useState<'fragment' | 'scene' | 'all'>('scene')
+
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isProcessingAudio, setIsProcessingAudio] = useState(false)
-  const [activeProcess, setActiveProcess] = useState<'denoise' | 'normalize' | 'remove_silence' | 'enhance' | null>(null)
+  const [activeProcess, setActiveProcess] = useState<'denoise' | 'normalize' | 'remove_silence' | 'enhance' | 'undo' | null>(null)
+
+  const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false)
+  const [newVoiceName, setNewVoiceName] = useState('')
+  const [newVoiceText, setNewVoiceText] = useState('')
+  const [newVoiceAudioPath, setNewVoiceAudioPath] = useState<string | null>(null)
 
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
-  const [renderTarget, setRenderTarget] = useState('проекта')
+  const [renderTaskId, setRenderTaskId] = useState<string | null>(null)
   const [targetFrag, setTargetFrag] = useState<string | null>(null)
 
-  // ponytail: single WS connection for render progress
   const wsRef = useRef<WebSocket | null>(null)
+  const audioAbortController = useRef<AbortController | null>(null)
+  const showNotification = useNotificationStore(s => s.showNotification)
+
+  const activeScene = project.scenes.find(s => s.id === activeSceneId)
+
+  useEffect(() => {
+    if (activeScene && activeScene.fragments.length > 0) {
+      if (!activeScene.fragments.find(f => f.id === targetFrag)) {
+        setTargetFrag(activeScene.fragments[0].id)
+      }
+    } else {
+      setTargetFrag(null)
+    }
+  }, [activeSceneId, activeScene])
+
   useEffect(() => {
     const ws = new WebSocket(`${API.replace('http', 'ws')}/ws/events/frontend`)
     ws.onmessage = (e) => {
@@ -51,7 +76,11 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
         if (msg.type === 'RENDER_PROGRESS') {
           setRenderProgress(msg.payload.progress)
           if (msg.payload.progress >= 100 || msg.payload.status === 'done') {
-            setTimeout(() => setIsRendering(false), 500)
+            setTimeout(() => {
+              setIsRendering(false)
+              setRenderTaskId(null)
+              showNotification('Рендер успешно завершен!', 'success')
+            }, 500)
           }
         }
       } catch { /* ignore */ }
@@ -61,12 +90,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   }, [])
 
   const audioInputRef = useRef<HTMLInputElement>(null)
-  const assetInputRef = useRef<HTMLInputElement>(null)
-  const fragmentAudioRef = useRef<HTMLInputElement>(null)
-  const fragmentAssetRef = useRef<HTMLInputElement>(null)
-  const cloneAudioRef = useRef<HTMLInputElement>(null)
-
-  const activeScene = project.scenes.find(s => s.id === activeSceneId)
+  const customVoiceAudioRef = useRef<HTMLInputElement>(null)
 
   const handleSceneChange = (id: string) => {
     setActiveSceneId(id)
@@ -90,7 +114,7 @@ const COLORS = {
 export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = () => {
   return (
     <AbsoluteFill style={{ backgroundColor: COLORS.background }}>
-${frags.map((f, i) => {
+      ${frags.map((f, i) => {
       const start = Math.round((f.startTime ?? i * 2) * 30)
       const dur = Math.round(((f.endTime ?? (i + 1) * 2) - (f.startTime ?? i * 2)) * 30)
       return `      <Sequence from={${start}} durationInFrames={${dur}}>
@@ -110,6 +134,7 @@ ${frags.map((f, i) => {
   const handleGenerateCode = async () => {
     if (!activeScene) return
     setIsGeneratingCode(true)
+    showNotification('Идет генерация TSX кода...', 'info')
     try {
       const prompt = generateRemotionPrompt(project, activeScene)
       const res = await fetch(`${API}/api/v1/code/generate`, {
@@ -119,7 +144,7 @@ ${frags.map((f, i) => {
           target_id: activeScene.id,
           prompt,
           project_data: project,
-          project_path: project.projectDir ? project.projectDir.name : '',
+          project_path: getProjectPath(project),
         }),
       })
       const data = await res.json()
@@ -131,167 +156,183 @@ ${frags.map((f, i) => {
             s.id === activeScene.id ? { ...s, remotionCode: data.tsx_code } : s
           ),
         })
+        showNotification('Код успешно сгенерирован', 'success')
       }
-    } catch (e) {
-      console.error('Code generation failed', e)
+    } catch {
+      showNotification('Ошибка генерации кода. Сервер LLM недоступен.', 'error')
     } finally {
       setIsGeneratingCode(false)
-    }
-  }
-
-  const handleColorChange = (key: keyof AppColors, value: string) => {
-    onUpdateProject({ ...project, montage: { ...project.montage, colors: { ...project.montage.colors, [key]: value } } })
-  }
-
-  const handleTypographyChange = (key: keyof AppTypography, value: string) => {
-    onUpdateProject({ ...project, montage: { ...project.montage, typography: { ...project.montage.typography, [key]: value } } })
-  }
-
-  const handleMetadataChange = (key: keyof typeof project.metadata, value: string) => {
-    onUpdateProject({ ...project, metadata: { ...project.metadata, [key]: key === 'tags' ? value.split(',').map(t => t.trim()) : value } })
-  }
-
-  const copyPromptForAI = async () => {
-    if (!activeScene) return
-    const prompt = generateRemotionPrompt(project, activeScene)
-    await navigator.clipboard.writeText(prompt)
-    setIsCopied(true)
-    setTimeout(() => setIsCopied(false), 2000)
-  }
-
-  const copyFragmentPrompt = async (frag: SceneFragment) => {
-    if (!activeScene) return
-    const prompt = generateFragmentPrompt(project, activeScene, frag)
-    await navigator.clipboard.writeText(prompt)
-    setCopiedFragId(frag.id)
-    setTimeout(() => setCopiedFragId(null), 2000)
-  }
-
-  const toggleFragCode = (id: string) => {
-    setExpandedCodeFrags(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const handleSaveCode = async () => {
-    if (!activeScene) return
-    onUpdateProject({
-      ...project,
-      scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: codeInput } : s),
-    })
-    if (project.projectDir) {
-      await saveSceneCodeToDisk(project.projectDir, `Scene_${activeScene.id}`, codeInput)
     }
   }
 
   const handleAudioUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    showNotification('Загрузка аудио...', 'info')
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('project_path', project.projectDir?.name || '')
+    formData.append('project_path', getProjectPath(project))
     try {
       const res = await fetch(`${API}/api/v1/audio/upload-ref`, { method: 'POST', body: formData })
       const data = await res.json()
-      if (data.status === 'ok') setAudioLoaded(data.ref_audio_path)
+      if (data.status === 'ok') {
+        setAudioLoaded(data.ref_audio_path)
+        showNotification('Аудио загружено', 'success')
+      }
     } catch {
-      if (project.projectDir) await saveAudioToDisk(project.projectDir, file)
       setAudioLoaded(file.name)
+      showNotification('Ошибка загрузки', 'error')
     }
     e.target.value = ''
   }
 
-  const handleAssetUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleCustomVoiceAudioUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (project.projectDir) await saveAssetToDisk(project.projectDir, file, 'b-roll')
-    e.target.value = ''
-  }
-
-  const handleFragmentAudio = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !targetFrag) return
-    if (project.projectDir) await saveAudioToDisk(project.projectDir, file)
-    updateFragment(targetFrag, { audioFileName: file.name })
-    e.target.value = ''
-  }
-
-  const handleFragmentAsset = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !targetFrag) return
-    if (project.projectDir) await saveAssetToDisk(project.projectDir, file, 'b-roll')
-    updateFragment(targetFrag, { bRollFileName: file.name })
-    e.target.value = ''
-  }
-
-  const handleCloneAudioUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const projectPath = project.projectDir?.name || project.name || 'temp_project'
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('project_path', projectPath)
+    formData.append('project_path', getProjectPath(project))
 
+    showNotification('Загрузка референса...', 'info')
     try {
       const res = await fetch(`${API}/api/v1/audio/upload-ref`, { method: 'POST', body: formData })
       const data = await res.json()
       if (res.ok && data.ref_audio_path) {
-        setAudioRefName(data.ref_audio_path)
+        setNewVoiceAudioPath(data.ref_audio_path)
+        showNotification('Референс загружен', 'success')
       }
     } catch {
-      setAudioRefName(file.name)
+      setNewVoiceAudioPath(file.name)
     }
     e.target.value = ''
   }
 
-  const handleGenerateAudio = async () => {
-    if (!activeScene) return
-    const projectPath = project.projectDir?.name || project.name || 'temp_project'
-    setIsGeneratingAudio(true)
+  const handleSaveCustomVoice = () => {
+    if (!newVoiceName || !newVoiceAudioPath) {
+      showNotification('Укажите имя голоса и загрузите аудио-референс', 'error')
+      return
+    }
+    const newVoice = {
+      id: crypto.randomUUID(),
+      name: newVoiceName,
+      refAudioPath: newVoiceAudioPath,
+      refText: newVoiceText
+    }
+    const currentVoices = project.customVoices || []
+    onUpdateProject({ ...project, customVoices: [...currentVoices, newVoice] })
+    setVoiceModel(newVoice.id)
+    setIsVoiceManagerOpen(false)
+    setNewVoiceName('')
+    setNewVoiceText('')
+    setNewVoiceAudioPath(null)
+    showNotification('Голос успешно добавлен', 'success')
+  }
 
-    const frags = activeScene.fragments.filter(f => f.text?.trim())
-    const fullText = frags.map(f => f.text).join(' ')
+  const handleDeleteCustomVoice = (id: string) => {
+    const currentVoices = project.customVoices || []
+    onUpdateProject({ ...project, customVoices: currentVoices.filter(v => v.id !== id) })
+    if (voiceModel === id) setVoiceModel('aria')
+    showNotification('Голос удален', 'info')
+  }
+
+  const handleGenerateAudio = async (target?: 'fragment' | 'scene' | 'all') => {
+    if (isGeneratingAudio && audioAbortController.current) {
+      audioAbortController.current.abort()
+      setIsGeneratingAudio(false)
+      showNotification('Генерация отменена пользователем', 'info')
+      return
+    }
+
+    const mode = target || audioTarget
+    if (!activeScene) return
+
+    if (mode === 'fragment' && !targetFrag) {
+      showNotification('Пожалуйста, выберите фрагмент для генерации', 'error')
+      return
+    }
+
+    setIsGeneratingAudio(true)
+    audioAbortController.current = new AbortController()
+    showNotification('Запущена ИИ генерация аудио. Это может занять время...', 'info')
+
+    const scenes = mode === 'all' ? project.scenes : [activeScene]
 
     try {
-      const payload = {
-        fragment_id: activeScene.id,
-        text: fullText,
-        voice_model: voiceModel,
-        stability: voiceStability / 100,
-        clarity: voiceClarity / 100,
-        ref_audio_path: audioRefName || null,
-        ref_text: cloneText || null,
-        project_path: projectPath,
+      for (const scene of scenes) {
+        if (audioAbortController.current?.signal.aborted) break
+
+        let frags = scene.fragments.filter(f => f.text?.trim())
+        if (mode === 'fragment') frags = frags.filter(f => f.id === targetFrag)
+        if (!frags.length) continue
+
+        const fullText = frags.map(f => f.text).join(' ')
+        const sIdx = project.scenes.findIndex(s => s.id === scene.id) + 1
+        const filePrefix = mode === 'fragment'
+          ? `Scene_${sIdx}_Frag_${scene.fragments.findIndex(f => f.id === targetFrag) + 1}`
+          : `Scene_${sIdx}_Full`
+
+        const customVoice = project.customVoices?.find(v => v.id === voiceModel)
+
+        const payload = {
+          fragment_id: mode === 'fragment' ? (targetFrag || scene.id) : scene.id,
+          file_prefix: filePrefix,
+          text: fullText,
+          voice_model: customVoice ? 'clone' : voiceModel,
+          guidance_scale: guidanceScale,
+          num_steps: numSteps,
+          speed: speed,
+          duration: duration,
+          denoise: denoise,
+          preprocess_prompt: preprocessPrompt,
+          postprocess_output: postprocessOutput,
+          ref_audio_path: customVoice?.refAudioPath || null,
+          ref_text: customVoice?.refText || null,
+          project_path: getProjectPath(project),
+        }
+
+        const res = await fetch(`${API}/api/v1/audio/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: audioAbortController.current.signal
+        })
+        const data = await res.json()
+        if (res.ok && data.status === 'ok') {
+          if (scene.id === activeScene.id) setAudioLoaded(data.absolute_path)
+          showNotification(`Сцена ${sIdx}: Аудио успешно сгенерировано`, 'success')
+        } else {
+          showNotification(data.detail || 'Ошибка генерации аудио', 'error')
+        }
       }
-
-      const res = await fetch(`${API}/api/v1/audio/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await res.json()
-
-      if (res.ok && data.status === 'ok') {
-        setAudioLoaded(data.absolute_path)
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        showNotification('Отменено', 'info')
       } else {
-        console.error('Ошибка генерации аудио:', data)
+        showNotification('Сервер недоступен', 'error')
       }
-    } catch (e) {
-      console.error('Сбой запроса генерации:', e)
     } finally {
       setIsGeneratingAudio(false)
+      audioAbortController.current = null
     }
+  }
+
+  const recalculateTimecodes = (scenes: Scene[]) => {
+    let currentTime = 0
+    return scenes.map(s => {
+      const m = Math.floor(currentTime / 60).toString().padStart(2, '0')
+      const sec = Math.floor(currentTime % 60).toString().padStart(2, '0')
+      const duration = s.fragments.length > 0 ? (s.fragments[s.fragments.length - 1].endTime ?? 5) : 5
+      const newSc = { ...s, timecode: `00:${m}:${sec}` }
+      currentTime += duration
+      return newSc
+    })
   }
 
   const handleSyncAudioVideo = async () => {
     if (!activeScene || !audioLoaded) return
-    const projectPath = project.projectDir?.name || project.name || 'temp_project'
     setIsSyncing(true)
+    showNotification('Whisper: Анализ таймингов...', 'info')
+
     try {
       const res = await fetch(`${API}/api/v1/audio/sync`, {
         method: 'POST',
@@ -300,7 +341,7 @@ ${frags.map((f, i) => {
           scene_id: activeScene.id,
           audio_path: audioLoaded,
           fragments: activeScene.fragments.map(f => ({ id: f.id, text: f.text })),
-          project_path: projectPath,
+          project_path: getProjectPath(project),
         }),
       })
       const data = await res.json()
@@ -312,51 +353,64 @@ ${frags.map((f, i) => {
           const t = timingMap[frag.id]
           return t ? { ...frag, startTime: t.startTime, endTime: t.endTime } : frag
         })
-        onUpdateProject({
-          ...project,
-          scenes: project.scenes.map(s =>
-            s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s
-          ),
-        })
+        let newScenes = project.scenes.map(s =>
+          s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s
+        )
+        newScenes = recalculateTimecodes(newScenes)
+        onUpdateProject({ ...project, scenes: newScenes })
+        showNotification(data.fallback ? 'Синхронизировано приблизительно' : 'Аудио точно синхронизировано', 'success')
       }
-    } catch (error) {
-      console.error('Sync error:', error)
+    } catch {
+      showNotification('Ошибка синхронизации', 'error')
     } finally {
       setIsSyncing(false)
     }
   }
 
-  const handleProcessAudio = async (action: 'denoise' | 'normalize' | 'remove_silence' | 'enhance') => {
+  const handleProcessAudio = async (action: 'denoise' | 'normalize' | 'remove_silence' | 'enhance' | 'undo') => {
     if (!audioLoaded) return
     setIsProcessingAudio(true)
     setActiveProcess(action)
+    showNotification(action === 'undo' ? 'Откат изменений...' : 'Обработка аудио...', 'info')
+
     try {
-      const res = await fetch(`${API}/api/v1/audio/process`, {
+      const endpoint = action === 'undo' ? '/api/v1/audio/undo' : '/api/v1/audio/process'
+      const payload = {
+        scene_id: activeScene?.id,
+        audio_path: audioLoaded,
+        action,
+        project_path: getProjectPath(project),
+      }
+      const res = await fetch(`${API}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scene_id: activeScene?.id, audio_path: audioLoaded, action, project_path: project.projectDir?.name || project.name || 'temp_project' }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (data.status === 'ok') {
         setAudioLoaded(data.processed_audio_path)
+        showNotification(action === 'undo' ? 'Изменения отменены' : 'Аудио обработано', 'success')
+      } else {
+        showNotification(data.detail || 'Ошибка', 'error')
       }
-    } catch (e) {
-      console.error('Audio processing error:', e)
+    } catch {
+      showNotification('Сбой запроса', 'error')
     } finally {
       setIsProcessingAudio(false)
       setActiveProcess(null)
     }
   }
 
-  const startRender = async (target: string) => {
+  const startRender = async (target: 'scene' | 'fragment' | 'project') => {
     if (!activeScene) return
     setIsRendering(true)
     setRenderProgress(0)
-    setRenderTarget(target)
 
-    const targetId = target === 'сцены' ? activeScene.id : target === 'проекта' ? project.scenes[0]?.id : ''
-    const projectPath = project.projectDir?.name || ''
+    const targetId = target === 'fragment'
+      ? (targetFrag || activeScene.id)
+      : target === 'scene' ? activeScene.id : project.scenes[0]?.id || ''
 
+    showNotification('Запуск процесса рендера...', 'info')
     try {
       const res = await fetch(`${API}/api/v1/render/start`, {
         method: 'POST',
@@ -365,266 +419,210 @@ ${frags.map((f, i) => {
           project_id: project.name,
           target,
           target_id: targetId,
-          project_path: projectPath,
+          project_path: getProjectPath(project),
         }),
       })
       const { task_id } = await res.json()
-      if (task_id) setRenderTarget(`задача ${task_id.slice(0, 8)}`)
+      if (task_id) {
+        setRenderTaskId(task_id)
+        showNotification('Рендер начался', 'success')
+      }
     } catch {
       setIsRendering(false)
+      showNotification('Ошибка старта рендера', 'error')
     }
   }
 
-  const updateFragment = (fragId: string, updates: Partial<SceneFragment>) => {
-    if (!activeScene) return
-    onUpdateProject({
-      ...project,
-      scenes: project.scenes.map(s => s.id === activeScene.id ? {
-        ...s,
-        fragments: s.fragments.map(f => f.id === fragId ? { ...f, ...updates } : f)
-      } : s)
-    })
+  const cancelRender = async () => {
+    if (!renderTaskId) return
+    showNotification('Отмена рендера...', 'info')
+    try {
+      await fetch(`${API}/api/v1/render/cancel/${renderTaskId}`, { method: 'POST' })
+      setIsRendering(false)
+      setRenderTaskId(null)
+      setRenderProgress(0)
+      showNotification('Рендер отменен', 'success')
+    } catch {
+      showNotification('Ошибка отмены', 'error')
+    }
   }
 
-  const addFragment = () => {
-    if (!activeScene) return
-    onUpdateProject({
-      ...project,
-      scenes: project.scenes.map(s => s.id === activeScene.id ? {
-        ...s,
-        fragments: [...s.fragments, { id: crypto.randomUUID(), visualNote: 'Новый визуал', text: '' }]
-      } : s)
-    })
-  }
-
-  const deleteFragment = (fragId: string) => {
-    if (!activeScene) return
-    onUpdateProject({
-      ...project,
-      scenes: project.scenes.map(s => s.id === activeScene.id ? {
-        ...s,
-        fragments: s.fragments.filter(f => f.id !== fragId)
-      } : s)
-    })
+  const handleProjectDelete = () => {
+    onDeleteProject(project.name)
+    showNotification('Проект удален', 'info')
+    setIsSettingsOpen(false)
   }
 
   return (
     <div className="h-dvh w-full flex flex-col overflow-hidden bg-background">
-      <input type="file" ref={fragmentAudioRef} className="hidden" accept="audio/*" onChange={handleFragmentAudio} />
-      <input type="file" ref={fragmentAssetRef} className="hidden" accept="video/mp4, image/*" onChange={handleFragmentAsset} />
-
-      <header className="h-16 border-b border-white/5 flex items-center justify-between px-6 bg-surface-container-lowest shrink-0 z-10">
-        <div className="flex items-center gap-6">
+      <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
+        <div className="flex items-center gap-4">
+          <span className="font-display text-2xl font-bold text-primary tracking-tight">Vidora</span>
+          <div className="h-4 w-px bg-white/20" />
           <Dropdown
-            align="left"
             trigger={
-              <div className="flex items-center gap-2 cursor-pointer bg-surface-container hover:bg-surface-container-high py-2 px-3 rounded-lg transition-colors border border-white/5 group">
-                <span className="font-title-md font-bold text-on-surface group-hover:text-primary transition-colors">{project.name}</span>
-                <Icon name="unfold_more" className="text-on-surface-variant group-hover:text-primary text-[18px]" />
-              </div>
+              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors font-medium text-sm">
+                <Icon name="folder" className="text-secondary text-[18px]" />
+                {project.name}
+                <Icon name="expand_more" className="text-on-surface-variant text-[18px]" />
+              </button>
             }
           >
             {projects.map(p => (
-              <DropdownItem key={p.name} onClick={() => onSwitchProject(p.name)}>
-                {p.name} {p.name === project.name && '✓'}
+              <DropdownItem key={p.name} onClick={() => { onSwitchProject(p.name); showNotification(`Открыт проект: ${p.name}`, 'success') }}>
+                {p.name === project.name ? '✓ ' : ''}{p.name}
               </DropdownItem>
             ))}
             <div className="h-px bg-white/10 my-1" />
-            <DropdownItem onClick={onNewProject}>
-              <div className="flex items-center gap-2 text-primary">
-                <Icon name="add" className="text-[16px]" /> Новый проект
-              </div>
-            </DropdownItem>
+            <DropdownItem onClick={onNewProject} className="text-primary"><Icon name="add" className="inline text-[16px] mr-1 align-text-bottom" /> Новый проект</DropdownItem>
+            <DropdownItem onClick={() => setIsSettingsOpen(true)}><Icon name="settings" className="inline text-[16px] mr-1 align-text-bottom" /> Настройки проекта</DropdownItem>
           </Dropdown>
-
-          <div className="flex gap-2">
-            <Badge variant="mono" className="bg-surface-container border border-white/5">{project.format}</Badge>
-            <Badge variant="primary" className="bg-primary/10 border border-primary/20">{project.resolution}</Badge>
-            <Badge variant="neutral" className="bg-surface-container border border-white/5">{project.montage.fps} FPS</Badge>
-          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" icon="settings" onClick={() => setIsSettingsOpen(true)} className="!py-2 !px-4">Настройки</Button>
-          {isRendering ? (
-            <div className="flex items-center gap-3 bg-secondary/10 border border-secondary/30 px-5 py-2 rounded-lg">
-              <Spinner className="text-[16px]" />
-              <span className="font-label text-xs text-secondary font-medium tracking-wider">Рендеринг {renderTarget}... {renderProgress}%</span>
-            </div>
-          ) : (
-            <Button variant="primary" icon="play_arrow" onClick={() => startRender('проекта')} className="!py-2 !px-6 shadow-lg shadow-primary/20">Рендер</Button>
+        <div className="flex items-center gap-2">
+          <Dropdown
+            align="right"
+            trigger={
+              <Button variant="primary" icon="file_export" disabled={isRendering}>
+                {isRendering ? `Рендер... ${renderProgress}%` : 'Рендер'} <Icon name="expand_more" />
+              </Button>
+            }
+          >
+            <DropdownItem onClick={() => startRender('project')}>Рендер всего проекта</DropdownItem>
+            <DropdownItem onClick={() => startRender('scene')}>Рендер текущей сцены</DropdownItem>
+            <DropdownItem onClick={() => startRender('fragment')}>Рендер фрагмента</DropdownItem>
+          </Dropdown>
+          {isRendering && (
+            <Button variant="ghost" icon="close" onClick={cancelRender} className="text-error hover:bg-error/10 hover:text-error" title="Отменить рендер" />
           )}
         </div>
       </header>
 
       <main className="flex-1 flex overflow-hidden">
-        <aside className="w-[300px] border-r border-white/5 flex flex-col bg-surface-container/20">
-          <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface-container-lowest/30">
-            <div className="flex items-center gap-2">
-              <span className="font-label text-sm uppercase tracking-wider text-on-surface">Сцены</span>
-            </div>
-            <span className="font-mono text-xs text-on-surface-variant bg-white/5 px-2 py-0.5 rounded">{project.scenes.length}</span>
+        <aside className="w-[320px] border-r border-white/10 bg-surface-container/30 flex flex-col shrink-0">
+          <div className="p-4 border-b border-white/5 bg-surface-container-lowest/30 flex justify-between items-center">
+            <h2 className="font-title-md text-title-md text-on-surface">Сценарий</h2>
           </div>
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
             {project.scenes.map((scene) => (
               <div key={scene.id} onClick={() => handleSceneChange(scene.id)}>
-                <SceneCard scene={scene.title} time={scene.timecode} description={`${scene.fragments.length} фрагментов`} isActive={activeSceneId === scene.id} />
+                <SceneCard
+                  scene={scene.title}
+                  time={scene.timecode}
+                  description={scene.fragments[0]?.text.substring(0, 60) + '...'}
+                  isActive={activeSceneId === scene.id}
+                />
               </div>
             ))}
           </div>
         </aside>
 
-        <div className="flex-1 flex flex-col relative bg-surface-container-lowest/50 overflow-hidden">
-          <div className="flex px-6 border-b border-white/5 bg-surface-container/30">
-            <button onClick={() => setActiveTab('script')} className={`py-4 mr-8 font-label text-sm border-b-2 transition-colors ${activeTab === 'script' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}>
-              Сценарий
+        <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
+          <div className="h-12 border-b border-white/5 flex items-center px-4 gap-2 bg-surface-container-lowest/50">
+            <button
+              onClick={() => setPreviewTab('video')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${previewTab === 'video' ? 'text-primary border-primary bg-primary/5' : 'text-on-surface-variant border-transparent hover:text-on-surface'}`}
+            >
+              Плеер (Видео)
             </button>
-            <button onClick={() => setActiveTab('code')} className={`py-4 font-label text-sm border-b-2 transition-colors ${activeTab === 'code' ? 'border-secondary text-secondary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}>
-              TSX-Код
+            <button
+              onClick={() => setPreviewTab('scene')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${previewTab === 'scene' ? 'text-primary border-primary bg-primary/5' : 'text-on-surface-variant border-transparent hover:text-on-surface'}`}
+            >
+              Режиссура (Сцена)
+            </button>
+            <button
+              onClick={() => setPreviewTab('fragment')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${previewTab === 'fragment' ? 'text-primary border-primary bg-primary/5' : 'text-on-surface-variant border-transparent hover:text-on-surface'}`}
+            >
+              Настройка Фрагмента
             </button>
           </div>
 
-          <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-            {activeTab === 'script' ? (
-              <div className="flex flex-col gap-5 max-w-3xl">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-xl font-bold text-on-surface flex items-center gap-2">
-                    <Icon name="movie" className="text-primary" /> {activeScene?.title} ({activeScene?.timecode})
-                  </h2>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" icon="play_circle" onClick={() => startRender('сцены')}>
-                      Рендер сцены
-                    </Button>
-                    <Button variant={isCopied ? 'primary' : 'secondary'} icon={isCopied ? 'check' : 'smart_toy'} onClick={copyPromptForAI}>
-                      {isCopied ? 'Скопировано!' : 'Промпт сцены'}
-                    </Button>
+          <div className="flex-1 flex justify-center items-center p-8 overflow-y-auto custom-scrollbar">
+            {previewTab === 'video' && (
+              <div className="w-full max-w-[800px] aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center">
+                <span className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-2">
+                  <Icon name="movie" className="text-[48px]" />
+                  Player Canvas (Remotion Preview)
+                </span>
+                <div className="absolute bottom-4 left-4 right-4 h-12 bg-surface-container/80 backdrop-blur-xl rounded-lg border border-white/10 flex items-center px-4 gap-4">
+                  <Icon name="play_arrow" className="text-white text-[24px] cursor-pointer" filled />
+                  <div className="flex-1 h-1 bg-white/20 rounded-full cursor-pointer">
+                    <div className="w-1/3 h-full bg-primary rounded-full relative">
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full" />
+                    </div>
                   </div>
+                  <Icon name="volume_up" className="text-white text-[20px] cursor-pointer" />
                 </div>
-
-                {activeScene?.fragments.map((frag, index) => (
-                  <div key={frag.id} className="bg-surface-container/30 border border-white/5 rounded-xl p-5 flex gap-4 transition-colors focus-within:border-primary/40 focus-within:bg-surface-container/50 relative group">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-surface-container-high border border-white/10 text-on-surface-variant flex items-center justify-center font-bold text-xs mt-0.5 group-focus-within:bg-primary/20 group-focus-within:text-primary group-focus-within:border-primary/30 transition-colors">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 flex flex-col min-w-0 gap-3">
-                      <div className="flex justify-between items-start gap-4">
-                        <input
-                          className="bg-transparent border-b border-transparent focus:border-primary/50 text-[13px] font-label uppercase tracking-wider text-primary outline-none transition-colors w-full pb-1"
-                          value={frag.visualNote}
-                          placeholder="Визуал фрагмента"
-                          onChange={e => updateFragment(frag.id, { visualNote: e.target.value })}
-                        />
-                        <button onClick={() => deleteFragment(frag.id)} className="opacity-0 group-hover:opacity-100 text-on-surface-variant hover:text-error transition-opacity flex-shrink-0" title="Удалить фрагмент">
-                          <Icon name="delete" className="text-[18px]"/>
-                        </button>
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <label className="text-[10px] text-secondary font-label uppercase flex items-center gap-1">
-                          <Icon name="speaker_notes" className="text-[14px]" /> Текст суфлера (Озвучка / Экран)
-                        </label>
-                        <textarea
-                          className="w-full bg-black/30 border border-white/5 rounded-lg p-3 text-sm text-on-surface outline-none resize-none focus:border-secondary/50 focus:bg-black/40 custom-scrollbar transition-colors leading-relaxed"
-                          rows={3}
-                          placeholder="Текст для суфлера и генерации..."
-                          value={frag.text || ''}
-                          onChange={e => updateFragment(frag.id, { text: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2 mt-1 pt-3 border-t border-white/5 overflow-x-auto custom-scrollbar pb-1">
-                        <Button
-                          variant="primary"
-                          icon="play_circle"
-                          className="!py-1.5 !px-3 text-[11px] whitespace-nowrap"
-                          onClick={() => startRender('фрагмента')}
-                        >
-                          <span className="truncate">Render</span>
-                        </Button>
-                        <Button
-                          variant={copiedFragId === frag.id ? 'primary' : 'dashed'}
-                          icon={copiedFragId === frag.id ? 'check' : 'smart_toy'}
-                          className="!py-1.5 !px-3 text-[11px] whitespace-nowrap"
-                          onClick={() => copyFragmentPrompt(frag)}
-                        >
-                          <span className="truncate">Prompt</span>
-                        </Button>
-                        <Button
-                          variant={expandedCodeFrags.has(frag.id) ? 'primary' : 'dashed'}
-                          icon="code"
-                          className="!py-1.5 !px-3 text-[11px] whitespace-nowrap"
-                          onClick={() => toggleFragCode(frag.id)}
-                        >
-                          <span className="truncate">Code</span>
-                        </Button>
-                        <Button
-                          variant={frag.bRollFileName ? 'primary' : 'dashed'}
-                          icon="movie"
-                          className="!py-1.5 !px-3 text-[11px] whitespace-nowrap max-w-[140px]"
-                          onClick={() => { setTargetFrag(frag.id); fragmentAssetRef.current?.click() }}
-                          title={frag.bRollFileName}
-                        >
-                          <span className="truncate">{frag.bRollFileName || 'B-roll'}</span>
-                        </Button>
-                        <Button
-                          variant={frag.audioFileName ? 'primary' : 'dashed'}
-                          icon="mic"
-                          className="!py-1.5 !px-3 text-[11px] whitespace-nowrap max-w-[140px]"
-                          onClick={() => { setTargetFrag(frag.id); fragmentAudioRef.current?.click() }}
-                          title={frag.audioFileName}
-                        >
-                          <span className="truncate">{frag.audioFileName || 'Audio'}</span>
-                        </Button>
-                      </div>
-
-                      {expandedCodeFrags.has(frag.id) && (
-                        <div className="mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <textarea
-                            className="w-full bg-[#0d1117] text-[#e6edf3] font-mono text-xs p-3 rounded-lg border border-white/10 focus:border-secondary/50 outline-none resize-y custom-scrollbar transition-colors"
-                            rows={8}
-                            placeholder="Вставьте TSX код для этого фрагмента..."
-                            value={frag.remotionCode || ''}
-                            onChange={e => updateFragment(frag.id, { remotionCode: e.target.value })}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  className="w-full py-4 border border-dashed border-white/10 hover:border-primary/40 hover:bg-primary/5 rounded-xl text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center gap-2 font-label text-sm mt-2"
-                  onClick={addFragment}
-                >
-                  <Icon name="add" className="text-[18px]" /> Добавить фрагмент
-                </button>
               </div>
-            ) : (
-              <div className="flex flex-col h-full gap-4 max-w-4xl">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-sm font-label text-secondary uppercase">Remotion TSX (Сцена: {activeScene?.title})</h2>
+            )}
+
+            {previewTab === 'scene' && activeScene && (
+              <div className="w-full max-w-[800px] flex flex-col gap-6 text-on-surface">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-3xl font-bold font-display">{activeScene.title}</h2>
                   <div className="flex gap-2">
-                    <Button variant="ghost" icon="play_circle" onClick={() => startRender('сцены')}>Рендер</Button>
-                    <Button variant="ghost" icon="upload" onClick={() => assetInputRef.current?.click()}>Импорт футажа (B-roll)</Button>
-                    <Button variant="primary" icon="save" onClick={handleSaveCode}>Сохранить .tsx файл</Button>
+                    <button className="text-on-surface-variant hover:text-primary transition-colors text-xs flex items-center gap-1" onClick={() => { navigator.clipboard.writeText(generateRemotionPrompt(project, activeScene)); showNotification('Промпт сцены скопирован!', 'success') }} title="Копировать промпт сцены">
+                      <Icon name="content_copy" className="text-[14px]" /> Сцену
+                    </button>
+                    <button className="text-on-surface-variant hover:text-primary transition-colors text-xs flex items-center gap-1" onClick={() => { navigator.clipboard.writeText(generateProjectPrompt(project)); showNotification('Промпт проекта скопирован!', 'success') }} title="Копировать промпт проекта">
+                      <Icon name="content_copy" className="text-[14px]" /> Проект
+                    </button>
                   </div>
                 </div>
-                <input type="file" ref={assetInputRef} className="hidden" accept="video/mp4, image/*" onChange={handleAssetUpload} />
-                <textarea
-                  className="flex-1 w-full bg-[#0d1117] text-[#e6edf3] font-mono text-sm p-4 rounded-xl border border-white/10 focus:border-secondary/50 focus:outline-none resize-none custom-scrollbar"
-                  placeholder="Вставьте сгенерированный ИИ код сцены сюда..."
-                  value={codeInput}
-                  onChange={(e) => setCodeInput(e.target.value)}
-                />
+                <div className="flex flex-col gap-4">
+                  {activeScene.fragments.map((frag, idx) => (
+                    <div key={frag.id} className="p-4 rounded-xl bg-surface-container/40 border border-white/10 flex flex-col gap-2">
+                      <div className="flex justify-between items-center text-xs font-mono text-secondary">
+                        <span>Фрагмент {idx + 1}</span>
+                        <span>{frag.startTime?.toFixed(2) || '0.00'}s - {frag.endTime?.toFixed(2) || '5.00'}s</span>
+                      </div>
+                      <div className="p-3 bg-black/40 rounded-lg text-sm text-on-surface-variant italic">
+                        {frag.visualNote}
+                      </div>
+                      <div className="text-base">{frag.text}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {previewTab === 'fragment' && activeScene && (
+              <div className="w-full max-w-[600px] flex flex-col gap-4">
+                <FieldGroup label="Выберите фрагмент текста">
+                  <Select value={targetFrag || ''} onChange={(e) => setTargetFrag(e.target.value)}>
+                    {activeScene.fragments.map((f, i) => (
+                      <option key={f.id} value={f.id}>
+                        Фрагмент {i + 1}: {f.text.substring(0, 40)}...
+                      </option>
+                    ))}
+                  </Select>
+                </FieldGroup>
+                {targetFrag && (() => {
+                  const f = activeScene.fragments.find(x => x.id === targetFrag)
+                  if (!f) return null
+                  return (
+                    <div className="p-6 rounded-xl bg-surface-container border border-primary/20 flex flex-col gap-4 shadow-2xl">
+                      <FieldGroup label="Визуальная ремарка">
+                        <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-sm text-on-surface focus:border-primary/50 outline-none" rows={3} value={f.visualNote} readOnly />
+                      </FieldGroup>
+                      <FieldGroup label="Текст суфлера">
+                        <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-sm text-on-surface focus:border-primary/50 outline-none" rows={4} value={f.text} readOnly />
+                      </FieldGroup>
+                      <button className="text-on-surface-variant hover:text-primary transition-colors text-xs flex items-center gap-1 self-end" onClick={() => { navigator.clipboard.writeText(generateFragmentPrompt(project, activeScene, f)); showNotification('Промпт фрагмента скопирован!', 'success') }} title="Копировать промпт фрагмента">
+                        <Icon name="content_copy" className="text-[14px]" /> Копировать промпт
+                      </button>
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right sidebar */}
         <aside className="w-[380px] border-l border-white/10 flex flex-col bg-surface-container/60 backdrop-blur-2xl shrink-0">
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6 custom-scrollbar">
-            {/* Remotion Code Panel */}
             <section className="flex flex-col gap-2">
               <div className="flex justify-between items-center mb-1">
                 <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
@@ -635,12 +633,12 @@ ${frags.map((f, i) => {
                   <button className="text-on-surface-variant hover:text-primary transition-colors" onClick={handleGenerateCode} disabled={isGeneratingCode} title="Сгенерировать ИИ">
                     {isGeneratingCode ? <Spinner className="text-[16px]" /> : <Icon name="bolt" className="text-[16px]" />}
                   </button>
-                  <button className="text-on-surface-variant hover:text-white" onClick={() => navigator.clipboard.writeText(displayCode)} title="Копировать TSX">
+                  <button className="text-on-surface-variant hover:text-white" onClick={() => { navigator.clipboard.writeText(displayCode); showNotification('Код скопирован!', 'success') }} title="Копировать TSX">
                     <Icon name="content_copy" className="text-[16px]" />
                   </button>
                 </div>
               </div>
-              <div className="border border-white/5 shadow-inner bg-surface-container-lowest/50 p-4 rounded-lg overflow-x-auto custom-scrollbar max-h-[400px]">
+              <div className="border border-white/5 shadow-inner bg-surface-container-lowest/50 p-4 rounded-lg overflow-x-auto custom-scrollbar max-h-[300px]">
                 <pre className="font-mono text-[12px] text-on-surface-variant leading-relaxed">
                   <code>{displayCode}</code>
                 </pre>
@@ -650,217 +648,212 @@ ${frags.map((f, i) => {
             <div className="h-px w-full bg-white/5" />
 
             <section className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <Icon name="record_voice_over" className="text-primary text-[18px]" />
-                <h3 className="font-title-md text-title-md text-on-surface">OmniVoice AI</h3>
-              </div>
-            <FieldGroup label="Голосовая модель">
-              <Select value={voiceModel} onChange={(e) => setVoiceModel(e.target.value)}>
-                <option value="aria">Neural - Aria (Женский, Спокойный)</option>
-                <option value="marcus">Neural - Marcus (Мужской, Глубокий)</option>
-                <option value="nova">Expressive - Nova (Женский, Энергичный)</option>
-                <option value="clone">Cloning - Клонирование голоса</option>
-              </Select>
-            </FieldGroup>
-
-            {voiceModel === 'clone' && (
-              <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                <input type="file" ref={cloneAudioRef} className="hidden" accept="audio/*" onChange={handleCloneAudioUpload} />
-                <button
-                  className="w-full flex flex-col items-center justify-center p-3 rounded-lg border border-dashed border-white/20 hover:border-secondary/50 hover:bg-white/5 transition-all group"
-                  onClick={() => cloneAudioRef.current?.click()}
-                >
-                  <Icon name="upload_file" className="text-[20px] text-on-surface-variant group-hover:text-secondary" />
-                  <span className="text-[11px] text-on-surface-variant group-hover:text-secondary mt-1">
-                    {audioRefName ? audioRefName : 'Загрузить Audio Ref (.wav/.mp3)'}
-                  </span>
-                </button>
-                <FieldGroup label="Текст референса (Опционально)">
-                  <Input value={cloneText} onChange={(e) => setCloneText(e.target.value)} placeholder="Текст, который звучит в аудио-примере..." />
-                </FieldGroup>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-label text-xs text-on-surface-variant">Стабильность</label>
-                  <span className="font-mono text-[10px] text-on-surface-variant">{voiceStability}%</span>
-                </div>
-                <Slider value={voiceStability} onChange={(e) => setVoiceStability(Number(e.target.value))} min={0} max={100} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-label text-xs text-on-surface-variant">Четкость</label>
-                  <span className="font-mono text-[10px] text-on-surface-variant">{voiceClarity}%</span>
-                </div>
-                <Slider value={voiceClarity} onChange={(e) => setVoiceClarity(Number(e.target.value))} min={0} max={100} />
-              </div>
-            </div>
-
-            <div className="h-px bg-white/5 w-full my-1" />
-
-            <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <span className="font-label text-[11px] uppercase tracking-wider text-on-surface-variant">Аудиодорожка (Сцена)</span>
-                <button className="text-[11px] text-secondary hover:underline" onClick={() => audioInputRef.current?.click()}>
-                  Загрузить вручную
+                <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
+                  <Icon name="record_voice_over" className="text-primary text-[18px]" />
+                  OmniVoice AI
+                </h3>
+                <button className="text-[11px] text-primary hover:underline flex items-center gap-1" onClick={() => setIsVoiceManagerOpen(true)}>
+                  <Icon name="settings_voice" className="text-[14px]" /> Настроить голоса
                 </button>
               </div>
 
-              <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" onChange={handleAudioUpload} />
+              <FieldGroup label="Голосовая модель">
+                <Select value={voiceModel} onChange={(e) => setVoiceModel(e.target.value)}>
+                  <option value="aria">Neural - Aria (Женский, Спокойный)</option>
+                  <option value="marcus">Neural - Marcus (Мужской, Глубокий)</option>
+                  <option value="nova">Expressive - Nova (Женский, Энергичный)</option>
+                  {project.customVoices?.map(cv => (
+                    <option key={cv.id} value={cv.id}>Custom - {cv.name}</option>
+                  ))}
+                </Select>
+              </FieldGroup>
 
-              {audioLoaded ? (
-                <div className="flex flex-col gap-4">
-                  <div className="bg-secondary/10 border border-secondary/30 p-3 rounded-xl flex items-center justify-between group">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <Icon name="audio_file" className="text-secondary text-[20px] shrink-0" />
-                      <span className="text-xs text-secondary font-medium truncate" title={audioLoaded}>{audioLoaded}</span>
-                    </div>
-                    <button className="text-on-surface-variant hover:text-error opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setAudioLoaded(null)}>
-                      <Icon name="close" className="text-[16px]" />
-                    </button>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="font-label text-xs text-on-surface-variant">Inference Steps</label>
+                    <span className="font-mono text-[10px] text-on-surface-variant">{numSteps}</span>
                   </div>
-
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[10px] uppercase font-label text-on-surface-variant">Инструменты обработки</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="dashed"
-                        icon={activeProcess === 'denoise' ? undefined : "noise_aware"}
-                        className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5"
-                        disabled={isProcessingAudio || isSyncing}
-                        onClick={() => handleProcessAudio('denoise')}
-                      >
-                        {activeProcess === 'denoise' ? <Spinner className="text-[14px]" /> : 'Убрать шум'}
-                      </Button>
-                      <Button
-                        variant="dashed"
-                        icon={activeProcess === 'normalize' ? undefined : "equalizer"}
-                        className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5"
-                        disabled={isProcessingAudio || isSyncing}
-                        onClick={() => handleProcessAudio('normalize')}
-                      >
-                        {activeProcess === 'normalize' ? <Spinner className="text-[14px]" /> : 'Нормализация'}
-                      </Button>
-                      <Button
-                        variant="dashed"
-                        icon={activeProcess === 'remove_silence' ? undefined : "content_cut"}
-                        className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5"
-                        disabled={isProcessingAudio || isSyncing}
-                        onClick={() => handleProcessAudio('remove_silence')}
-                      >
-                        {activeProcess === 'remove_silence' ? <Spinner className="text-[14px]" /> : 'Убрать паузы'}
-                      </Button>
-                      <Button
-                        variant="dashed"
-                        icon={activeProcess === 'enhance' ? undefined : "auto_fix_high"}
-                        className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                        disabled={isProcessingAudio || isSyncing}
-                        onClick={() => handleProcessAudio('enhance')}
-                      >
-                        {activeProcess === 'enhance' ? <Spinner className="text-[14px]" /> : 'Улучшить (AI)'}
-                      </Button>
-                    </div>
+                  <Slider value={numSteps} onChange={(e) => setNumSteps(Number(e.target.value))} min={8} max={64} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="font-label text-xs text-on-surface-variant">Скорость</label>
+                    <span className="font-mono text-[10px] text-on-surface-variant">{speed.toFixed(2)}x</span>
                   </div>
-
-                  <Button
-                    variant={isSyncing ? "dashed" : "secondary"}
-                    icon={isSyncing ? undefined : "sync"}
-                    disabled={isProcessingAudio || isSyncing}
-                    className="w-full justify-center shadow-[0_0_15px_rgba(4,180,162,0.15)] transition-all"
-                    onClick={handleSyncAudioVideo}
-                  >
-                    {isSyncing ? (
-                      <><Spinner className="text-[18px] text-secondary" /> Синхронизация...</>
-                    ) : (
-                      'Синхронизировать с видео'
-                    )}
-                  </Button>
+                  <Slider value={speed * 100} onChange={(e) => setSpeed(Math.round(Number(e.target.value)) / 100)} min={50} max={200} />
                 </div>
-              ) : (
-                <div className="border border-white/5 bg-surface-container-lowest/50 p-4 rounded-xl flex flex-col items-center justify-center text-center gap-2">
-                  <span className="text-xs text-on-surface-variant">Аудиодорожка пуста</span>
-                </div>
-              )}
-            </div>
+              </div>
 
-            <div className="mt-auto pt-4">
-              <Button
-                variant="primary"
-                className="w-full justify-center !py-3 shadow-[0_0_20px_rgba(221,183,255,0.15)]"
-                disabled={isGeneratingAudio || (!activeScene?.fragments.some(f => f.text))}
-                onClick={handleGenerateAudio}
-              >
-                {isGeneratingAudio ? (
-                  <><Spinner className="text-[18px]" /> Генерация...</>
+              <div className="h-px bg-white/5 w-full my-1" />
+
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-label text-[11px] uppercase tracking-wider text-on-surface-variant">Аудиодорожка</span>
+                  <button className="text-[11px] text-secondary hover:underline" onClick={() => audioInputRef.current?.click()}>
+                    Загрузить вручную
+                  </button>
+                </div>
+                <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" onChange={handleAudioUpload} />
+
+                {audioLoaded ? (
+                  <div className="flex flex-col gap-4 animate-in fade-in">
+                    <div className="bg-secondary/10 border border-secondary/30 p-3 rounded-xl flex items-center justify-between group">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <Icon name="audio_file" className="text-secondary text-[20px] shrink-0" />
+                        <span className="text-xs text-secondary font-medium truncate" title={audioLoaded}>{audioLoaded}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button className="text-on-surface-variant hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Отменить последнее изменение" onClick={() => handleProcessAudio('undo')}>
+                          <Icon name="undo" className="text-[16px]" />
+                        </button>
+                        <button className="text-on-surface-variant hover:text-error opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить" onClick={() => { setAudioLoaded(null); showNotification('Аудиодорожка очищена', 'info') }}>
+                          <Icon name="close" className="text-[16px]" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <span className="text-[10px] uppercase font-label text-on-surface-variant">Инструменты обработки</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="dashed" icon={activeProcess === 'denoise' ? undefined : "noise_aware"} className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5" disabled={isProcessingAudio || isSyncing} onClick={() => handleProcessAudio('denoise')}>
+                          {activeProcess === 'denoise' ? <Spinner className="text-[14px]" /> : 'Убрать шум'}
+                        </Button>
+                        <Button variant="dashed" icon={activeProcess === 'normalize' ? undefined : "equalizer"} className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5" disabled={isProcessingAudio || isSyncing} onClick={() => handleProcessAudio('normalize')}>
+                          {activeProcess === 'normalize' ? <Spinner className="text-[14px]" /> : 'Нормализация'}
+                        </Button>
+                        <Button variant="dashed" icon={activeProcess === 'remove_silence' ? undefined : "content_cut"} className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5" disabled={isProcessingAudio || isSyncing} onClick={() => handleProcessAudio('remove_silence')}>
+                          {activeProcess === 'remove_silence' ? <Spinner className="text-[14px]" /> : 'Убрать паузы'}
+                        </Button>
+                        <Button variant="dashed" icon={activeProcess === 'enhance' ? undefined : "auto_fix_high"} className="!py-1.5 !px-2 text-[11px] flex justify-center gap-1.5 border-primary/30 text-primary hover:bg-primary/10" disabled={isProcessingAudio || isSyncing} onClick={() => handleProcessAudio('enhance')}>
+                          {activeProcess === 'enhance' ? <Spinner className="text-[14px]" /> : 'Улучшить (AI)'}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Button variant={isSyncing ? "dashed" : "secondary"} icon={isSyncing ? undefined : "sync"} disabled={isProcessingAudio || isSyncing} className="w-full justify-center shadow-[0_0_15px_rgba(4,180,162,0.15)] transition-all" onClick={handleSyncAudioVideo}>
+                      {isSyncing ? <><Spinner className="text-[18px] text-secondary" /> Синхронизация...</> : 'Синхронизировать с видео'}
+                    </Button>
+                  </div>
                 ) : (
-                  <><Icon name="bolt" className="text-[20px]" filled /> Генерировать аудио</>
+                  <div className="border border-white/5 bg-surface-container-lowest/50 p-4 rounded-xl flex flex-col items-center justify-center text-center gap-2">
+                    <span className="text-xs text-on-surface-variant">Аудиодорожка пуста</span>
+                  </div>
                 )}
-              </Button>
-            </div>
-          </section>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 p-4 bg-surface-container-lowest/30 rounded-xl border border-white/5">
+                <div className="flex flex-col gap-2">
+                  <label className="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Область генерации</label>
+                  <div className="flex gap-1">
+                    {(['fragment', 'scene', 'all'] as const).map(t => (
+                      <button key={t} onClick={() => setAudioTarget(t)}
+                        className={`flex-1 text-[11px] py-1.5 rounded-lg border transition-all ${audioTarget === t
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-white/10 text-on-surface-variant hover:border-white/30'
+                          }`}>
+                        {t === 'fragment' ? 'Фрагмент' : t === 'scene' ? 'Сцену' : 'Проект'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {audioTarget === 'fragment' && activeScene && (
+                  <div className="animate-in fade-in slide-in-from-top-1">
+                    <FieldGroup label="Выберите фрагмент текста">
+                      <Select value={targetFrag || ''} onChange={(e) => setTargetFrag(e.target.value)}>
+                        <option value="" disabled>-- Выберите фрагмент --</option>
+                        {activeScene.fragments.map((f, i) => (
+                          <option key={f.id} value={f.id}>
+                            Фрагмент {i + 1}: {f.text.substring(0, 30)}...
+                          </option>
+                        ))}
+                      </Select>
+                    </FieldGroup>
+                  </div>
+                )}
+
+                {isGeneratingAudio ? (
+                  <Button
+                    variant="dashed"
+                    className="w-full justify-center mt-2 border-error/30 text-error hover:bg-error/10 hover:border-error/50"
+                    onClick={() => handleGenerateAudio()}
+                  >
+                    <Icon name="close" className="text-[20px]" /> Отменить генерацию
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    className="w-full justify-center mt-2 shadow-[0_0_20px_rgba(221,183,255,0.15)]"
+                    disabled={(!activeScene?.fragments.some(f => f.text))}
+                    onClick={() => handleGenerateAudio()}
+                  >
+                    <Icon name="mic" className="text-[20px]" filled /> Генерировать голос
+                  </Button>
+                )}
+              </div>
+            </section>
           </div>
         </aside>
       </main>
 
+      <Modal isOpen={isVoiceManagerOpen} onClose={() => setIsVoiceManagerOpen(false)} title="Менеджер голосов">
+        <div className="flex flex-col gap-6 w-full pb-4">
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-label uppercase text-primary">Добавить новый голос</h3>
+
+            <FieldGroup label="Имя диктора">
+              <Input value={newVoiceName} onChange={e => setNewVoiceName(e.target.value)} placeholder="Например: Иван (Реклама)" />
+            </FieldGroup>
+
+            <FieldGroup label="Аудио референс">
+              <input type="file" ref={customVoiceAudioRef} className="hidden" accept="audio/*" onChange={handleCustomVoiceAudioUpload} />
+              <button
+                className="w-full flex items-center justify-center p-3 rounded-lg border border-dashed border-white/20 hover:border-primary/50 hover:bg-white/5 transition-all gap-2"
+                onClick={() => customVoiceAudioRef.current?.click()}
+              >
+                <Icon name={newVoiceAudioPath ? "audio_file" : "upload_file"} className="text-[20px] text-on-surface-variant" />
+                <span className="text-sm text-on-surface-variant">
+                  {newVoiceAudioPath ? newVoiceAudioPath.substring(0, 30) : 'Загрузить .wav/.mp3'}
+                </span>
+              </button>
+            </FieldGroup>
+
+            <FieldGroup label="Текст, который звучит в референсе (Желательно)">
+              <Input value={newVoiceText} onChange={e => setNewVoiceText(e.target.value)} placeholder="Точный текст диктора..." />
+            </FieldGroup>
+
+            <Button variant="primary" onClick={handleSaveCustomVoice}>Сохранить голос</Button>
+          </div>
+
+          <div className="h-px bg-white/10" />
+
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-label uppercase text-on-surface-variant">Сохраненные голоса</h3>
+            {(!project.customVoices || project.customVoices.length === 0) && (
+              <div className="text-sm text-on-surface-variant/50 text-center py-4">Список пуст</div>
+            )}
+            {project.customVoices?.map(voice => (
+              <div key={voice.id} className="flex items-center justify-between p-3 rounded-xl bg-surface-container border border-white/5">
+                <div className="flex items-center gap-3">
+                  <Icon name="record_voice_over" className="text-secondary text-[20px]" />
+                  <span className="text-sm font-medium text-on-surface">{voice.name}</span>
+                </div>
+                <button className="text-on-surface-variant hover:text-error" onClick={() => handleDeleteCustomVoice(voice.id)}>
+                  <Icon name="delete" className="text-[18px]" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
+
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="Параметры проекта">
         <div className="flex flex-col gap-6 w-full pb-4">
           <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-label uppercase text-secondary">Метаданные YouTube (Из сценария)</h3>
-            <FieldGroup label="Название видео">
-              <Input value={project.metadata.title} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMetadataChange('title', e.target.value)} />
-            </FieldGroup>
-            <FieldGroup label="Описание">
-              <Input value={project.metadata.description} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMetadataChange('description', e.target.value)} />
-            </FieldGroup>
-            <FieldGroup label="Теги">
-              <Input value={project.metadata.tags.join(', ')} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMetadataChange('tags', e.target.value)} />
-            </FieldGroup>
-          </section>
-
-          <div className="h-px bg-white/10" />
-
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-label uppercase text-primary">Цветовая палитра проекта</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                { label: 'Primary', key: 'primary' as const },
-                { label: 'Secondary', key: 'secondary' as const },
-                { label: 'Accent', key: 'accent' as const },
-                { label: 'Background', key: 'background' as const },
-                { label: 'Surface', key: 'surface' as const },
-                { label: 'Text', key: 'text' as const },
-              ]).map(color => (
-                <FieldGroup key={color.key} label={color.label}>
-                  <div className="flex items-center gap-2 bg-surface-container-lowest border border-white/10 p-1.5 rounded-lg">
-                    <input type="color" value={project.montage.colors[color.key]} onChange={(e) => handleColorChange(color.key, e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent" />
-                    <span className="font-mono text-xs">{project.montage.colors[color.key]}</span>
-                  </div>
-                </FieldGroup>
-              ))}
-            </div>
-          </section>
-
-          <div className="h-px bg-white/10" />
-
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-label uppercase text-primary">Типографика проекта</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <FieldGroup label="Шрифт заголовков (Heading)">
-                <Input value={project.montage.typography.heading} onChange={(e) => handleTypographyChange('heading', e.target.value)} />
-              </FieldGroup>
-              <FieldGroup label="Шрифт текста (Body)">
-                <Input value={project.montage.typography.body} onChange={(e) => handleTypographyChange('body', e.target.value)} />
-              </FieldGroup>
-            </div>
-          </section>
-
-          <div className="h-px bg-white/10" />
-
-          <section className="flex flex-col gap-3">
             <h3 className="text-sm font-label uppercase text-error">Опасная зона</h3>
-            <Button variant="dashed" className="border-error/30 text-error hover:bg-error/10 hover:border-error/50 w-full" onClick={() => onDeleteProject(project.name)}>
+            <Button variant="dashed" className="border-error/30 text-error hover:bg-error/10 hover:border-error/50 w-full" onClick={handleProjectDelete}>
               Удалить проект
             </Button>
           </section>

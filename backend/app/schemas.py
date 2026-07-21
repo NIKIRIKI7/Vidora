@@ -14,6 +14,7 @@ class MontageSettings(BaseModel):
     animationStyle: str
     transitions: List[str] = []
     colors: AppColors
+    typography: Optional[dict] = None
 
 class SceneFragment(BaseModel):
     id: str
@@ -40,9 +41,15 @@ class ProjectData(BaseModel):
 class AudioGenerationRequest(BaseModel):
     fragment_id: str
     text: str
+    file_prefix: Optional[str] = "audio"
     voice_model: str = Field(..., description="aria, marcus, nova, clone")
-    stability: float = Field(default=0.75, ge=0.0, le=1.0)
-    clarity: float = Field(default=0.90, ge=0.0, le=1.0)
+    guidance_scale: float = Field(default=3.0, ge=0.0, le=10.0)
+    num_steps: int = Field(default=32, ge=8, le=64)
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    duration: float = Field(default=0.0, ge=0.0, le=30.0)
+    denoise: bool = True
+    preprocess_prompt: bool = True
+    postprocess_output: bool = True
     ref_audio_path: Optional[str] = Field(None, description="Absolute path to reference audio for cloning")
     ref_text: Optional[str] = Field(None, description="Text spoken in reference audio")
     project_path: str = Field(..., description="Absolute path to the project directory from Electron")

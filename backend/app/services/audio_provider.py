@@ -14,8 +14,13 @@ class BaseTTSProvider(ABC):
         self,
         text: str,
         voice_model: str,
-        stability: float,
-        clarity: float,
+        guidance_scale: float,
+        num_steps: int,
+        speed: float,
+        duration: float,
+        denoise: bool,
+        preprocess_prompt: bool,
+        postprocess_output: bool,
         output_path: str,
         ref_audio_path: str = None,
         ref_text: str = None,
@@ -23,21 +28,25 @@ class BaseTTSProvider(ABC):
         pass
 
 class LocalMockTTSProvider(BaseTTSProvider):
-    """Резервная заглушка, если нейросеть не запустилась (чтобы не крашить сервер)"""
     async def generate_tts(
         self,
         text: str,
         voice_model: str,
-        stability: float,
-        clarity: float,
-        output_path: str,
+        guidance_scale: float = 3.0,
+        num_steps: int = 32,
+        speed: float = 1.0,
+        duration: float = 0.0,
+        denoise: bool = True,
+        preprocess_prompt: bool = True,
+        postprocess_output: bool = True,
+        output_path: str = "",
         ref_audio_path: str = None,
         ref_text: str = None,
     ) -> None:
         await asyncio.sleep(2.0)
-        duration = max(len(text) * 0.08, 1.0)
         sample_rate = 24000
-        num_samples = int(duration * sample_rate)
+        dur = duration if duration > 0 else max(len(text) * 0.08, 1.0)
+        num_samples = int(dur * sample_rate)
         with wave.open(output_path, 'w') as wav_file:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
@@ -94,35 +103,50 @@ class OmniVoiceProvider(BaseTTSProvider):
         self,
         text: str,
         voice_model: str,
-        stability: float,
-        clarity: float,
-        output_path: str,
+        guidance_scale: float = 3.0,
+        num_steps: int = 32,
+        speed: float = 1.0,
+        duration: float = 0.0,
+        denoise: bool = True,
+        preprocess_prompt: bool = True,
+        postprocess_output: bool = True,
+        output_path: str = "",
         ref_audio_path: str = None,
         ref_text: str = None,
     ) -> None:
         model = self._get_model()
 
         if model == "MOCK":
-            await LocalMockTTSProvider().generate_tts(text, voice_model, stability, clarity, output_path)
+            await LocalMockTTSProvider().generate_tts(
+                text=text, voice_model=voice_model,
+                guidance_scale=guidance_scale, num_steps=num_steps,
+                speed=speed, duration=duration,
+                denoise=denoise, preprocess_prompt=preprocess_prompt,
+                postprocess_output=postprocess_output,
+                output_path=output_path,
+                ref_audio_path=ref_audio_path, ref_text=ref_text,
+            )
             return
 
         from omnivoice import OmniVoiceGenerationConfig
 
-        guidance_scale = 1.0 + (1.0 - max(0.0, min(1.0, stability))) * 2.0
-        num_step = max(8, int(max(0.0, min(1.0, clarity)) * 64))
-
         gen_config = OmniVoiceGenerationConfig(
-            num_step=num_step,
+            num_step=num_steps,
             guidance_scale=guidance_scale,
-            denoise=True,
-            preprocess_prompt=True,
-            postprocess_output=True,
+            denoise=denoise,
+            preprocess_prompt=preprocess_prompt,
+            postprocess_output=postprocess_output,
         )
 
         kwargs = dict(
             text=text.strip(),
             generation_config=gen_config,
         )
+
+        if speed != 1.0:
+            kwargs["speed"] = speed
+        if duration > 0.0:
+            kwargs["duration"] = duration
 
         if voice_model == "clone":
             if not ref_audio_path:
@@ -134,6 +158,9 @@ class OmniVoiceProvider(BaseTTSProvider):
             )
         else:
             kwargs["instruct"] = self._VOICE_MAP.get(voice_model, f"{voice_model}")
+
+        print(f"[OmniVoice] generate: text='{text[:60]}...' config=num_step={num_steps} guidance_scale={guidance_scale} "
+              f"speed={speed} duration={duration} denoise={denoise}")
 
         loop = asyncio.get_event_loop()
         audio_list = await loop.run_in_executor(

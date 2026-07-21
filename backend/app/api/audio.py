@@ -2,7 +2,14 @@ import os
 import shutil
 import subprocess
 import difflib
+import warnings
 from pathlib import Path
+
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+warnings.filterwarnings("ignore", message=".*torchcodec is not installed correctly.*")
+warnings.filterwarnings("ignore", message=".*Audio is shorter than 30s.*")
+warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
+
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest
 from app.services.audio_service import AudioService
@@ -17,38 +24,41 @@ audio_service = AudioService()
 def _resolve_path(path: str, project_path: str = "") -> str:
     if os.path.isabs(path):
         return path
+    base_dir = os.getcwd()
     if project_path:
-        return os.path.normpath(os.path.join(project_path, path))
-    return os.path.normpath(os.path.abspath(path))
+        base_dir = os.path.join(base_dir, project_path)
+    return os.path.normpath(os.path.join(base_dir, path))
+
+def _run_ffmpeg(cmd: list, desc: str = "ffmpeg") -> str:
+    print(f"[AUDIO API] {desc}: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        err = result.stderr.strip() or "unknown error"
+        print(f"[AUDIO API] {desc} failed (code {result.returncode}): {err[:500]}")
+        raise RuntimeError(f"FFmpeg error: {err[:500]}")
+    return result.stdout or ""
 
 @router.post("/generate")
 async def generate_audio(request: AudioGenerationRequest):
-    print(f"\n[AUDIO API] Запрос на генерацию для фрагмента: {request.fragment_id}")
-    print(f"[AUDIO API] Текст: {request.text[:50]}...")
-    print(f"[AUDIO API] Модель: {request.voice_model}, Путь проекта: {request.project_path}")
+    print(f"\n[AUDIO API] \u0417\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u044e \u0434\u043b\u044f \u0444\u0440\u0430\u0433\u043c\u0435\u043d\u0442\u0430: {request.fragment_id}")
 
-    if not os.path.exists(request.project_path):
-        print(f"[AUDIO API] Предупреждение: путь '{request.project_path}' не существует. Создаю директорию.")
-        try:
-            os.makedirs(request.project_path, exist_ok=True)
-        except Exception as e:
-            print(f"[AUDIO API] Ошибка создания директории: {e}")
-            raise HTTPException(status_code=400, detail=f"Невозможно создать директорию проекта: {e}")
+    if not request.project_path:
+        request.project_path = "vidora_projects"
 
     try:
-        print("[AUDIO API] Запуск audio_service.generate()...")
+        os.makedirs(request.project_path, exist_ok=True)
+    except Exception as e:
+        print(f"[AUDIO API] \u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u044f \u0434\u0438\u0440\u0435\u043a\u0442\u043e\u0440\u0438\u0438: {e}")
+
+    try:
         result = await audio_service.generate(request)
-        print(f"[AUDIO API] Успешно сгенерировано: {result}")
         return result
     except Exception as e:
-        print(f"[AUDIO API] Ошибка генерации: {e}")
+        print(f"[AUDIO API] \u041e\u0448\u0438\u0431\u043a\u0430 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload-ref")
-async def upload_ref(project_path: str = Form(...), file: UploadFile = File(...)):
-    if not project_path:
-        raise HTTPException(status_code=400, detail="project_path не указан")
-
+async def upload_ref(project_path: str = Form(default="vidora_projects"), file: UploadFile = File(...)):
     os.makedirs(project_path, exist_ok=True)
     refs_dir = os.path.join(project_path, "assets", "refs")
     os.makedirs(refs_dir, exist_ok=True)
@@ -59,30 +69,51 @@ async def upload_ref(project_path: str = Form(...), file: UploadFile = File(...)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    print(f"[AUDIO API] Референс аудио сохранён: {file_path}")
     return {"status": "ok", "ref_audio_path": file_path}
 
 @router.post("/process")
 async def process_audio(request: AudioProcessRequest):
     audio_path = _resolve_path(request.audio_path, request.project_path)
-    out_path = audio_path.replace(".wav", f"_{request.action}.wav")
+    if not os.path.exists(audio_path):
+        return {"status": "error", "detail": f"\u0424\u0430\u0439\u043b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d: {audio_path}"}
+
+    backup_path = audio_path + ".bak"
+    if not os.path.exists(backup_path):
+        shutil.copy2(audio_path, backup_path)
+
+    temp_out = audio_path + ".tmp.wav"
 
     cmds = {
-        "normalize": ["ffmpeg", "-y", "-i", audio_path, "-af", "loudnorm=I=-14:LRA=11:TP=-1.5", out_path],
-        "remove_silence": ["ffmpeg", "-y", "-i", audio_path, "-af", "silenceremove=stop_periods=-1:stop_duration=0.3:stop_threshold=-35dB", out_path],
-        "denoise": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn", out_path],
-        "enhance": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,acompressor,equalizer=f=3000:width_type=h:width=200:g=3", out_path],
+        "normalize": ["ffmpeg", "-y", "-i", audio_path, "-af", "loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
+        "remove_silence": ["ffmpeg", "-y", "-i", audio_path, "-af", "silenceremove=stop_periods=-1:stop_duration=0.3:stop_threshold=-35dB", temp_out],
+        "denoise": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn", temp_out],
+        "enhance": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,acompressor,equalizer=f=3000:width_type=h:width=200:g=3", temp_out],
     }
 
     if request.action not in cmds:
-        return {"status": "error", "detail": "Неизвестное действие"}
+        return {"status": "error", "detail": "\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u043e\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435"}
 
-    subprocess.run(cmds[request.action], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        _run_ffmpeg(cmds[request.action], desc=f"process/{request.action}")
+    except RuntimeError as e:
+        return {"status": "error", "detail": str(e)}
 
-    if not os.path.exists(out_path):
-        return {"status": "error", "detail": "FFmpeg не создал выходной файл"}
+    if not os.path.exists(temp_out):
+        return {"status": "error", "detail": "FFmpeg \u043d\u0435 \u0441\u043e\u0437\u0434\u0430\u043b \u0432\u044b\u0445\u043e\u0434\u043d\u043e\u0439 \u0444\u0430\u0439\u043b"}
 
-    return {"status": "ok", "processed_audio_path": out_path, "action_applied": request.action}
+    shutil.move(temp_out, audio_path)
+
+    return {"status": "ok", "processed_audio_path": audio_path, "action_applied": request.action}
+
+@router.post("/undo")
+async def undo_audio(request: AudioProcessRequest):
+    audio_path = _resolve_path(request.audio_path, request.project_path)
+    backup_path = audio_path + ".bak"
+
+    if os.path.exists(backup_path):
+        shutil.copy2(backup_path, audio_path)
+        return {"status": "ok", "processed_audio_path": audio_path, "detail": "\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u044b"}
+    return {"status": "error", "detail": "\u041d\u0435\u0442 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u0434\u043b\u044f \u043e\u0442\u043a\u0430\u0442\u0430"}
 
 @router.post("/concat")
 async def concat_audio(request: AudioConcatRequest):
@@ -91,12 +122,12 @@ async def concat_audio(request: AudioConcatRequest):
         with open(list_file, "w", encoding="utf-8") as f:
             for p in request.audio_paths:
                 f.write(f"file '{p}'\n")
-        subprocess.run(
+        _run_ffmpeg(
             ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", request.output_path],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            desc="concat",
         )
         return {"status": "ok", "output_path": request.output_path}
-    except Exception as e:
+    except RuntimeError as e:
         return {"status": "error", "detail": str(e)}
     finally:
         if os.path.exists(list_file):
@@ -104,11 +135,9 @@ async def concat_audio(request: AudioConcatRequest):
 
 @router.post("/sync")
 async def sync_audio(request: AudioSyncRequest):
-    # ponytail: whisperx + difflib. Fallback — средняя скорость речи.
     audio_path = _resolve_path(request.audio_path, request.project_path)
-    print(f"[AUDIO API] Sync: resolving audio_path='{request.audio_path}' + project_path='{request.project_path}' -> '{audio_path}'")
+
     if not os.path.exists(audio_path):
-        print(f"[AUDIO API] Sync: файл не найден: {audio_path}, переключаюсь на fallback")
         results, cur_time = [], 0.0
         for frag in request.fragments:
             dur = max(len(frag.text.split()) / 2.5, 1.0)
@@ -119,10 +148,10 @@ async def sync_audio(request: AudioSyncRequest):
             })
             cur_time += dur + 0.1
         return {"status": "ok", "fragments_timings": results, "fallback": True}
+
     try:
         import whisperx
         import torch
-
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
 
@@ -144,6 +173,7 @@ async def sync_audio(request: AudioSyncRequest):
                     recognized_words.append(w)
 
         all_reco_texts = [w["word"].strip().lower() for w in recognized_words]
+
         results = []
         reco_cursor = 0
 
@@ -162,8 +192,8 @@ async def sync_audio(request: AudioSyncRequest):
                 if ratio > best_ratio:
                     best_ratio = ratio
                     best_start = i
-                    if ratio == 1.0:
-                        break
+                if ratio == 1.0:
+                    break
 
             if best_start is not None and best_ratio > 0.3:
                 chunk_words = recognized_words[best_start:best_start + len(frag_words)]
@@ -192,5 +222,6 @@ async def sync_audio(request: AudioSyncRequest):
                 "endTime": round(cur_time + dur, 3),
             })
             cur_time += dur + 0.1
+        return {"status": "ok", "fragments_timings": results, "fallback": True}
 
     return {"status": "ok", "fragments_timings": results}

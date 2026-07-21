@@ -3,6 +3,7 @@ export const saveSceneCodeToDisk = async (projectDir: FileSystemDirectoryHandle,
     const codeDir = await projectDir.getDirectoryHandle('code')
     const aRollDir = await codeDir.getDirectoryHandle('a-roll')
     const fileHandle = await aRollDir.getFileHandle(`${sceneId}.tsx`, { create: true })
+
     const writable = await fileHandle.createWritable()
     await writable.write(code)
     await writable.close()
@@ -15,8 +16,10 @@ export const saveSceneCodeToDisk = async (projectDir: FileSystemDirectoryHandle,
 
 export const saveAudioToDisk = async (projectDir: FileSystemDirectoryHandle, file: File) => {
   try {
-    const voiceDir = await projectDir.getDirectoryHandle('voice')
+    const assetsDir = await projectDir.getDirectoryHandle('assets')
+    const voiceDir = await assetsDir.getDirectoryHandle('voice', { create: true })
     const fileHandle = await voiceDir.getFileHandle(file.name, { create: true })
+
     const writable = await fileHandle.createWritable()
     await writable.write(file)
     await writable.close()
@@ -32,6 +35,7 @@ export const saveAssetToDisk = async (projectDir: FileSystemDirectoryHandle, fil
     const assetsDir = await projectDir.getDirectoryHandle('assets')
     const targetDir = await assetsDir.getDirectoryHandle(type)
     const fileHandle = await targetDir.getFileHandle(file.name, { create: true })
+
     const writable = await fileHandle.createWritable()
     await writable.write(file)
     await writable.close()
