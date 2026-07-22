@@ -50,6 +50,69 @@ python -m app.main
 
 Сценарий пишется в формате `SCENARIO.md` — спецификация в [docs/SCENARIO_RULES.md](docs/SCENARIO_RULES.md).
 
+## Настройка AI-моделей
+
+Бэкенд использует 4 модели. Все, кроме Ollama, скачиваются автоматически при первом запуске.
+
+### 1. OmniVoice (TTS — озвучка)
+
+Автоматически скачивается с HuggingFace при старте бэкенда.
+- **Репозиторий:** [k2-fsa/OmniVoice](https://huggingface.co/k2-fsa/OmniVoice)
+- **Вес:** ~3.2 ГБ (`model.safetensors` + `audio_tokenizer/model.safetensors`)
+- **Куда сохраняется:** `backend/ai-models/OmniVoice/`
+- **Python-пакет:** `omnivoice` (ставится из `requirements.txt`)
+
+Если модель не загрузилась автоматически (медленный интернет, таймаут), скачайте вручную:
+
+```bash
+cd backend
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('k2-fsa/OmniVoice', local_dir='ai-models/OmniVoice')
+"
+```
+
+### 2. WhisperX (распознавание речи + forced alignment)
+
+Две модели скачиваются автоматически через библиотеку `whisperx` при первом вызове синхронизации (`POST /api/v1/audio/sync`):
+
+| Модель | Назначение | Размер | Кеш HuggingFace |
+|--------|-----------|--------|-----------------|
+| `Systran/faster-whisper-base` | Транскрипция | ~300 МБ | `ai-models/models--Systran--faster-whisper-base/` |
+| `jonatasgrosman/wav2vec2-large-xlsr-53-russian` | Выравнивание таймингов (русский) | ~1.2 ГБ | `ai-models/models--jonatasgrosman--wav2vec2-large-xlsr-53-russian/` |
+
+При необходимости установите whisperX отдельно:
+
+```bash
+pip install whisperx
+```
+
+### 3. Ollama + qwen2.5-coder (LLM — генерация Remotion-кода)
+
+Модель **не входит в бэкенд** и запускается как отдельный сервис.
+
+```bash
+# Установите Ollama: https://ollama.com
+ollama pull qwen2.5-coder
+
+# Запустите сервер
+ollama serve
+```
+
+После этого бэкенд будет обращаться к `http://127.0.0.1:11434`.  
+Если Ollama не запущен, кодогенерация вернёт fallback-сообщение (остальные функции не пострадают).
+
+### Быстрая проверка
+
+```bash
+# Убедитесь, что все модели на месте
+ls backend/ai-models/
+# Должны быть папки: OmniVoice, models--Systran--faster-whisper-base, models--jonatasgrosman--wav2vec2-large-xlsr-53-russian
+
+# Проверьте Ollama
+ollama list | grep qwen2.5-coder
+```
+
 ## Структура проекта
 
 ```
