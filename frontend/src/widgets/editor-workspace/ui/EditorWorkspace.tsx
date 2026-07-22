@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, ChangeEvent } from 'react'
-import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
+import { useState, useRef, useEffect } from 'react'
+import { SceneCard, Icon, Button, FieldGroup, Spinner, Slider, Select, Dropdown, DropdownItem } from '@shared/ui'
 import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
 import { useNotificationStore } from '@entities/project'
-import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
+import type { ProjectSettings } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
 
@@ -17,7 +17,7 @@ interface Props {
 
 const getProjectPath = (p: ProjectSettings) => p.projectDir?.name || p.name || 'vidora_projects'
 
-export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProject, onUpdateProject, onDeleteProject }: Props) => {
+export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProject, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [targetFragId, setTargetFragId] = useState<string | null>(project.scenes[0]?.fragments[0]?.id ?? null)
   
@@ -36,13 +36,9 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
-  const [renderTaskId, setRenderTaskId] = useState<string | null>(null)
 
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
-
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const showNotification = useNotificationStore(s => s.showNotification)
@@ -65,7 +61,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           }
           if (msg.payload.progress >= 100 || msg.payload.status === 'done' || msg.payload.status === 'error') {
             setIsRendering(false)
-            setRenderTaskId(null)
             showNotification(msg.payload.status === 'error' ? 'Ошибка рендера' : 'Рендер завершен!', msg.payload.status === 'error' ? 'error' : 'success')
           }
         }
@@ -193,7 +188,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     setIsRendering(true)
     setRenderProgress(0)
     try {
-      const res = await fetch(`${API}/api/v1/render/start`, {
+      await fetch(`${API}/api/v1/render/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -205,11 +200,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           audio_path: audioPath || audioLoaded || '',
         })
       })
-      const { task_id } = await res.json()
-      if (task_id) {
-        setRenderTaskId(task_id)
-        setCenterView('player')
-      }
+      setCenterView('player')
     } catch {
       setIsRendering(false)
       showNotification('Ошибка старта рендера', 'error')
@@ -264,9 +255,11 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
             variant="primary"
             disabled={isAutoPipelineRunning || isRendering}
             onClick={handleFullAutoPipeline}
+            icon="bolt"
+            filledIcon
             className="bg-gradient-to-r from-secondary to-primary text-black font-semibold shadow-[0_0_20px_rgba(79,219,200,0.3)]"
           >
-            {isAutoPipelineRunning ? <><Spinner className="text-[16px]" /> {pipelineStep}</> : <><Icon name="bolt" filled /> ⚡ Сгенерировать всё</>}
+            {isAutoPipelineRunning ? pipelineStep : 'Сгенерировать всё'}
           </Button>
 
           <Button
@@ -280,6 +273,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       </header>
 
       <main className="flex-1 flex overflow-hidden">
+        {/* ЛЕВЫЙ САЙДБАР С БЕЙДЖАМИ СТАТУСОВ */}
         <aside className="w-[320px] border-r border-white/10 bg-surface-container/30 flex flex-col shrink-0">
           <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface-container-lowest/30">
             <h2 className="font-title-md text-title-md text-on-surface">Сценарий</h2>
@@ -315,6 +309,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           </div>
         </aside>
 
+        {/* ЦЕНТРАЛЬНАЯ ОБЛАСТЬ */}
         <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
           <div className="h-12 border-b border-white/5 flex items-center px-4 justify-between bg-surface-container-lowest/50">
             <div className="flex gap-2">
@@ -358,7 +353,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                 ) : (
                   <div className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-3">
                     <Icon name="movie" className="text-[56px] text-primary/40" />
-                    <span>Нажмите «⚡ Сгенерировать всё» для начала сборки</span>
+                    <span>Нажмите «Сгенерировать всё» для начала сборки</span>
                   </div>
                 )}
               </div>
@@ -380,17 +375,33 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           </div>
         </div>
 
+        {/* ПРАВЫЙ ПАЙПЛАЙН ИНСПЕКТОР */}
         <aside className="w-[360px] border-l border-white/10 flex flex-col bg-surface-container/60 backdrop-blur-2xl shrink-0">
           <div className="p-4 border-b border-white/5 flex justify-between items-center">
             <h3 className="font-title-md text-title-md text-on-surface">Инспектор Пайплайна</h3>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar">
+            {/* 0. СЦЕНАРИЙ И ФРАГМЕНТЫ (С КНОПКАМИ КОПИРОВАНИЯ ПРОМПТА) */}
             <section className="flex flex-col gap-3">
               <span className="font-label text-xs uppercase tracking-wider text-primary">Сценарий фрагментов</span>
               {activeScene?.fragments.map((frag, i) => (
                 <div key={frag.id} className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl flex flex-col gap-2">
-                  <span className="text-[10px] font-mono text-secondary">Фрагмент {i + 1} ({frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s)</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-mono text-secondary">Фрагмент {i + 1} ({frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s)</span>
+                    <button
+                      className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1"
+                      onClick={() => {
+                        if (activeScene) {
+                          navigator.clipboard.writeText(generateFragmentPrompt(project, activeScene, frag))
+                          showNotification(`Промпт фрагмента ${i + 1} скопирован!`, 'success')
+                        }
+                      }}
+                      title="Копировать промпт фрагмента"
+                    >
+                      <Icon name="content_copy" className="text-[12px]" /> Промпт
+                    </button>
+                  </div>
                   <input
                     className="text-xs bg-transparent border-b border-white/10 text-on-surface-variant focus:border-primary outline-none py-1"
                     value={frag.visualNote}
@@ -409,6 +420,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
             <div className="h-px bg-white/5" />
 
+            {/* 1. ОЗВУЧКА */}
             <section className="flex flex-col gap-3">
               <span className="font-label text-xs uppercase tracking-wider text-primary">1. Озвучка (OmniVoice)</span>
               <FieldGroup label="Голосовая модель">
@@ -425,6 +437,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
             <div className="h-px bg-white/5" />
 
+            {/* 2. СИНХРОНИЗАЦИЯ */}
             <section className="flex flex-col gap-3">
               <span className="font-label text-xs uppercase tracking-wider text-primary">2. Синхронизация (Whisper)</span>
               <Button variant="dashed" disabled={isSyncing || !audioLoaded} onClick={() => runSync(audioLoaded || '')}>
@@ -434,15 +447,43 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
             <div className="h-px bg-white/5" />
 
+            {/* 3. КОД REMOTION (С КНОПКАМИ КОПИРОВАНИЯ ПРОМПТА С ТАЙМКОДАМИ) */}
             <section className="flex flex-col gap-3">
-              <span className="font-label text-xs uppercase tracking-wider text-primary">3. Код Remotion (Ollama TSX)</span>
+              <div className="flex justify-between items-center">
+                <span className="font-label text-xs uppercase tracking-wider text-primary">3. Код Remotion (TSX)</span>
+                <div className="flex gap-1">
+                  <button
+                    className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10"
+                    onClick={() => {
+                      if (activeScene) {
+                        navigator.clipboard.writeText(generateRemotionPrompt(project, activeScene))
+                        showNotification('Промпт сцены с таймкодами скопирован!', 'success')
+                      }
+                    }}
+                    title="Копировать промпт сцены с таймкодами"
+                  >
+                    <Icon name="content_copy" className="text-[12px]" /> Сцену
+                  </button>
+                  <button
+                    className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateProjectPrompt(project))
+                      showNotification('Промпт всего проекта скопирован!', 'success')
+                    }}
+                    title="Копировать промпт проекта с таймкодами"
+                  >
+                    <Icon name="content_copy" className="text-[12px]" /> Проект
+                  </button>
+                </div>
+              </div>
               <Button variant="dashed" disabled={isGeneratingCode} onClick={() => runCodeGen()}>
-                {isGeneratingCode ? <Spinner /> : 'Сгенерировать TSX'}
+                {isGeneratingCode ? <Spinner /> : 'Сгенерировать TSX через Ollama'}
               </Button>
             </section>
 
             <div className="h-px bg-white/5" />
 
+            {/* 4. РЕНДЕР */}
             <section className="flex flex-col gap-3">
               <span className="font-label text-xs uppercase tracking-wider text-primary">4. Финальный Рендер</span>
               <Button variant="primary" disabled={isRendering} onClick={() => runRender(activeScene?.remotionCode || '')}>
