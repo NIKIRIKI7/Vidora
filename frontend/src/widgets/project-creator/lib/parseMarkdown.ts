@@ -86,3 +86,36 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
   result.scenes = scenes
   return result
 }
+
+export const serializeProjectToMarkdown = (project: ProjectSettings): string => {
+  const { metadata, montage, scenes } = project
+  const yaml = [
+    '---',
+    `title: "${metadata.title || project.name}"`,
+    `description: "${metadata.description || ''}"`,
+    `tags: [${(metadata.tags || []).join(', ')}]`,
+    `animation_style: ${montage.animationStyle || 'screencast'}`,
+    `fps: ${montage.fps || 30}`,
+    `primary: "${montage.colors?.primary || '#ddb7ff'}"`,
+    `secondary: "${montage.colors?.secondary || '#4fdbc8'}"`,
+    `background: "${montage.colors?.background || '#0b1326'}"`,
+    `surface: "${montage.colors?.surface || '#171f33'}"`,
+    `accent: "${montage.colors?.accent || '#ffb4ab'}"`,
+    `text: "${montage.colors?.text || '#dae2fd'}"`,
+    '---',
+    ''
+  ].join('\n')
+
+  const body = scenes.map(s => {
+    const header = `[${s.title}] (${s.timecode || '00:00:00'})`
+    const frags = s.fragments.map(f => {
+      if (f.visualNote) {
+        return `*(${f.visualNote})* ${f.text}`
+      }
+      return f.text
+    }).join('\n')
+    return `${header}\n${frags}`
+  }).join('\n\n')
+
+  return `${yaml}\n${body}`
+}

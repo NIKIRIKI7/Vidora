@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, ChangeEvent } from 'react'
 import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
 import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
 import { useNotificationStore } from '@entities/project'
+import { saveProjectToDisk } from '@features/file-system'
 import type { ProjectSettings, SceneFragment } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
@@ -51,6 +52,11 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
   const showNotification = useNotificationStore(s => s.showNotification)
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
+
+  const updateAndSaveProject = (updatedProject: ProjectSettings) => {
+    updateAndSaveProject(updatedProject)
+    saveProjectToDisk(updatedProject)
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -109,7 +115,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       ...s,
       fragments: [...s.fragments, newFrag]
     } : s)
-    onUpdateProject({ ...project, scenes: updatedScenes })
+    updateAndSaveProject({ ...project, scenes: updatedScenes })
     showNotification('Фрагмент добавлен', 'success')
   }
 
@@ -123,7 +129,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       ...s,
       fragments: s.fragments.filter(f => f.id !== fragId)
     } : s)
-    onUpdateProject({ ...project, scenes: updatedScenes })
+    updateAndSaveProject({ ...project, scenes: updatedScenes })
     showNotification('Фрагмент удален', 'info')
   }
 
@@ -137,7 +143,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
         visualNote: newVisualNote !== undefined ? newVisualNote : f.visualNote
       } : f)
     } : s)
-    onUpdateProject({ ...project, scenes: updated })
+    updateAndSaveProject({ ...project, scenes: updated })
   }
 
   // --- ОБРАБОТКА АУДИО ---
@@ -247,7 +253,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           return t ? { ...f, startTime: t.startTime, endTime: t.endTime } : f
         })
         const updatedScenes = project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
-        onUpdateProject({ ...project, scenes: updatedScenes })
+        updateAndSaveProject({ ...project, scenes: updatedScenes })
         showNotification('Тайминги успешно выровнены!', 'success')
       }
     } catch {
@@ -276,7 +282,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       const data = await res.json()
       if (data.tsx_code) {
         const updated = project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: data.tsx_code } : s)
-        onUpdateProject({ ...project, scenes: updated })
+        updateAndSaveProject({ ...project, scenes: updated })
         showNotification('TSX код сгенерирован', 'success')
         return data.tsx_code
       }
@@ -513,7 +519,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   onChange={(e) => {
                     if (!activeScene) return
                     const updated = project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: e.target.value } : s)
-                    onUpdateProject({ ...project, scenes: updated })
+                    updateAndSaveProject({ ...project, scenes: updated })
                   }}
                   placeholder="// Введите или сгенерируйте TSX код Remotion..."
                   spellCheck={false}
