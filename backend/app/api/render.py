@@ -1,30 +1,53 @@
 import os
 import re
 import sys
+import shutil
 import asyncio
 import subprocess
+from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from app.schemas import RenderRequest
 from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
 
 active_renders = {}
+REMO_DIR = Path(__file__).resolve().parent.parent.parent / "remotion-project"
+SCENE_FILE = REMO_DIR / "src" / "scenes" / "current.tsx"
+OUT_DIR = REMO_DIR / "out"
 
 def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEventLoop):
     npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
-    cmd = [npx_cmd, "remotion", "render", "src/index.ts", req.target_id, f"out/{task_id}.mp4"]
+    temp_output = OUT_DIR / f"{task_id}.mp4"
+    cmd = [npx_cmd, "remotion", "render", "src/index.ts", "current", f"out/{task_id}.mp4"]
 
     try:
+        if req.tsx_code:
+            # 1. Save to remotion workspace for the actual render
+            SCENE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            SCENE_FILE.write_text(req.tsx_code, encoding="utf-8")
+
+            # 2. Save to project code directory for persistence
+            try:
+                folder_name = "b-roll" if req.target == "b-roll" else "a-roll"
+                code_dir = Path(req.project_path) / "code" / folder_name
+                code_dir.mkdir(parents=True, exist_ok=True)
+                code_file = code_dir / f"{req.target_id}.tsx"
+                code_file.write_text(req.tsx_code, encoding="utf-8")
+            except Exception as code_err:
+                print(f"[RENDER API] Ошибка записи TSX в проект: {code_err}")
+
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+
         process = subprocess.Popen(
             cmd,
-            cwd=req.project_path or os.getcwd(),
+            cwd=str(REMO_DIR),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             errors="replace"
         )
-
         active_renders[task_id] = process
 
         for line in iter(process.stdout.readline, ""):
@@ -41,21 +64,40 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                     }),
                     loop
                 )
-
         process.wait()
+        status = "done" if process.returncode == 0 else "error"
+        final_file_path = ""
 
-        if process.returncode == 0:
-            asyncio.run_coroutine_threadsafe(
-                manager.broadcast({
-                    "type": "RENDER_PROGRESS",
-                    "payload": {"task_id": task_id, "progress": 100, "status": "done"},
-                }),
-                loop
-            )
+        if status == "done" and temp_output.exists():
+            folder_name = "b-roll" if req.target == "b-roll" else "a-roll"
+            dest_dir = Path(req.project_path) / "assets" / folder_name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_file = dest_dir / f"{req.target_id}.mp4"
+            shutil.copy2(temp_output, dest_file)
+            final_file_path = str(dest_file)
+
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({
+                "type": "RENDER_PROGRESS",
+                "payload": {
+                    "task_id": task_id,
+                    "progress": 100,
+                    "status": status,
+                    "target_id": req.target_id,
+                    "target": req.target,
+                    "output_path": final_file_path
+                }
+            }), loop
+        )
+
     except Exception as e:
         print(f"Render error: {e}")
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "RENDER_PROGRESS", "payload": {"task_id": task_id, "progress": 100, "status": "error"}}), loop
+        )
     finally:
         active_renders.pop(task_id, None)
+
 
 async def run_remotion(task_id: str, req: RenderRequest):
     loop = asyncio.get_running_loop()
@@ -78,3 +120,9 @@ async def cancel_render(task_id: str):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Ошибка отмены: {str(e)}")
     raise HTTPException(status_code=404, detail="Процесс рендера не найден")
+
+@router.get("/media")
+async def serve_media(path: str):
+    if os.path.exists(path):
+        return FileResponse(path)
+    raise HTTPException(status_code=404, detail="Медиафайл не найден")

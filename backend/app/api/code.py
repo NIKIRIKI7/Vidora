@@ -1,5 +1,6 @@
 import re
 import httpx
+from pathlib import Path
 from fastapi import APIRouter
 from app.schemas import CodeGenerationRequest
 
@@ -18,6 +19,15 @@ async def generate_code(request: CodeGenerationRequest):
                 data = res.json().get("response", "")
                 match = re.search(r"```tsx\s*(.*?)\s*```", data, re.DOTALL)
                 tsx_code = match.group(1) if match else data
+
+                try:
+                    code_dir = Path(request.project_path) / "code" / "a-roll"
+                    code_dir.mkdir(parents=True, exist_ok=True)
+                    code_file = code_dir / f"{request.target_id}.tsx"
+                    code_file.write_text(tsx_code, encoding="utf-8")
+                except Exception as fs_err:
+                    print(f"[CODE API] Ошибка сохранения файла: {fs_err}")
+
                 return {"status": "ok", "tsx_code": tsx_code}
             return {"status": "error", "tsx_code": "// Ошибка генерации: неверный статус LLM"}
     except Exception:

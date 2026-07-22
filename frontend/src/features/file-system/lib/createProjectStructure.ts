@@ -1,6 +1,6 @@
 export const createProjectStructure = async (projectName: string, markdownContent: string) => {
   try {
-    const parentDirHandle = await (window as any).showDirectoryPicker({
+    const parentDirHandle = await window.showDirectoryPicker({
       mode: 'readwrite',
     })
 

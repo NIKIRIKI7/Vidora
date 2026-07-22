@@ -13,11 +13,24 @@ frontend/release/
 __pycache__/
 backend/*.spec
 backend/.venv/
+backend/test_render.py
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
 .eggs/
+
+# AI Models (large files, downloaded)
+backend/ai-models/
+
+# Remotion workspace (generated videos + npm deps)
+backend/remotion-project/node_modules/
+backend/remotion-project/out/
+
+# Per-project generated artifacts
+backend/*/assets/
+backend/*/code/
+backend/*/voice/
 
 # Environment
 .env

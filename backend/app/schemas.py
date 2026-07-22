@@ -85,3 +85,4 @@ class RenderRequest(BaseModel):
     target: str
     target_id: str
     project_path: str
+    tsx_code: str = ""

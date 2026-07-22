@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, type ChangeEvent } from 'react'
-import { Badge, SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
+import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
 import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
 import { useNotificationStore } from '@entities/project'
-import type { ProjectSettings, AppColors, SceneFragment, AppTypography, Scene } from '@entities/project'
+import type { ProjectSettings, Scene } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
 
@@ -21,20 +21,22 @@ const getProjectPath = (project: ProjectSettings) =>
 export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProject, onUpdateProject, onDeleteProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [codeInput, setCodeInput] = useState('')
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
 
   const [previewTab, setPreviewTab] = useState<'video' | 'scene' | 'fragment'>('video')
 
+  const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
+  const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
+
+  const [isRenderModalOpen, setIsRenderModalOpen] = useState(false)
+  const [renderTarget, setRenderTarget] = useState<'project' | 'scene' | 'fragment'>('scene')
+  const [renderSceneId, setRenderSceneId] = useState<string>(project.scenes[0]?.id || '')
+  const [renderFragId, setRenderFragId] = useState<string>(project.scenes[0]?.fragments[0]?.id || '')
+
   const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
   const [voiceModel, setVoiceModel] = useState('aria')
-  const [guidanceScale, setGuidanceScale] = useState(3.0)
   const [numSteps, setNumSteps] = useState(32)
   const [speed, setSpeed] = useState(1.0)
-  const [duration, setDuration] = useState(0)
-  const [denoise, setDenoise] = useState(true)
-  const [preprocessPrompt, setPreprocessPrompt] = useState(true)
-  const [postprocessOutput, setPostprocessOutput] = useState(true)
   const [audioTarget, setAudioTarget] = useState<'fragment' | 'scene' | 'all'>('scene')
 
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
@@ -50,7 +52,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderTaskId, setRenderTaskId] = useState<string | null>(null)
-  const [targetFrag, setTargetFrag] = useState<string | null>(null)
+  const [targetFrag, setTargetFrag] = useState<string | null>(() => project.scenes[0]?.fragments[0]?.id ?? null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const audioAbortController = useRef<AbortController | null>(null)
@@ -59,27 +61,21 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 
   useEffect(() => {
-    if (activeScene && activeScene.fragments.length > 0) {
-      if (!activeScene.fragments.find(f => f.id === targetFrag)) {
-        setTargetFrag(activeScene.fragments[0].id)
-      }
-    } else {
-      setTargetFrag(null)
-    }
-  }, [activeSceneId, activeScene])
-
-  useEffect(() => {
     const ws = new WebSocket(`${API.replace('http', 'ws')}/ws/events/frontend`)
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
         if (msg.type === 'RENDER_PROGRESS') {
           setRenderProgress(msg.payload.progress)
-          if (msg.payload.progress >= 100 || msg.payload.status === 'done') {
+          if (msg.payload.status === 'done' && msg.payload.output_path) {
+            setRenderedVideos(prev => ({ ...prev, [msg.payload.target_id]: msg.payload.output_path }))
+            setPlayingTargetId(msg.payload.target_id)
+          }
+          if (msg.payload.progress >= 100 || msg.payload.status === 'done' || msg.payload.status === 'error') {
             setTimeout(() => {
               setIsRendering(false)
               setRenderTaskId(null)
-              showNotification('Рендер успешно завершен!', 'success')
+              showNotification(msg.payload.status === 'error' ? 'Ошибка рендера' : 'Рендер успешно завершен!', msg.payload.status === 'error' ? 'error' : 'success')
             }, 500)
           }
         }
@@ -87,61 +83,68 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     }
     wsRef.current = ws
     return () => ws.close()
-  }, [])
+  }, [showNotification])
 
   const audioInputRef = useRef<HTMLInputElement>(null)
   const customVoiceAudioRef = useRef<HTMLInputElement>(null)
 
+  const currentTargetType = previewTab === 'fragment' ? 'fragment' : 'scene'
+  const currentTargetId = currentTargetType === 'fragment' ? targetFrag : activeScene?.id
+
+  const displayCode = (() => {
+    if (!activeScene) return ''
+    if (currentTargetType === 'fragment' && targetFrag) {
+      return activeScene.fragments.find(f => f.id === targetFrag)?.remotionCode || ''
+    }
+    return activeScene.remotionCode || ''
+  })()
+
+  const handleCodeChange = (newCode: string) => {
+    if (!activeScene) return
+    if (currentTargetType === 'fragment' && targetFrag) {
+      onUpdateProject({
+        ...project,
+        scenes: project.scenes.map(s => s.id === activeScene.id ? {
+          ...s, fragments: s.fragments.map(f => f.id === targetFrag ? { ...f, remotionCode: newCode } : f)
+        } : s)
+      })
+    } else {
+      onUpdateProject({
+        ...project,
+        scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: newCode } : s)
+      })
+    }
+  }
+
   const handleSceneChange = (id: string) => {
     setActiveSceneId(id)
     const scene = project.scenes.find(s => s.id === id)
-    setCodeInput(scene?.remotionCode || '')
+    setTargetFrag(scene?.fragments[0]?.id ?? null)
   }
 
-  const getDisplayCode = () => {
-    if (codeInput) return codeInput
-    if (!activeScene) return '// Выберите сцену'
-    const frags = activeScene.fragments
-    return `import React from 'react';
-import { Composition, Sequence, AbsoluteFill } from 'remotion';
-
-const COLORS = {
-  primary: '${project.montage.colors.primary}',
-  background: '${project.montage.colors.background}',
-  text: '${project.montage.colors.text}'
-};
-
-export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = () => {
-  return (
-    <AbsoluteFill style={{ backgroundColor: COLORS.background }}>
-      ${frags.map((f, i) => {
-      const start = Math.round((f.startTime ?? i * 2) * 30)
-      const dur = Math.round(((f.endTime ?? (i + 1) * 2) - (f.startTime ?? i * 2)) * 30)
-      return `      <Sequence from={${start}} durationInFrames={${dur}}>
-        {/* ${f.visualNote} */}
-        <div style={{ color: COLORS.text, fontSize: 48, padding: 40, fontFamily: 'system-ui' }}>
-          ${f.text}
-        </div>
-      </Sequence>`
-    }).join('\n')}
-    </AbsoluteFill>
-  );
-};`
+  const codeUploadRef = useRef<HTMLInputElement>(null)
+  const handleCodeUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    handleCodeChange(text)
+    e.target.value = ''
+    showNotification('Код успешно загружен', 'success')
   }
-
-  const displayCode = getDisplayCode()
 
   const handleGenerateCode = async () => {
     if (!activeScene) return
     setIsGeneratingCode(true)
-    showNotification('Идет генерация TSX кода...', 'info')
+    showNotification(`Идет генерация кода для ${currentTargetType === 'fragment' ? 'фрагмента' : 'сцены'}...`, 'info')
     try {
-      const prompt = generateRemotionPrompt(project, activeScene)
+      const prompt = currentTargetType === 'fragment' && targetFrag
+        ? generateFragmentPrompt(project, activeScene, activeScene.fragments.find(f => f.id === targetFrag)!)
+        : generateRemotionPrompt(project, activeScene)
       const res = await fetch(`${API}/api/v1/code/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target_id: activeScene.id,
+          target_id: currentTargetId,
           prompt,
           project_data: project,
           project_path: getProjectPath(project),
@@ -149,13 +152,7 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
       })
       const data = await res.json()
       if (data.tsx_code) {
-        setCodeInput(data.tsx_code)
-        onUpdateProject({
-          ...project,
-          scenes: project.scenes.map(s =>
-            s.id === activeScene.id ? { ...s, remotionCode: data.tsx_code } : s
-          ),
-        })
+        handleCodeChange(data.tsx_code)
         showNotification('Код успешно сгенерирован', 'success')
       }
     } catch {
@@ -278,13 +275,13 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
           file_prefix: filePrefix,
           text: fullText,
           voice_model: customVoice ? 'clone' : voiceModel,
-          guidance_scale: guidanceScale,
+          guidance_scale: 3.0,
           num_steps: numSteps,
           speed: speed,
-          duration: duration,
-          denoise: denoise,
-          preprocess_prompt: preprocessPrompt,
-          postprocess_output: postprocessOutput,
+          duration: 0,
+          denoise: true,
+          preprocess_prompt: true,
+          postprocess_output: true,
           ref_audio_path: customVoice?.refAudioPath || null,
           ref_text: customVoice?.refText || null,
           project_path: getProjectPath(project),
@@ -304,8 +301,8 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
           showNotification(data.detail || 'Ошибка генерации аудио', 'error')
         }
       }
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
         showNotification('Отменено', 'info')
       } else {
         showNotification('Сервер недоступен', 'error')
@@ -401,14 +398,22 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
     }
   }
 
-  const startRender = async (target: 'scene' | 'fragment' | 'project') => {
-    if (!activeScene) return
+  const startRender = async () => {
+    setIsRenderModalOpen(false)
     setIsRendering(true)
     setRenderProgress(0)
 
-    const targetId = target === 'fragment'
-      ? (targetFrag || activeScene.id)
-      : target === 'scene' ? activeScene.id : project.scenes[0]?.id || ''
+    let codeToRender = ''
+
+    const targetId = renderTarget === 'project' ? project.name : renderTarget === 'scene' ? renderSceneId : renderFragId
+    if (renderTarget === 'scene') {
+      const sc = project.scenes.find(s => s.id === renderSceneId)
+      codeToRender = sc?.remotionCode || ''
+    } else if (renderTarget === 'fragment') {
+      const sc = project.scenes.find(s => s.fragments.some(f => f.id === renderFragId))
+      const fr = sc?.fragments.find(f => f.id === renderFragId)
+      codeToRender = fr?.remotionCode || ''
+    }
 
     showNotification('Запуск процесса рендера...', 'info')
     try {
@@ -417,15 +422,16 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: project.name,
-          target,
+          target: renderTarget,
           target_id: targetId,
           project_path: getProjectPath(project),
+          tsx_code: codeToRender,
         }),
       })
       const { task_id } = await res.json()
       if (task_id) {
         setRenderTaskId(task_id)
-        showNotification('Рендер начался', 'success')
+        setPreviewTab('video')
       }
     } catch {
       setIsRendering(false)
@@ -480,18 +486,9 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
         </div>
 
         <div className="flex items-center gap-2">
-          <Dropdown
-            align="right"
-            trigger={
-              <Button variant="primary" icon="file_export" disabled={isRendering}>
-                {isRendering ? `Рендер... ${renderProgress}%` : 'Рендер'} <Icon name="expand_more" />
-              </Button>
-            }
-          >
-            <DropdownItem onClick={() => startRender('project')}>Рендер всего проекта</DropdownItem>
-            <DropdownItem onClick={() => startRender('scene')}>Рендер текущей сцены</DropdownItem>
-            <DropdownItem onClick={() => startRender('fragment')}>Рендер фрагмента</DropdownItem>
-          </Dropdown>
+          <Button variant="primary" icon="file_export" disabled={isRendering} onClick={() => setIsRenderModalOpen(true)}>
+            {isRendering ? `Рендер... ${renderProgress}%` : 'Рендер'}
+          </Button>
           {isRendering && (
             <Button variant="ghost" icon="close" onClick={cancelRender} className="text-error hover:bg-error/10 hover:text-error" title="Отменить рендер" />
           )}
@@ -541,20 +538,20 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
 
           <div className="flex-1 flex justify-center items-center p-8 overflow-y-auto custom-scrollbar">
             {previewTab === 'video' && (
-              <div className="w-full max-w-[800px] aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center">
-                <span className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-2">
-                  <Icon name="movie" className="text-[48px]" />
-                  Player Canvas (Remotion Preview)
-                </span>
-                <div className="absolute bottom-4 left-4 right-4 h-12 bg-surface-container/80 backdrop-blur-xl rounded-lg border border-white/10 flex items-center px-4 gap-4">
-                  <Icon name="play_arrow" className="text-white text-[24px] cursor-pointer" filled />
-                  <div className="flex-1 h-1 bg-white/20 rounded-full cursor-pointer">
-                    <div className="w-1/3 h-full bg-primary rounded-full relative">
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full" />
-                    </div>
-                  </div>
-                  <Icon name="volume_up" className="text-white text-[20px] cursor-pointer" />
-                </div>
+              <div className="w-full max-w-[800px] aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center overflow-hidden">
+                {renderedVideos[playingTargetId || ''] ? (
+                  <video
+                    src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`}
+                    controls
+                    autoPlay
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <span className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-2">
+                    <Icon name="movie" className="text-[48px]" />
+                    Нет видео. Нажмите «Рендер», чтобы сгенерировать анимацию.
+                  </span>
+                )}
               </div>
             )}
 
@@ -627,21 +624,26 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
               <div className="flex justify-between items-center mb-1">
                 <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
                   <Icon name="code" className="text-secondary text-[18px]" />
-                  Remotion Code
+                  TSX ({currentTargetType === 'fragment' ? 'Фрагмент' : 'Сцена'})
                 </h3>
                 <div className="flex gap-2">
+                  <input type="file" accept=".tsx,.ts,.js,.jsx" className="hidden" ref={codeUploadRef} onChange={handleCodeUpload} />
+                  <button className="text-on-surface-variant hover:text-secondary transition-colors" onClick={() => codeUploadRef.current?.click()} title="Загрузить .tsx">
+                    <Icon name="upload_file" className="text-[16px]" />
+                  </button>
                   <button className="text-on-surface-variant hover:text-primary transition-colors" onClick={handleGenerateCode} disabled={isGeneratingCode} title="Сгенерировать ИИ">
                     {isGeneratingCode ? <Spinner className="text-[16px]" /> : <Icon name="bolt" className="text-[16px]" />}
                   </button>
-                  <button className="text-on-surface-variant hover:text-white" onClick={() => { navigator.clipboard.writeText(displayCode); showNotification('Код скопирован!', 'success') }} title="Копировать TSX">
-                    <Icon name="content_copy" className="text-[16px]" />
-                  </button>
                 </div>
               </div>
-              <div className="border border-white/5 shadow-inner bg-surface-container-lowest/50 p-4 rounded-lg overflow-x-auto custom-scrollbar max-h-[300px]">
-                <pre className="font-mono text-[12px] text-on-surface-variant leading-relaxed">
-                  <code>{displayCode}</code>
-                </pre>
+              <div className="border border-white/5 shadow-inner bg-surface-container-lowest/50 p-4 rounded-lg overflow-x-auto custom-scrollbar h-[300px]">
+                <textarea
+                  className="font-mono text-[12px] text-on-surface-variant leading-relaxed bg-transparent w-full h-full resize-none outline-none custom-scrollbar"
+                  placeholder={`// Вставьте React/Remotion код ${currentTargetType === 'fragment' ? 'фрагмента' : 'всей сцены'} сюда...\n// Или сгенерируйте через ИИ`}
+                  value={displayCode}
+                  onChange={e => handleCodeChange(e.target.value)}
+                  spellCheck={false}
+                />
               </div>
             </section>
 
@@ -797,6 +799,58 @@ export const Scene_${(activeScene.id || '01').replace(/[^a-zA-Z0-9]/g, '')} = ()
           </div>
         </aside>
       </main>
+
+      <Modal isOpen={isRenderModalOpen} onClose={() => setIsRenderModalOpen(false)} title="Настройки рендера">
+        <div className="flex flex-col gap-5 w-full pb-4">
+          <FieldGroup label="Что рендерить?">
+            <div className="flex gap-2">
+              {(['project', 'scene', 'fragment'] as const).map(t => (
+                <button key={t} onClick={() => setRenderTarget(t)}
+                  className={`flex-1 py-2 text-sm rounded-lg border transition-all ${renderTarget === t ? 'border-primary bg-primary/10 text-primary' : 'border-white/10 text-on-surface-variant hover:border-white/30'}`}>
+                  {t === 'project' ? 'Весь проект' : t === 'scene' ? 'Сцену' : 'Фрагмент'}
+                </button>
+              ))}
+            </div>
+          </FieldGroup>
+
+          {renderTarget === 'scene' && (
+            <FieldGroup label="Выберите сцену">
+              <Select value={renderSceneId} onChange={(e) => setRenderSceneId(e.target.value)}>
+                {project.scenes.map((s, i) => (
+                  <option key={s.id} value={s.id}>Сцена {i + 1}: {s.title}</option>
+                ))}
+              </Select>
+            </FieldGroup>
+          )}
+
+          {renderTarget === 'fragment' && (
+            <>
+              <FieldGroup label="Сцена">
+                <Select value={renderSceneId} onChange={(e) => {
+                  setRenderSceneId(e.target.value)
+                  const scene = project.scenes.find(s => s.id === e.target.value)
+                  if (scene && scene.fragments.length > 0) setRenderFragId(scene.fragments[0].id)
+                }}>
+                  {project.scenes.map((s, i) => (
+                    <option key={s.id} value={s.id}>Сцена {i + 1}: {s.title}</option>
+                  ))}
+                </Select>
+              </FieldGroup>
+              <FieldGroup label="Фрагмент">
+                <Select value={renderFragId} onChange={(e) => setRenderFragId(e.target.value)}>
+                  {project.scenes.find(s => s.id === renderSceneId)?.fragments.map((f, i) => (
+                    <option key={f.id} value={f.id}>Фрагмент {i + 1}: {f.text.substring(0, 30)}...</option>
+                  ))}
+                </Select>
+              </FieldGroup>
+            </>
+          )}
+
+          <Button variant="primary" onClick={startRender} className="mt-2 w-full justify-center">
+            Начать рендер
+          </Button>
+        </div>
+      </Modal>
 
       <Modal isOpen={isVoiceManagerOpen} onClose={() => setIsVoiceManagerOpen(false)} title="Менеджер голосов">
         <div className="flex flex-col gap-6 w-full pb-4">
