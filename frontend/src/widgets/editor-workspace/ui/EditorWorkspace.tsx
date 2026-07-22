@@ -61,10 +61,22 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 
   useEffect(() => {
-    const ws = new WebSocket(`${API.replace('http', 'ws')}/ws/events/frontend`)
+    let isMounted = true
+    const wsUrl = `${API.replace('http', 'ws')}/ws/events/frontend`
+    const ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      if (!isMounted) {
+        ws.close()
+      } else {
+        console.log('[WS] Соединение установлено:', wsUrl)
+      }
+    }
+
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
+        console.log('[WS MESSAGE]', msg)
         if (msg.type === 'RENDER_PROGRESS') {
           setRenderProgress(msg.payload.progress)
           if (msg.payload.status === 'done' && msg.payload.output_path) {
@@ -79,10 +91,17 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
             }, 500)
           }
         }
-      } catch { /* ignore */ }
+      } catch { }
     }
+
     wsRef.current = ws
-    return () => ws.close()
+
+    return () => {
+      isMounted = false
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close()
+      }
+    }
   }, [showNotification])
 
   const audioInputRef = useRef<HTMLInputElement>(null)

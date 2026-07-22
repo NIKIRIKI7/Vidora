@@ -1,21 +1,38 @@
 import React from 'react'
 import { Composition } from 'remotion'
-import { Scene } from './scenes/current'
+import * as CurrentSceneModule from './scenes/current'
 
-const FPS = 30
-const WIDTH = 1920
-const HEIGHT = 1080
-const DEFAULT_DURATION = 150
+const SceneComponent: React.FC = (props) => {
+  const Component =
+    (CurrentSceneModule as any).default ||
+    (CurrentSceneModule as any).Scene ||
+    Object.values(CurrentSceneModule).find((v) => typeof v === 'function') ||
+    (() => null)
 
-const Root: React.FC = () => (
-  <Composition
-    id="current"
-    component={Scene}
-    durationInFrames={DEFAULT_DURATION}
-    fps={FPS}
-    width={WIDTH}
-    height={HEIGHT}
-  />
-)
+  return <Component {...props} />
+}
 
-export { Root }
+const getConfig = () => {
+  const config = (CurrentSceneModule as any).compositionConfig || {}
+  const fps = Number(config.fps) || 30
+  const width = Number(config.width) || 1920
+  const height = Number(config.height) || 1080
+  const durationInSeconds = Number(config.durationInSeconds) || 5
+  const durationInFrames =
+    Number(config.durationInFrames) || Math.ceil(durationInSeconds * fps) || 150
+  return { fps, width, height, durationInFrames }
+}
+
+export const Root: React.FC = () => {
+  const { fps, width, height, durationInFrames } = getConfig()
+  return (
+    <Composition
+      id="current"
+      component={SceneComponent}
+      durationInFrames={durationInFrames}
+      fps={fps}
+      width={width}
+      height={height}
+    />
+  )
+}

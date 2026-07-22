@@ -7,10 +7,12 @@ class ConnectionManager:
     async def connect(self, client_id: str, websocket: WebSocket):
         await websocket.accept()
         self.active_connections[client_id] = websocket
+        print(f"[WS] Клиент подключен: '{client_id}' (всего активных: {len(self.active_connections)})")
 
     def disconnect(self, client_id: str):
         if client_id in self.active_connections:
             del self.active_connections[client_id]
+            print(f"[WS] Клиент отключен: '{client_id}' (всего активных: {len(self.active_connections)})")
 
     async def send_personal_message(self, message: dict, client_id: str):
         websocket = self.active_connections.get(client_id)
@@ -18,8 +20,16 @@ class ConnectionManager:
             await websocket.send_json(message)
 
     async def broadcast(self, message: dict):
-        for connection in self.active_connections.values():
-            await connection.send_json(message)
-
+        msg_type = message.get("type", "UNKNOWN")
+        print(f"[WS BROADCAST] Отправка типа '{msg_type}' для {len(self.active_connections)} клиентов")
+        disconnected = []
+        for client_id, connection in self.active_connections.items():
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                print(f"[WS BROADCAST ERROR] Сбой отправки клиенту '{client_id}': {e}")
+                disconnected.append(client_id)
+        for client_id in disconnected:
+            self.disconnect(client_id)
 
 manager = ConnectionManager()
