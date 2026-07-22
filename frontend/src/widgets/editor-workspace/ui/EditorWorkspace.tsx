@@ -53,6 +53,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderTaskId, setRenderTaskId] = useState<string | null>(null)
   const [targetFrag, setTargetFrag] = useState<string | null>(() => project.scenes[0]?.fragments[0]?.id ?? null)
+  const [playWithAudio, setPlayWithAudio] = useState(true)
 
   const wsRef = useRef<WebSocket | null>(null)
   const audioAbortController = useRef<AbortController | null>(null)
@@ -345,36 +346,49 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   }
 
   const handleSyncAudioVideo = async () => {
-    if (!activeScene || !audioLoaded) return
+    if (!audioLoaded) return
+    const syncAll = audioTarget === 'all' || !activeScene
+    const fragsToSync = syncAll
+      ? project.scenes.flatMap(s => s.fragments)
+      : (activeScene?.fragments || [])
+
+    if (!fragsToSync.length) return
+
     setIsSyncing(true)
-    showNotification('Whisper: Анализ таймингов...', 'info')
+    showNotification(syncAll ? 'Whisper: Анализ таймингов всего проекта...' : 'Whisper: Анализ таймингов сцены...', 'info')
 
     try {
       const res = await fetch(`${API}/api/v1/audio/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scene_id: activeScene.id,
+          scene_id: syncAll ? 'project_all' : activeScene?.id,
           audio_path: audioLoaded,
-          fragments: activeScene.fragments.map(f => ({ id: f.id, text: f.text })),
+          fragments: fragsToSync.map(f => ({ id: f.id, text: f.text })),
           project_path: getProjectPath(project),
         }),
       })
       const data = await res.json()
+
       if (data.status === 'ok' && data.fragments_timings) {
         const timingMap = Object.fromEntries(
           data.fragments_timings.map((t: { id: string; startTime: number; endTime: number }) => [t.id, t])
         )
-        const updatedFragments = activeScene.fragments.map(frag => {
-          const t = timingMap[frag.id]
-          return t ? { ...frag, startTime: t.startTime, endTime: t.endTime } : frag
-        })
-        let newScenes = project.scenes.map(s =>
-          s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s
-        )
+
+        let newScenes = project.scenes.map(scene => ({
+          ...scene,
+          fragments: scene.fragments.map(frag => {
+            const t = timingMap[frag.id]
+            return t ? { ...frag, startTime: t.startTime, endTime: t.endTime } : frag
+          })
+        }))
+
         newScenes = recalculateTimecodes(newScenes)
         onUpdateProject({ ...project, scenes: newScenes })
-        showNotification(data.fallback ? 'Синхронизировано приблизительно' : 'Аудио точно синхронизировано', 'success')
+        showNotification(
+          data.fallback ? 'Синхронизировано приблизительно' : 'Тайминги успешно обновлены!',
+          'success'
+        )
       }
     } catch {
       showNotification('Ошибка синхронизации', 'error')
@@ -434,19 +448,20 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       codeToRender = fr?.remotionCode || ''
     }
 
-    showNotification('Запуск процесса рендера...', 'info')
-    try {
-      const res = await fetch(`${API}/api/v1/render/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: project.name,
-          target: renderTarget,
-          target_id: targetId,
-          project_path: getProjectPath(project),
-          tsx_code: codeToRender,
-        }),
-      })
+      showNotification('Запуск процесса рендера...', 'info')
+      try {
+        const res = await fetch(`${API}/api/v1/render/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: project.name,
+            target: renderTarget,
+            target_id: targetId,
+            project_path: getProjectPath(project),
+            tsx_code: codeToRender,
+            audio_path: audioLoaded || '',
+          }),
+        })
       const { task_id } = await res.json()
       if (task_id) {
         setRenderTaskId(task_id)
@@ -557,20 +572,33 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
           <div className="flex-1 flex justify-center items-center p-8 overflow-y-auto custom-scrollbar">
             {previewTab === 'video' && (
-              <div className="w-full max-w-[800px] aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center overflow-hidden">
-                {renderedVideos[playingTargetId || ''] ? (
-                  <video
-                    src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`}
-                    controls
-                    autoPlay
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <span className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-2">
-                    <Icon name="movie" className="text-[48px]" />
-                    Нет видео. Нажмите «Рендер», чтобы сгенерировать анимацию.
-                  </span>
-                )}
+              <div className="flex flex-col items-center gap-3 w-full max-w-[800px]">
+                <div className="flex justify-end w-full">
+                  <Button
+                    variant="ghost"
+                    icon={playWithAudio ? "volume_up" : "volume_off"}
+                    onClick={() => setPlayWithAudio(!playWithAudio)}
+                    className="text-xs"
+                  >
+                    {playWithAudio ? 'Звук: Вкл' : 'Звук: Выкл'}
+                  </Button>
+                </div>
+                <div className="w-full aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center overflow-hidden">
+                  {renderedVideos[playingTargetId || ''] ? (
+                    <video
+                      src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`}
+                      controls
+                      autoPlay
+                      muted={!playWithAudio}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-2">
+                      <Icon name="movie" className="text-[48px]" />
+                      Нет видео. Нажмите «Рендер», чтобы сгенерировать анимацию.
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 

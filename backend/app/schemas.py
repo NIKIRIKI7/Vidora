@@ -86,3 +86,4 @@ class RenderRequest(BaseModel):
     target_id: str
     project_path: str
     tsx_code: str = ""
+    audio_path: Optional[str] = ""
