@@ -48,12 +48,14 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
         )
         active_renders[task_id] = process
 
+        output_logs = []
         for line in iter(process.stdout.readline, ""):
             if not line:
                 break
             text_line = line.strip()
             if text_line:
                 print(f"[REMOTION] {text_line}")
+                output_logs.append(text_line)
 
             match = re.search(r"(\d+)/(\d+)", text_line)
             if match:
@@ -69,6 +71,9 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
         process.wait()
         status = "done" if process.returncode == 0 else "error"
 
+        if status == "error":
+            print(f"[RENDER API] ОШИБКА РЕНДЕРА:\n" + "\n".join(output_logs[-15:]))
+
         final_file_path = ""
         if status == "done" and temp_output.exists():
             source_video = temp_output
@@ -76,7 +81,7 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
 
             if resolved_audio and os.path.exists(resolved_audio):
                 merged_output = OUT_DIR / f"{task_id}_merged.mp4"
-                print(f"[RENDER API] Склеивание видео и аудио ({resolved_audio})...")
+                print(f"[RENDER API] Склеивание с аудио: {resolved_audio}")
                 merge_cmd = [
                     "ffmpeg", "-y",
                     "-i", str(temp_output),
@@ -115,7 +120,7 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             }), loop
         )
     except Exception as e:
-        print(f"[RENDER API] Ошибка: {e}")
+        print(f"[RENDER API] Exception: {e}")
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({"type": "RENDER_PROGRESS", "payload": {"task_id": task_id, "progress": 100, "status": "error"}}), loop
         )
