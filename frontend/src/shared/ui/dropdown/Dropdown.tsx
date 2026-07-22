@@ -26,10 +26,9 @@ export const Dropdown = ({ trigger, children, align = 'right', className = '' }:
       <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer">
         {trigger}
       </div>
-      
       {isOpen && (
-        <div 
-          className={`absolute z-40 top-full mt-2 w-48 bg-surface-container/80 backdrop-blur-xl border border-white/10 rounded-lg shadow-lg py-1 animate-in fade-in slide-in-from-top-2 duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
+        <div
+          className={`absolute z-[100] top-full mt-2 w-56 bg-[#171f33] border border-white/15 rounded-xl shadow-2xl py-1.5 animate-in fade-in slide-in-from-top-2 duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
           onClick={() => setIsOpen(false)}
         >
           {children}
@@ -41,7 +40,7 @@ export const Dropdown = ({ trigger, children, align = 'right', className = '' }:
 
 export const DropdownItem = ({ children, onClick, className = '', danger = false }: { children: ReactNode, onClick?: () => void, className?: string, danger?: boolean }) => (
   <button
-    className={`w-full text-left px-4 py-2 font-label text-sm transition-colors ${danger ? 'text-error hover:bg-error/10' : 'text-on-surface hover:bg-white/5'} ${className}`}
+    className={`w-full text-left px-4 py-2 font-label text-sm transition-colors ${danger ? 'text-error hover:bg-error/10' : 'text-on-surface hover:bg-white/10'} ${className}`}
     onClick={onClick}
   >
     {children}
