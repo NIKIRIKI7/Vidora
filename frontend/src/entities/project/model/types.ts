@@ -54,6 +54,7 @@ export interface CustomVoice {
   name: string
   refAudioPath: string
   refText: string
+  tags?: string[]
 }
 
 export interface ProjectSettings {
