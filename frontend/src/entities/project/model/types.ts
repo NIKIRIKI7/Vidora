@@ -47,6 +47,7 @@ export interface Scene {
   timecode: string
   fragments: SceneFragment[]
   remotionCode?: string
+  ignoreTsx?: boolean
 }
 
 export interface CustomVoice {

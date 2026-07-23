@@ -5,6 +5,8 @@ import shutil
 import asyncio
 import subprocess
 from pathlib import Path
+from pydantic import BaseModel
+from typing import List
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from app.schemas import RenderRequest
@@ -12,6 +14,11 @@ from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
 active_renders = {}
+
+class VideoConcatRequest(BaseModel):
+    project_path: str
+    video_paths: List[str]
+    output_path: str
 
 REMO_DIR = Path(__file__).resolve().parent.parent.parent / "remotion-project"
 SCENE_FILE = REMO_DIR / "src" / "scenes" / "current.tsx"
@@ -109,9 +116,10 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
 
             if req.target == "project":
                 dest_dir = Path(req.project_path) / "preview"
+            elif req.target == "b-roll":
+                dest_dir = Path(req.project_path) / "assets" / "b-roll"
             else:
-                folder_name = "b-roll" if req.target == "b-roll" else "a-roll"
-                dest_dir = Path(req.project_path) / "assets" / folder_name
+                dest_dir = Path(req.project_path) / "assets" / "a-roll"
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_file = dest_dir / f"{req.target_id}.mp4"
             shutil.copy2(source_video, dest_file)
@@ -131,7 +139,7 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             }), loop
         )
     except Exception as e:
-        print(f"[RENDER API] Exception: {e}")
+        print(f"[RENDER API] Exception в фоновой задаче: {e}")
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({"type": "RENDER_PROGRESS", "payload": {"task_id": task_id, "progress": 100, "status": "error"}}), loop
         )
@@ -147,6 +155,36 @@ async def start_render(req: RenderRequest, bg: BackgroundTasks):
     task_id = f"render_{os.urandom(4).hex()}"
     bg.add_task(run_remotion, task_id, req)
     return {"task_id": task_id}
+
+@router.post("/concat-video")
+async def concat_video(req: VideoConcatRequest):
+    out_path = _resolve_path(req.output_path, req.project_path)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    list_file = out_path + ".list.txt"
+    try:
+        with open(list_file, "w", encoding="utf-8") as f:
+            for p in req.video_paths:
+                abs_p = _resolve_path(p, req.project_path)
+                if os.path.exists(abs_p):
+                    formatted_p = abs_p.replace("\\", "/")
+                    f.write(f"file '{formatted_p}'\n")
+
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path]
+        print(f"[RENDER API] Concat video: {' '.join(cmd)}")
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            fallback_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c:v", "libx264", "-c:a", "aac", out_path]
+            res2 = subprocess.run(fallback_cmd, capture_output=True, text=True)
+            if res2.returncode != 0:
+                raise RuntimeError(f"FFmpeg video concat error: {res2.stderr[:300]}")
+
+        return {"status": "ok", "output_path": out_path}
+    except Exception as e:
+        print(f"[RENDER API] Ошибка склейки видео: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(list_file):
+            os.remove(list_file)
 
 @router.post("/cancel/{task_id}")
 async def cancel_render(task_id: str):
