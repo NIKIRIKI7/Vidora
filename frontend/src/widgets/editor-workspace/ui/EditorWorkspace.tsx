@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, ChangeEvent } from 'react'
-import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
+import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select, Switch } from '@shared/ui'
 import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
 import { useNotificationStore } from '@entities/project'
-import { saveAudioToDisk, saveSceneCodeToDisk } from '@features/file-system'
+import { saveAudioToDisk, saveSceneCodeToDisk, saveRenderedVideoToDisk } from '@features/file-system'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
@@ -36,10 +36,56 @@ const formatShortTimecode = (sec: number): string => {
 }
 
 const parseTcString = (str: string): number | null => {
-  const parts = str.split(':').map(Number)
+  if (!str) return null
+  const parts = str.trim().split(':').map(Number)
   if (parts.some(isNaN)) return null
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
   if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 1) return parts[0]
+  return null
+}
+
+// Приоритет 1: Точные тайминги Whisper
+const getWhisperSyncedDuration = (fragments: SceneFragment[]): number | null => {
+  const syncedEnds = fragments
+    .map(f => f.endTime)
+    .filter((e): e is number => typeof e === 'number' && e > 0)
+
+  if (syncedEnds.length > 0) {
+    return Math.max(...syncedEnds)
+  }
+  return null
+}
+
+// Приоритет 2: Интервал из заголовков сцены (например "2:05 - 3:35" -> 90 сек)
+const getSceneDurationFromTimecode = (timecodeStr: string): number | null => {
+  if (!timecodeStr) return null
+  const rangeMatch = timecodeStr.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(\d{1,2}:\d{2}(?::\d{2})?)/)
+  if (rangeMatch) {
+    const start = parseTcString(rangeMatch[1])
+    const end = parseTcString(rangeMatch[2])
+    if (start !== null && end !== null && end > start) {
+      return end - start
+    }
+  }
+  return null
+}
+
+// Приоритет 3: Интервал из визуальных ремарок (например "0:00 - 0:04")
+const getVisualNoteDuration = (fragments: SceneFragment[]): number | null => {
+  let maxVisualNoteEnd = 0
+  fragments.forEach(f => {
+    const match = f.visualNote?.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(\d{1,2}:\d{2}(?::\d{2})?)/)
+    if (match) {
+      const endSec = parseTcString(match[2])
+      if (endSec !== null && endSec > maxVisualNoteEnd) {
+        maxVisualNoteEnd = endSec
+      }
+    }
+  })
+  if (maxVisualNoteEnd > 0) {
+    return maxVisualNoteEnd
+  }
   return null
 }
 
@@ -56,22 +102,112 @@ const getAudioPathForScene = (project: ProjectSettings, scene: Scene): string =>
   return `${projectPath}/assets/voice/Scene_${safeTitle}_${scene.id.slice(0, 6)}.wav`
 }
 
+// Генерация мастер-TSX с заданным порядком приоритетов
+const buildMasterProjectTsx = (project: ProjectSettings): string => {
+  const fps = Number(project.montage?.fps) || 30
+  const width = project.format === '9:16' ? 1080 : 1920
+  const height = project.format === '9:16' ? 1920 : 1080
+
+  const sceneBlocks: string[] = []
+  const sequenceTags: string[] = []
+  let cumulativeFrames = 0
+
+  project.scenes.forEach((scene, index) => {
+    const sceneNum = index + 1
+    const compName = `SceneComp_${sceneNum}`
+
+    // 1. Приоритет 1: Точные Whisper-тайминги
+    let sceneDurationSec = getWhisperSyncedDuration(scene.fragments)
+
+    // 2. Приоритет 2: Интервал из заголовков сцены (например "2:05 - 3:35" -> 90 сек)
+    if (!sceneDurationSec) {
+      sceneDurationSec = getSceneDurationFromTimecode(scene.timecode)
+    }
+
+    // 3. Приоритет 3: Визуальные ремарки (например "0:00 - 0:04")
+    if (!sceneDurationSec) {
+      sceneDurationSec = getVisualNoteDuration(scene.fragments)
+    }
+
+    // 4. Фолбэк по длине текста или 5 секунд
+    if (!sceneDurationSec || sceneDurationSec <= 0) {
+      sceneDurationSec = scene.fragments.reduce((acc, f) => {
+        return acc + Math.max(f.text.split(' ').length / 2.5, 1.0)
+      }, 0) || 5
+    }
+
+    const durationInFrames = Math.max(Math.ceil(sceneDurationSec * fps), 30)
+
+    if (scene.ignoreTsx || !scene.remotionCode?.trim()) {
+      sceneBlocks.push(`
+const ${compName}: React.FC = () => {
+  return <AbsoluteFill style={{ backgroundColor: '#000000' }} />;
+};`)
+    } else {
+      let cleanCode = scene.remotionCode
+        .replace(/export\s+default\s+function\s+([A-Za-z0-9_]+)/g, 'function $1')
+        .replace(/export\s+default\s+const\s+([A-Za-z0-9_]+)/g, 'const $1')
+        .replace(/export\s+default\s+([A-Za-z0-9_]+);?/g, '')
+        .replace(/import\s+React.*?;?/g, '')
+        .replace(/import\s+\{.*?\}\s+from\s+['"]remotion['"];?/g, '')
+
+      sceneBlocks.push(`
+// === Сцена ${sceneNum}: ${scene.title} ===
+${cleanCode}
+const ${compName} = typeof SceneComponent !== 'undefined' ? SceneComponent : (typeof MainVideo !== 'undefined' ? MainVideo : (() => <AbsoluteFill style={{ backgroundColor: '#000000' }} />));
+`)
+    }
+
+    sequenceTags.push(`
+        <Sequence from={${cumulativeFrames}} durationInFrames={${durationInFrames}}>
+          <${compName} />
+        </Sequence>`)
+
+    cumulativeFrames += durationInFrames
+  })
+
+  const totalFrames = Math.max(cumulativeFrames, 30)
+
+  return `
+import React from 'react';
+import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
+
+export const compositionConfig = {
+  id: 'MasterProject',
+  durationInFrames: ${totalFrames},
+  durationInSeconds: ${Math.ceil(totalFrames / fps)},
+  fps: ${fps},
+  width: ${width},
+  height: ${height},
+};
+
+${sceneBlocks.join('\n\n')}
+
+export const MasterProject: React.FC = () => {
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#000000' }}>
+      ${sequenceTags.join('\n')}
+    </AbsoluteFill>
+  );
+};
+
+export default MasterProject;
+`.trim()
+}
+
 export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProject, onUpdateProject, onDeleteProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [centerView, setCenterView] = useState<'player' | 'code'>('player')
-  
   const [voiceModel, setVoiceModel] = useState('aria')
   const [speed, setSpeed] = useState(1.0)
   const [numSteps, setNumSteps] = useState(32)
   const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
   const [playWithAudio, setPlayWithAudio] = useState(true)
-
   const [isVoiceboxOpen, setIsVoiceboxOpen] = useState(false)
   const [newVoiceName, setNewVoiceName] = useState('')
   const [newVoiceText, setNewVoiceText] = useState('')
   const [newVoiceTags, setNewVoiceTags] = useState('')
   const [newVoiceAudioPath, setNewVoiceAudioPath] = useState<string | null>(null)
-
   const [isAutoPipelineRunning, setIsAutoPipelineRunning] = useState(false)
   const [pipelineStep, setPipelineStep] = useState<string>('')
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
@@ -80,11 +216,9 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderTaskId, setRenderTaskId] = useState<string | null>(null)
-
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [useWhisper, setUseWhisper] = useState(true)
   const [autoOffloadVram, setAutoOffloadVram] = useState(true)
-
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
   const [draggedSceneIdx, setDraggedSceneIdx] = useState<number | null>(null)
@@ -94,8 +228,8 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const refVoiceInputRef = useRef<HTMLInputElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
-
   const showNotification = useNotificationStore(s => s.showNotification)
+
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 
   const handleSceneDragStart = (idx: number) => () => setDraggedSceneIdx(idx)
@@ -107,6 +241,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     onUpdateProject({ ...project, scenes })
     setDraggedSceneIdx(null)
   }
+
   const handleFragDragStart = (idx: number) => () => setDraggedFragIdx(idx)
   const handleFragDrop = (dropIdx: number) => () => {
     if (!activeScene || draggedFragIdx === null || draggedFragIdx === dropIdx) { setDraggedFragIdx(null); return }
@@ -120,10 +255,16 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     setDraggedFragIdx(null)
   }
 
+  const toggleIgnoreTsx = (sceneId: string) => {
+    const updatedScenes = project.scenes.map(s =>
+      s.id === sceneId ? { ...s, ignoreTsx: !s.ignoreTsx } : s
+    )
+    onUpdateProject({ ...project, scenes: updatedScenes })
+  }
+
   useEffect(() => {
     let isMounted = true
     const ws = new WebSocket(`${API.replace('http', 'ws')}/ws/events/frontend`)
-
     ws.onopen = () => { if (!isMounted) ws.close() }
     ws.onmessage = (e) => {
       try {
@@ -133,6 +274,17 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           if (msg.payload.status === 'done' && msg.payload.output_path) {
             setRenderedVideos(prev => ({ ...prev, [msg.payload.target_id]: msg.payload.output_path }))
             setPlayingTargetId(msg.payload.target_id)
+
+            if (project.projectDir) {
+              const mediaUrl = `${API}/api/v1/render/media?path=${encodeURIComponent(msg.payload.output_path)}`
+              fetch(mediaUrl)
+                .then(res => res.blob())
+                .then(blob => {
+                  const videoFile = new File([blob], `${msg.payload.target_id}.mp4`, { type: 'video/mp4' })
+                  saveRenderedVideoToDisk(project.projectDir!, videoFile, msg.payload.target, msg.payload.target_id)
+                })
+                .catch(err => console.warn('Ошибка сохранения видео на диск:', err))
+            }
           }
           if (msg.payload.progress >= 100 || msg.payload.status === 'done' || msg.payload.status === 'error') {
             setIsRendering(false)
@@ -147,16 +299,14 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       isMounted = false
       if (ws.readyState === WebSocket.OPEN) ws.close()
     }
-  }, [showNotification])
+  }, [project.projectDir, showNotification])
 
   useEffect(() => {
     if (!activeScene) {
       setAudioLoaded(null)
       return
     }
-
     const expectedPath = getAudioPathForScene(project, activeScene)
-
     fetch(`${API}/api/v1/render/media?path=${encodeURIComponent(expectedPath)}`, { method: 'HEAD' })
       .then(res => {
         if (res.ok) {
@@ -168,7 +318,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       .catch(() => setAudioLoaded(null))
   }, [activeSceneId, project.name, project.scenes])
 
-  // --- CRUD СЦЕН ---
   const handleAddScene = () => {
     const newScene: Scene = {
       id: crypto.randomUUID(),
@@ -206,7 +355,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     onUpdateProject(updated)
   }
 
-  // --- CRUD ФРАГМЕНТОВ ---
   const handleAddFragment = () => {
     if (!activeScene) return
     const newFrag: SceneFragment = {
@@ -279,12 +427,10 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
         endTime: undefined,
       }))
     }))
-
     onUpdateProject({
       ...project,
       scenes: updatedScenes,
     })
-
     showNotification('Синхронизация сброшена для всех сцен', 'info')
   }
 
@@ -299,7 +445,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     }
   }
 
-  // --- VOICEBOX / КЛОНИРОВАНИЕ ГОЛОСА ---
   const handleUploadRefVoiceAudio = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -352,6 +497,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const runVoiceGenAllScenes = async (scenesToProcess?: Scene[] | unknown): Promise<{ scenes: Scene[]; activeAudio: string | null }> => {
     const targetScenes = Array.isArray(scenesToProcess) ? scenesToProcess : project.scenes
     if (!targetScenes || targetScenes.length === 0) return { scenes: targetScenes || [], activeAudio: null }
+
     setIsGeneratingAudio(true)
     try {
       const customVoice = project.customVoices?.find(v => v.id === voiceModel)
@@ -416,8 +562,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
         }
       }
 
-      const updatedProject = { ...project, scenes: updatedScenes }
-      onUpdateProject(updatedProject)
+      onUpdateProject({ ...project, scenes: updatedScenes })
 
       if (activeSceneAudioPath) {
         setAudioLoaded(activeSceneAudioPath)
@@ -434,7 +579,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     }
   }
 
-  // --- СИНХРОНИЗАЦИЯ ---
   const runSyncAllScenes = async (scenesToSync?: Scene[] | unknown): Promise<Scene[]> => {
     const targetScenes = Array.isArray(scenesToSync) ? scenesToSync : project.scenes
     setIsSyncing(true)
@@ -533,12 +677,17 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     }
   }
 
-  // --- ГЕНЕРАЦИЯ TSX ---
   const runCodeGen = async (targetScene?: Scene | unknown): Promise<string | null> => {
     const sceneToUse = (targetScene && typeof targetScene === 'object' && 'id' in targetScene)
       ? (targetScene as Scene)
       : activeScene
+
     if (!sceneToUse) return null
+    if (sceneToUse.ignoreTsx) {
+      showNotification(`Сцена "${sceneToUse.title}" помечена как игнорируемая (черный экран)`, 'info')
+      return null
+    }
+
     setIsGeneratingCode(true)
     try {
       const prompt = generateRemotionPrompt(project, sceneToUse)
@@ -552,6 +701,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           project_path: getProjectPath(project),
         })
       })
+
       const data = await res.json()
       if (data.tsx_code) {
         onUpdateProject({
@@ -572,7 +722,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     return null
   }
 
-  // --- РЕНДЕР ---
   const runRender = async (code?: string, audioPath?: string) => {
     if (!activeScene) return
     setIsRendering(true)
@@ -586,7 +735,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           target: 'scene',
           target_id: activeScene.id,
           project_path: getProjectPath(project),
-          tsx_code: typeof code === 'string' ? code : (activeScene.remotionCode || ''),
+          tsx_code: typeof code === 'string' ? code : (activeScene.ignoreTsx ? 'export const SceneComponent = () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;' : (activeScene.remotionCode || '')),
           audio_path: typeof audioPath === 'string' ? audioPath : (audioLoaded || getAudioPathForScene(project, activeScene)),
         })
       })
@@ -598,6 +747,64 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     } catch {
       setIsRendering(false)
       showNotification('Ошибка старта рендера', 'error')
+    }
+  }
+
+  const runProjectRender = async () => {
+    const unreadyScene = project.scenes.find(s => !s.ignoreTsx && (!s.remotionCode || !s.remotionCode.trim()))
+    if (unreadyScene) {
+      showNotification(
+        `Нельзя скомпилировать проект! У сцены "${unreadyScene.title}" отсутствует TSX код. Сгенерируйте код или включите "Игнорировать".`,
+        'error'
+      )
+      return
+    }
+
+    setIsRendering(true)
+    setRenderProgress(0)
+
+    try {
+      const masterTsxCode = buildMasterProjectTsx(project)
+      const projectPath = getProjectPath(project)
+
+      const audioPaths = project.scenes.map(s => getAudioPathForScene(project, s))
+      const fullAudioPath = `${projectPath}/assets/voice/Full_Project_${sanitizeFilename(project.name)}.wav`
+
+      try {
+        await fetch(`${API}/api/v1/audio/concat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audio_paths: audioPaths,
+            output_path: fullAudioPath
+          })
+        })
+      } catch (concatErr) {
+        console.warn('Не удалось объединить аудиозаписи сцен:', concatErr)
+      }
+
+      const res = await fetch(`${API}/api/v1/render/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: project.name,
+          target: 'project',
+          target_id: `Project_${project.name}`,
+          project_path: projectPath,
+          tsx_code: masterTsxCode,
+          audio_path: fullAudioPath,
+        })
+      })
+
+      const data = await res.json()
+      if (data.task_id) {
+        setRenderTaskId(data.task_id)
+        setCenterView('player')
+        showNotification('Старт сборки всего проекта!', 'success')
+      }
+    } catch {
+      setIsRendering(false)
+      showNotification('Ошибка старта рендера проекта', 'error')
     }
   }
 
@@ -644,7 +851,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
             <DropdownItem onClick={() => setIsSettingsOpen(true)}><Icon name="settings" className="inline text-[16px] mr-1" /> Настройки</DropdownItem>
           </Dropdown>
         </div>
-
         <div className="flex items-center gap-3">
           <Button
             variant="primary"
@@ -660,15 +866,24 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           <Button
             variant="dashed"
             disabled={isRendering}
+            onClick={runProjectRender}
+            className="border-primary/40 text-primary hover:bg-primary/10"
+          >
+            {isRendering ? `Рендер... ${renderProgress}%` : '🎬 Рендер всего проекта'}
+          </Button>
+
+          <Button
+            variant="dashed"
+            disabled={isRendering}
             onClick={() => runRender()}
           >
-            {isRendering ? `Рендер... ${renderProgress}%` : 'Только Рендер'}
+            Только текущая сцена
           </Button>
         </div>
       </header>
 
       <main className="flex-1 flex overflow-hidden">
-        {/* ЛЕВЫЙ САЙДБАР: CRUD СЦЕН */}
+        {/* Левый сайдбар со сценами */}
         <aside className="w-[320px] border-r border-white/10 bg-surface-container/30 flex flex-col shrink-0">
           <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface-container-lowest/30">
             <h2 className="font-title-md text-title-md text-on-surface">Сценарий</h2>
@@ -684,6 +899,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
               const isSceneActive = activeSceneId === scene.id
               const hasAudio = Boolean(scene.fragments.some(f => f.audioFileName) || (isSceneActive && audioLoaded))
               const hasSync = Boolean(scene.fragments.some(f => f.startTime !== undefined && f.startTime !== null))
+              const isIgnored = Boolean(scene.ignoreTsx)
               const hasCode = Boolean(scene.remotionCode && scene.remotionCode.trim().length > 0)
 
               return (
@@ -703,13 +919,22 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                       value={scene.title}
                       onChange={(e) => handleUpdateSceneTitle(scene.id, e.target.value, scene.timecode)}
                     />
-                    <button
-                      className="text-on-surface-variant hover:text-error opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                      onClick={(e) => { e.stopPropagation(); handleDeleteScene(scene.id) }}
-                      title="Удалить сцену"
-                    >
-                      <Icon name="delete" className="text-[14px]" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        className={`text-[11px] p-1 rounded transition-colors ${isIgnored ? 'text-error font-medium' : 'text-on-surface-variant/40 hover:text-white'}`}
+                        onClick={(e) => { e.stopPropagation(); toggleIgnoreTsx(scene.id) }}
+                        title={isIgnored ? "TSX игнорируется (черный экран)" : "Нажмите, чтобы игнорировать TSX"}
+                      >
+                        {isIgnored ? '⬛ Игнор' : '⬛'}
+                      </button>
+                      <button
+                        className="text-on-surface-variant hover:text-error opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteScene(scene.id) }}
+                        title="Удалить сцену"
+                      >
+                        <Icon name="delete" className="text-[14px]" />
+                      </button>
+                    </div>
                   </div>
                   <SceneCard
                     scene={`Сцена ${idx + 1}`}
@@ -724,9 +949,15 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                     <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasSync ? 'border-primary/40 text-primary bg-primary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>
                       ⏱️ Тайминги
                     </span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasCode ? 'border-accent/40 text-accent bg-accent/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>
-                      💻 TSX
-                    </span>
+                    {isIgnored ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/20 text-on-surface-variant bg-black font-medium" title="Черный экран при рендере">
+                        ⬛ Чёрный экран
+                      </span>
+                    ) : (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasCode ? 'border-accent/40 text-accent bg-accent/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>
+                        💻 TSX
+                      </span>
+                    )}
                   </div>
                 </div>
               )
@@ -734,7 +965,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           </div>
         </aside>
 
-        {/* ЦЕНТРАЛЬНЫЙ ХОЛСТ */}
+        {/* Центральный просмотрщик */}
         <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
           <div className="h-12 border-b border-white/5 flex items-center px-4 justify-between bg-surface-container-lowest/50">
             <div className="flex gap-2">
@@ -751,7 +982,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                 💻 Remotion TSX Код
               </button>
             </div>
-
             {centerView === 'player' && (
               <Button
                 variant="ghost"
@@ -763,7 +993,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
               </Button>
             )}
           </div>
-
           <div className="flex-1 flex flex-col justify-center items-center p-6 overflow-y-auto custom-scrollbar">
             {centerView === 'player' ? (
               <div className="w-full max-w-[840px] aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center overflow-hidden">
@@ -779,7 +1008,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                 ) : (
                   <div className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-3">
                     <Icon name="movie" className="text-[56px] text-primary/40" />
-                    <span>Нажмите «Сгенерировать всё» для начала сборки</span>
+                    <span>Нажмите «Сгенерировать всё» или «Рендер всего проекта» для сборки</span>
                   </div>
                 )}
                 {audioLoaded && (
@@ -788,30 +1017,37 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
               </div>
             ) : (
               <div className="w-full h-full max-w-[900px] flex flex-col gap-2">
-                <textarea
-                  className="w-full h-full font-mono text-[12px] bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50"
-                  value={activeScene?.remotionCode || ''}
-                  onChange={(e) => {
-                    if (!activeScene) return
-                    onUpdateProject({
-                      ...project,
-                      scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: e.target.value } : s)
-                    })
-                  }}
-                  placeholder="// TSX код компонента сгенерируется здесь..."
-                  spellCheck={false}
-                />
+                {activeScene?.ignoreTsx ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-black border border-white/10 rounded-xl text-on-surface-variant/60 font-mono text-sm gap-2">
+                    <Icon name="block" className="text-[32px] text-error" />
+                    <span>Сцена помечена как «Игнорировать TSX»</span>
+                    <span className="text-xs opacity-60">При рендере будет отображаться черный экран</span>
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full h-full font-mono text-[12px] bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50"
+                    value={activeScene?.remotionCode || ''}
+                    onChange={(e) => {
+                      if (!activeScene) return
+                      onUpdateProject({
+                        ...project,
+                        scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: e.target.value } : s)
+                      })
+                    }}
+                    placeholder="// TSX код компонента сгенерируется здесь..."
+                    spellCheck={false}
+                  />
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* ПРАВЫЙ ИНСПЕКТОР */}
+        {/* Правый инспектор */}
         <aside className="w-[380px] border-l border-white/10 flex flex-col bg-surface-container/60 backdrop-blur-2xl shrink-0">
           <div className="p-4 border-b border-white/5 flex justify-between items-center">
             <h3 className="font-title-md text-title-md text-on-surface">Инспектор Пайплайна</h3>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar">
             <section className="flex flex-col gap-3">
               <div className="flex justify-between items-center">
@@ -820,7 +1056,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   <Icon name="add" className="text-[14px]" /> Фрагмент
                 </button>
               </div>
-
               {activeScene?.fragments.map((frag, i) => (
                 <div
                   key={frag.id}
@@ -832,7 +1067,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                 >
                   <Icon name="drag_indicator" className="text-[12px] text-on-surface-variant/30 absolute -left-0.5 top-6 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-mono text-secondary">
+                    <span className="text-[10px] font-mono text-secondary font-medium">
                       Фрагмент {i + 1} ({frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s)
                     </span>
                     <div className="flex items-center gap-2">
@@ -867,7 +1102,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                 </div>
               ))}
             </section>
-
+            
             <div className="h-px bg-white/5" />
 
             <section className="flex flex-col gap-3">
@@ -880,7 +1115,6 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   <Icon name="record_voice_over" className="text-[14px]" /> Voicebox Студия
                 </button>
               </div>
-
               <FieldGroup label="Голосовая модель">
                 <Select value={voiceModel} onChange={(e) => setVoiceModel(e.target.value)}>
                   <option value="aria">Neural - Aria (Женский, Спокойный)</option>
@@ -891,7 +1125,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   ))}
                 </Select>
               </FieldGroup>
-              <Button variant="dashed" disabled={isGeneratingAudio} onClick={runVoiceGenAllScenes}>
+              <Button variant="dashed" disabled={isGeneratingAudio} onClick={() => runVoiceGenAllScenes()}>
                 {isGeneratingAudio ? <Spinner /> : 'Сгенерировать голос для всех сцен'}
               </Button>
             </section>
@@ -902,7 +1136,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
               <div className="flex justify-between items-center">
                 <span className="font-label text-xs uppercase tracking-wider text-primary">2. Синхронизация (Whisper)</span>
                 <div className="flex items-center gap-2">
-                  {project.scenes.some(s => s.fragments.some(f => f.startTime !== undefined && f.startTime !== null)) && (
+                  {project.scenes.some(s => s.fragments.some(f => f.startTime !== undefined)) && (
                     <button
                       className="text-[11px] text-on-surface-variant hover:text-error flex items-center gap-1 transition-colors"
                       onClick={handleResetAllSync}
@@ -929,7 +1163,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   <Icon name="memory" className="text-[14px]" /> Очистить VRAM вручную
                 </button>
               </div>
-              <Button variant="dashed" disabled={isSyncing} onClick={runSyncAllScenes}>
+              <Button variant="dashed" disabled={isSyncing} onClick={() => runSyncAllScenes()}>
                 {isSyncing ? <Spinner /> : 'Синхронизировать все сцены'}
               </Button>
             </section>
@@ -962,7 +1196,22 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   </button>
                 </div>
               </div>
-              <Button variant="dashed" disabled={isGeneratingCode} onClick={() => runCodeGen()}>
+
+              {activeScene && (
+                <div className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl">
+                  <Switch
+                    checked={Boolean(activeScene.ignoreTsx)}
+                    onChange={() => toggleIgnoreTsx(activeScene.id)}
+                    label="Игнорировать TSX (черный экран)"
+                  />
+                </div>
+              )}
+
+              <Button
+                variant="dashed"
+                disabled={isGeneratingCode || Boolean(activeScene?.ignoreTsx)}
+                onClick={() => runCodeGen()}
+              >
                 {isGeneratingCode ? <Spinner /> : 'Сгенерировать TSX через Ollama'}
               </Button>
             </section>
@@ -971,15 +1220,15 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
             <section className="flex flex-col gap-3">
               <span className="font-label text-xs uppercase tracking-wider text-primary">4. Финальный Рендер</span>
-              <Button variant="primary" disabled={isRendering} onClick={() => runRender()}>
-                {isRendering ? <Spinner /> : 'Собрать MP4'}
+              <Button variant="primary" disabled={isRendering} onClick={runProjectRender}>
+                {isRendering ? <Spinner /> : '🎬 Собрать весь MP4 проект'}
               </Button>
             </section>
           </div>
         </aside>
       </main>
 
-      {/* VOICEBOX СТУДИЯ КЛОНИРОВАНИЯ ГОЛОСА */}
+      {/* Модальные окна */}
       <Modal isOpen={isVoiceboxOpen} onClose={() => setIsVoiceboxOpen(false)} title="Voicebox — Клонирование голоса">
         <div className="flex flex-col gap-5 w-full pb-4">
           <div className="flex flex-col gap-3">
@@ -993,73 +1242,48 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
             </FieldGroup>
             <FieldGroup label="Аудио референс (.wav/.mp3)">
               <input type="file" ref={refVoiceInputRef} className="hidden" accept="audio/*" onChange={handleUploadRefVoiceAudio} />
-              <button
-                className="w-full flex items-center justify-center p-3 rounded-lg border border-dashed border-white/20 hover:border-primary/50 gap-2 transition-all"
-                onClick={() => refVoiceInputRef.current?.click()}
-              >
-                <Icon name={newVoiceAudioPath ? "audio_file" : "upload_file"} className="text-[20px] text-secondary" />
-                <span className="text-xs text-on-surface-variant truncate max-w-[260px]">
-                  {newVoiceAudioPath ? newVoiceAudioPath : 'Загрузить образцы голоса'}
-                </span>
-              </button>
+              <Button variant="dashed" icon="upload" onClick={() => refVoiceInputRef.current?.click()}>
+                {newVoiceAudioPath ? 'Заменить референс' : 'Загрузить аудиофайл'}
+              </Button>
+              {newVoiceAudioPath && <span className="text-[11px] text-secondary font-mono truncate">{newVoiceAudioPath}</span>}
             </FieldGroup>
-            <FieldGroup label="Текст, произнесенный в референсе (для точного клонирования)">
+            <FieldGroup label="Текст референса (опционально)">
               <Input
                 value={newVoiceText}
                 onChange={e => setNewVoiceText(e.target.value)}
-                placeholder="Точный текст записи..."
+                placeholder="Текст, произнесенный в референсе..."
               />
             </FieldGroup>
-            <FieldGroup label="Теги / Метки (через запятую)">
+            <FieldGroup label="Теги (через запятую)">
               <Input
                 value={newVoiceTags}
                 onChange={e => setNewVoiceTags(e.target.value)}
-                placeholder="диктор, быстрый, мужской"
+                placeholder="мужской, глубокий, рус"
               />
             </FieldGroup>
-
             <Button variant="primary" onClick={handleSaveCustomVoice} className="mt-2">
-              Сохранить голос в Voicebox
+              Сохранить голос
             </Button>
           </div>
-
-          <div className="h-px bg-white/10" />
-
-          <div className="flex flex-col gap-3">
-            <h4 className="text-xs font-label uppercase text-on-surface-variant">Сохраненные голоса ({project.customVoices?.length || 0})</h4>
-            {(!project.customVoices || project.customVoices.length === 0) ? (
-              <span className="text-xs text-on-surface-variant/50 text-center py-3">Нет клонированных голосов</span>
-            ) : (
-              project.customVoices.map(voice => (
-                <div key={voice.id} className="p-3 rounded-xl bg-surface-container-lowest/50 border border-white/10 flex justify-between items-center">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-medium text-on-surface">{voice.name}</span>
-                    <span className="text-[10px] text-secondary font-mono truncate max-w-[220px]">{voice.refAudioPath}</span>
-                    {voice.tags?.length ? (
-                      <div className="flex gap-1 mt-1">
-                        {voice.tags.map((t, ti) => (
-                          <span key={ti} className="text-[9px] px-1 py-0.2 rounded bg-white/5 border border-white/10 text-on-surface-variant">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
+          {project.customVoices && project.customVoices.length > 0 && (
+            <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
+              <h4 className="text-xs font-label uppercase text-on-surface-variant">Сохранённые голоса</h4>
+              {project.customVoices.map(v => (
+                <div key={v.id} className="flex justify-between items-center p-2 rounded-lg bg-surface-container-lowest/50 border border-white/5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-on-surface">{v.name}</span>
+                    <span className="text-[10px] text-on-surface-variant/60">{v.tags?.join(', ')}</span>
                   </div>
-                  <button
-                    className="text-on-surface-variant hover:text-error transition-colors p-1"
-                    onClick={() => handleDeleteCustomVoice(voice.id)}
-                    title="Удалить голос"
-                  >
+                  <button className="text-error hover:text-error/80 p-1" onClick={() => handleDeleteCustomVoice(v.id)}>
                     <Icon name="delete" className="text-[16px]" />
                   </button>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </Modal>
 
-      {/* НАСТРОЙКИ ПРОЕКТА */}
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="Настройки проекта">
         <div className="flex flex-col gap-4">
           <Button variant="dashed" className="text-error border-error/30 hover:bg-error/10" onClick={() => onDeleteProject(project.name)}>

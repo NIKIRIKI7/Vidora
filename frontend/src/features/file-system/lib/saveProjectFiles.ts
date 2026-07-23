@@ -58,6 +58,27 @@ export const saveAudioToDisk = async (projectDir: FileSystemDirectoryHandle, fil
   }
 }
 
+export const saveRenderedVideoToDisk = async (projectDir: FileSystemDirectoryHandle, file: File, target: string, targetId: string) => {
+  try {
+    let targetDir: FileSystemDirectoryHandle
+    if (target === 'b-roll') {
+      const assetsDir = await projectDir.getDirectoryHandle('assets', { create: true })
+      targetDir = await assetsDir.getDirectoryHandle('b-roll', { create: true })
+    } else {
+      const codeDir = await projectDir.getDirectoryHandle('code', { create: true })
+      targetDir = await codeDir.getDirectoryHandle('a-roll', { create: true })
+    }
+    const fileHandle = await targetDir.getFileHandle(`${targetId}.mp4`, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(file)
+    await writable.close()
+    return true
+  } catch (error) {
+    console.error('Error saving video:', error)
+    return false
+  }
+}
+
 export const saveAssetToDisk = async (projectDir: FileSystemDirectoryHandle, file: File, type: 'a-roll' | 'b-roll') => {
   try {
     const assetsDir = await projectDir.getDirectoryHandle('assets')

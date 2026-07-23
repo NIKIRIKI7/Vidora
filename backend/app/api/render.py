@@ -107,8 +107,11 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                 else:
                     print(f"[RENDER API] Ошибка склейки FFmpeg: {res.stderr[:300]}")
 
-            folder_name = "b-roll" if req.target == "b-roll" else "a-roll"
-            dest_dir = Path(req.project_path) / "assets" / folder_name
+            if req.target == "project":
+                dest_dir = Path(req.project_path) / "preview"
+            else:
+                folder_name = "b-roll" if req.target == "b-roll" else "a-roll"
+                dest_dir = Path(req.project_path) / "assets" / folder_name
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_file = dest_dir / f"{req.target_id}.mp4"
             shutil.copy2(source_video, dest_file)
