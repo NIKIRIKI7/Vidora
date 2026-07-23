@@ -144,12 +144,17 @@ const ${compName}: React.FC = () => {
   return <AbsoluteFill style={{ backgroundColor: '#000000' }} />;
 };`)
     } else {
+      // ponytail: strip all imports to prevent esbuild syntax errors on concat
       let cleanCode = scene.remotionCode
+        .replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/g, '')
+        .replace(/import\s+['"].*?['"];?/g, '')
+        .replace(/^[ \t]*React\s+from\s+['"].*?['"];?/gm, '')
+        .replace(/^[ \t]*from\s+['"].*?['"];?/gm, '')
         .replace(/export\s+default\s+function\s+([A-Za-z0-9_]+)/g, 'function $1')
         .replace(/export\s+default\s+const\s+([A-Za-z0-9_]+)/g, 'const $1')
         .replace(/export\s+default\s+([A-Za-z0-9_]+);?/g, '')
-        .replace(/import\s+React.*?;?/g, '')
-        .replace(/import\s+\{.*?\}\s+from\s+['"]remotion['"];?/g, '')
+        .replace(/export\s+const\s+/g, 'const ')
+        .replace(/export\s+function\s+/g, 'function ')
 
       sceneBlocks.push(`
 // === Сцена ${sceneNum}: ${scene.title} ===

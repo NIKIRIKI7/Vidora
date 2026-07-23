@@ -158,17 +158,23 @@ async def undo_audio(request: AudioProcessRequest):
 
 @router.post("/concat")
 async def concat_audio(request: AudioConcatRequest):
-    list_file = request.output_path + ".list.txt"
+    out_path = _resolve_path(request.output_path)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    list_file = out_path + ".list.txt"
     try:
         with open(list_file, "w", encoding="utf-8") as f:
             for p in request.audio_paths:
-                f.write(f"file '{p}'\n")
+                abs_p = _resolve_path(p)
+                if os.path.exists(abs_p):
+                    formatted_p = abs_p.replace("\\", "/")
+                    f.write(f"file '{formatted_p}'\n")
         _run_ffmpeg(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", request.output_path],
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path],
             desc="concat",
         )
-        return {"status": "ok", "output_path": request.output_path}
-    except RuntimeError as e:
+        return {"status": "ok", "output_path": out_path}
+    except Exception as e:
+        print(f"[AUDIO API] Concat status: {e}")
         return {"status": "error", "detail": str(e)}
     finally:
         if os.path.exists(list_file):
