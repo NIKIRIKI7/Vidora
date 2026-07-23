@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, ChangeEvent } from 'react'
 import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
 import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
 import { useNotificationStore } from '@entities/project'
-import { saveProjectToDisk } from '@features/file-system'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
@@ -17,6 +16,29 @@ interface Props {
 }
 
 const getProjectPath = (p: ProjectSettings) => p.projectDir?.name || p.name || 'vidora_projects'
+
+const sanitizeFilename = (str: string) => str.replace(/[^a-zA-Z0-9а-яА-Я_]/g, '_')
+
+const formatTimecode = (totalSeconds: number): string => {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = Math.floor(totalSeconds % 60)
+  const pad = (num: number) => num.toString().padStart(2, '0')
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
+const getAudioPathForScene = (project: ProjectSettings, scene: Scene): string => {
+  const projectPath = getProjectPath(project)
+  const firstFragAudio = scene.fragments.find(f => f.audioFileName)?.audioFileName
+  if (firstFragAudio) {
+    if (firstFragAudio.includes('/') || firstFragAudio.includes('\\') || firstFragAudio.includes(':')) {
+      return firstFragAudio
+    }
+    return `${projectPath}/assets/voice/${firstFragAudio}`
+  }
+  const safeTitle = sanitizeFilename(scene.title)
+  return `${projectPath}/assets/voice/Scene_${safeTitle}_${scene.id.slice(0, 6)}.wav`
+}
 
 export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProject, onUpdateProject, onDeleteProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
@@ -43,26 +65,43 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderTaskId, setRenderTaskId] = useState<string | null>(null)
 
-  const [isProcessingAudio, setIsProcessingAudio] = useState(false)
-  const [activeProcess, setActiveProcess] = useState<string | null>(null)
-  const [isAudioModalOpen, setIsAudioModalOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [useWhisper, setUseWhisper] = useState(true)
+  const [autoOffloadVram, setAutoOffloadVram] = useState(true)
 
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
+  const [draggedSceneIdx, setDraggedSceneIdx] = useState<number | null>(null)
+  const [draggedFragIdx, setDraggedFragIdx] = useState<number | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const audioInputRef = useRef<HTMLInputElement>(null)
   const refVoiceInputRef = useRef<HTMLInputElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
   const showNotification = useNotificationStore(s => s.showNotification)
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 
-  const saveProject = (updatedProject: ProjectSettings) => {
-    onUpdateProject(updatedProject)
-    saveProjectToDisk(updatedProject)
+  const handleSceneDragStart = (idx: number) => () => setDraggedSceneIdx(idx)
+  const handleSceneDrop = (dropIdx: number) => () => {
+    if (draggedSceneIdx === null || draggedSceneIdx === dropIdx) { setDraggedSceneIdx(null); return }
+    const scenes = [...project.scenes]
+    const [moved] = scenes.splice(draggedSceneIdx, 1)
+    scenes.splice(dropIdx, 0, moved)
+    onUpdateProject({ ...project, scenes })
+    setDraggedSceneIdx(null)
+  }
+  const handleFragDragStart = (idx: number) => () => setDraggedFragIdx(idx)
+  const handleFragDrop = (dropIdx: number) => () => {
+    if (!activeScene || draggedFragIdx === null || draggedFragIdx === dropIdx) { setDraggedFragIdx(null); return }
+    const fragments = [...activeScene.fragments]
+    const [moved] = fragments.splice(draggedFragIdx, 1)
+    fragments.splice(dropIdx, 0, moved)
+    onUpdateProject({
+      ...project,
+      scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments } : s)
+    })
+    setDraggedFragIdx(null)
   }
 
   useEffect(() => {
@@ -94,6 +133,25 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     }
   }, [showNotification])
 
+  useEffect(() => {
+    if (!activeScene) {
+      setAudioLoaded(null)
+      return
+    }
+
+    const expectedPath = getAudioPathForScene(project, activeScene)
+
+    fetch(`${API}/api/v1/render/media?path=${encodeURIComponent(expectedPath)}`, { method: 'HEAD' })
+      .then(res => {
+        if (res.ok) {
+          setAudioLoaded(expectedPath)
+        } else {
+          setAudioLoaded(null)
+        }
+      })
+      .catch(() => setAudioLoaded(null))
+  }, [activeSceneId, project.name, project.scenes])
+
   // --- CRUD СЦЕН ---
   const handleAddScene = () => {
     const newScene: Scene = {
@@ -107,7 +165,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       }]
     }
     const updated = { ...project, scenes: [...project.scenes, newScene] }
-    saveProject(updated)
+    onUpdateProject(updated)
     setActiveSceneId(newScene.id)
     showNotification('Новая сцена добавлена', 'success')
   }
@@ -119,7 +177,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     }
     const updatedScenes = project.scenes.filter(s => s.id !== sceneId)
     const updated = { ...project, scenes: updatedScenes }
-    saveProject(updated)
+    onUpdateProject(updated)
     if (activeSceneId === sceneId) setActiveSceneId(updatedScenes[0].id)
     showNotification('Сцена удалена', 'info')
   }
@@ -129,7 +187,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       ...project,
       scenes: project.scenes.map(s => s.id === sceneId ? { ...s, title, timecode } : s)
     }
-    saveProject(updated)
+    onUpdateProject(updated)
   }
 
   // --- CRUD ФРАГМЕНТОВ ---
@@ -144,7 +202,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       ...project,
       scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: [...s.fragments, newFrag] } : s)
     }
-    saveProject(updated)
+    onUpdateProject(updated)
     showNotification('Фрагмент добавлен', 'success')
   }
 
@@ -158,7 +216,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       ...project,
       scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: s.fragments.filter(f => f.id !== fragId) } : s)
     }
-    saveProject(updated)
+    onUpdateProject(updated)
     showNotification('Фрагмент удален', 'info')
   }
 
@@ -173,7 +231,37 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
         } : f)
       } : s)
     }
-    saveProject(updated)
+    onUpdateProject(updated)
+  }
+
+  const handleResetAllSync = () => {
+    const updatedScenes = project.scenes.map(s => ({
+      ...s,
+      timecode: '00:00:00',
+      fragments: s.fragments.map(f => ({
+        ...f,
+        startTime: undefined,
+        endTime: undefined,
+      }))
+    }))
+
+    onUpdateProject({
+      ...project,
+      scenes: updatedScenes,
+    })
+
+    showNotification('Синхронизация сброшена для всех сцен', 'info')
+  }
+
+  const handleUnloadVram = async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/audio/vram/unload`, { method: 'POST' })
+      if (res.ok) {
+        showNotification('VRAM память видеокарты очищена!', 'success')
+      }
+    } catch {
+      showNotification('Ошибка очистки VRAM', 'error')
+    }
   }
 
   // --- VOICEBOX / КЛОНИРОВАНИЕ ГОЛОСА ---
@@ -198,7 +286,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
   const handleSaveCustomVoice = () => {
     if (!newVoiceName || !newVoiceAudioPath) {
-      showNotification('Укажите имя голоса и загрузите аудиофайла', 'error')
+      showNotification('Укажите имя голоса и загрузите аудиофайл', 'error')
       return
     }
     const newVoice: CustomVoice = {
@@ -209,7 +297,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       tags: newVoiceTags.split(',').map(t => t.trim()).filter(Boolean)
     }
     const updatedVoices = [...(project.customVoices || []), newVoice]
-    saveProject({ ...project, customVoices: updatedVoices })
+    onUpdateProject({ ...project, customVoices: updatedVoices })
     setVoiceModel(newVoice.id)
     setIsVoiceboxOpen(false)
     setNewVoiceName('')
@@ -221,96 +309,175 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
   const handleDeleteCustomVoice = (voiceId: string) => {
     const updatedVoices = (project.customVoices || []).filter(v => v.id !== voiceId)
-    saveProject({ ...project, customVoices: updatedVoices })
+    onUpdateProject({ ...project, customVoices: updatedVoices })
     if (voiceModel === voiceId) setVoiceModel('aria')
     showNotification('Голос удален из Voicebox', 'info')
   }
 
-  // --- ОЗВУЧКА ---
-  const runVoiceGen = async (): Promise<string | null> => {
-    if (!activeScene) return null
+  const runVoiceGenAllScenes = async (scenesToProcess?: Scene[] | unknown): Promise<{ scenes: Scene[]; activeAudio: string | null }> => {
+    const targetScenes = Array.isArray(scenesToProcess) ? scenesToProcess : project.scenes
+    if (!targetScenes || targetScenes.length === 0) return { scenes: targetScenes || [], activeAudio: null }
     setIsGeneratingAudio(true)
     try {
       const customVoice = project.customVoices?.find(v => v.id === voiceModel)
-      const text = activeScene.fragments.map(f => f.text).join(' ')
-      
-      const payload = {
-        fragment_id: activeScene.id,
-        file_prefix: `Scene_${activeScene.title}`,
-        text,
-        voice_model: customVoice ? 'clone' : voiceModel,
-        ref_audio_path: customVoice ? customVoice.refAudioPath : null,
-        ref_text: customVoice ? customVoice.refText : null,
-        speed,
-        num_steps: numSteps,
-        project_path: getProjectPath(project),
+      const projectPath = getProjectPath(project)
+      let updatedScenes = [...targetScenes]
+      let activeSceneAudioPath: string | null = null
+      let successCount = 0
+
+      for (let idx = 0; idx < updatedScenes.length; idx++) {
+        const scene = updatedScenes[idx]
+        const text = scene.fragments.map(f => f.text).join(' ')
+        if (!text.trim()) continue
+
+        const safeTitle = sanitizeFilename(scene.title)
+        const payload = {
+          fragment_id: scene.id,
+          file_prefix: `Scene_${safeTitle}`,
+          text,
+          voice_model: customVoice ? 'clone' : voiceModel,
+          ref_audio_path: customVoice ? customVoice.refAudioPath : null,
+          ref_text: customVoice ? customVoice.refText : null,
+          speed,
+          num_steps: numSteps,
+          project_path: projectPath,
+          auto_offload_vram: autoOffloadVram,
+        }
+
+        const res = await fetch(`${API}/api/v1/audio/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+
+        const data = await res.json()
+        if (res.ok && data.status === 'ok') {
+          successCount++
+          const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
+          const updatedFragments = scene.fragments.map((f, i) =>
+            i === 0 ? { ...f, audioFileName: relativeAudioPath } : f
+          )
+          updatedScenes[idx] = {
+            ...scene,
+            fragments: updatedFragments,
+          }
+          if (scene.id === activeSceneId) {
+            activeSceneAudioPath = relativeAudioPath
+          }
+        }
       }
 
-      const res = await fetch(`${API}/api/v1/audio/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
-        setAudioLoaded(data.absolute_path)
-        showNotification('Озвучка успешно сгенерирована!', 'success')
-        return data.absolute_path
+      const updatedProject = { ...project, scenes: updatedScenes }
+      onUpdateProject(updatedProject)
+
+      if (activeSceneAudioPath) {
+        setAudioLoaded(activeSceneAudioPath)
       }
-    } catch {
-      showNotification('Сбой генерации голоса', 'error')
+
+      showNotification(`Озвучка успешно сгенерирована для всех сцен (${successCount}/${targetScenes.length})!`, 'success')
+      return { scenes: updatedScenes, activeAudio: activeSceneAudioPath }
+    } catch (error) {
+      console.error('Ошибка массовой генерации голоса:', error)
+      showNotification('Сбой генерации голоса для сцен', 'error')
+      return { scenes: targetScenes, activeAudio: null }
     } finally {
       setIsGeneratingAudio(false)
     }
-    return null
   }
 
   // --- СИНХРОНИЗАЦИЯ ---
-  const runSync = async (audioPath: string) => {
-    if (!activeScene) return
+  const runSyncAllScenes = async (scenesToSync?: Scene[] | unknown): Promise<Scene[]> => {
+    const targetScenes = Array.isArray(scenesToSync) ? scenesToSync : project.scenes
     setIsSyncing(true)
     try {
-      const res = await fetch(`${API}/api/v1/audio/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_id: activeScene.id,
-          audio_path: audioPath,
-          fragments: activeScene.fragments.map(f => ({ id: f.id, text: f.text })),
-          project_path: getProjectPath(project),
+      let cumulativeTime = 0
+      const updatedScenes: Scene[] = []
+      const projectPath = getProjectPath(project)
+      let whisperCount = 0
+      let fallbackCount = 0
+
+      for (const scene of targetScenes) {
+        const audioPathToUse = getAudioPathForScene(project, scene)
+
+        const res = await fetch(`${API}/api/v1/audio/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scene_id: scene.id,
+            audio_path: audioPathToUse,
+            fragments: scene.fragments.map(f => ({ id: f.id, text: f.text })),
+            project_path: projectPath,
+            use_whisper: useWhisper,
+            auto_offload_vram: autoOffloadVram,
+          })
         })
-      })
-      const data = await res.json()
-      if (data.status === 'ok' && data.fragments_timings) {
-        const timingMap = Object.fromEntries(data.fragments_timings.map((t: any) => [t.id, t]))
-        const updatedFragments = activeScene.fragments.map(f => {
-          const t = timingMap[f.id]
-          return t ? { ...f, startTime: t.startTime, endTime: t.endTime } : f
+
+        const data = await res.json()
+        if (data.fallback) {
+          fallbackCount++
+          console.warn(`[SYNC] ⚠️ Сцена "${scene.title}": сработал FALLBACK. Причина: ${data.reason || 'аудио не найдено'}`)
+        } else {
+          whisperCount++
+          console.log(`[SYNC] ✅ Сцена "${scene.title}": сработал WHISPERX.`)
+        }
+
+        let syncedFragments = [...scene.fragments]
+        let sceneDuration = 0
+
+        if (data.status === 'ok' && data.fragments_timings) {
+          const timingMap = Object.fromEntries(data.fragments_timings.map((t: any) => [t.id, t]))
+          syncedFragments = scene.fragments.map(f => {
+            const t = timingMap[f.id]
+            return t ? { ...f, startTime: t.startTime, endTime: t.endTime } : f
+          })
+          sceneDuration = Math.max(...syncedFragments.map(f => f.endTime || 0), 0)
+        }
+
+        if (sceneDuration <= 0) {
+          sceneDuration = scene.fragments.reduce((acc, f) => acc + Math.max(f.text.split(' ').length / 2.5, 1.0), 0)
+        }
+
+        const sceneTimecode = formatTimecode(cumulativeTime)
+        cumulativeTime += sceneDuration
+
+        updatedScenes.push({
+          ...scene,
+          timecode: sceneTimecode,
+          fragments: syncedFragments,
         })
-        saveProject({
-          ...project,
-          scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
-        })
-        showNotification('Тайминги выровнены', 'success')
       }
-    } catch {
-      showNotification('Сбой синхронизации', 'error')
+
+      onUpdateProject({
+        ...project,
+        scenes: updatedScenes,
+      })
+
+      const summaryMsg = `Синхронизация завершена! (WhisperX: ${whisperCount}, Fallback: ${fallbackCount})`
+      showNotification(summaryMsg, fallbackCount > 0 && whisperCount === 0 ? 'info' : 'success')
+      return updatedScenes
+    } catch (error) {
+      console.error('Ошибка выполнения запроса синхронизации:', error)
+      showNotification('Сбой синхронизации таймингов', 'error')
+      return targetScenes
     } finally {
       setIsSyncing(false)
     }
   }
 
   // --- ГЕНЕРАЦИЯ TSX ---
-  const runCodeGen = async (): Promise<string | null> => {
-    if (!activeScene) return null
+  const runCodeGen = async (targetScene?: Scene | unknown): Promise<string | null> => {
+    const sceneToUse = (targetScene && typeof targetScene === 'object' && 'id' in targetScene)
+      ? (targetScene as Scene)
+      : activeScene
+    if (!sceneToUse) return null
     setIsGeneratingCode(true)
     try {
-      const prompt = generateRemotionPrompt(project, activeScene)
+      const prompt = generateRemotionPrompt(project, sceneToUse)
       const res = await fetch(`${API}/api/v1/code/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target_id: activeScene.id,
+          target_id: sceneToUse.id,
           prompt,
           project_data: project,
           project_path: getProjectPath(project),
@@ -318,9 +485,9 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
       })
       const data = await res.json()
       if (data.tsx_code) {
-        saveProject({
+        onUpdateProject({
           ...project,
-          scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: data.tsx_code } : s)
+          scenes: project.scenes.map(s => s.id === sceneToUse.id ? { ...s, remotionCode: data.tsx_code } : s)
         })
         showNotification('TSX код сгенерирован', 'success')
         return data.tsx_code
@@ -334,7 +501,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
   }
 
   // --- РЕНДЕР ---
-  const runRender = async (code: string, audioPath?: string) => {
+  const runRender = async (code?: string, audioPath?: string) => {
     if (!activeScene) return
     setIsRendering(true)
     setRenderProgress(0)
@@ -347,8 +514,8 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           target: 'scene',
           target_id: activeScene.id,
           project_path: getProjectPath(project),
-          tsx_code: code || activeScene.remotionCode || '',
-          audio_path: audioPath || audioLoaded || '',
+          tsx_code: typeof code === 'string' ? code : (activeScene.remotionCode || ''),
+          audio_path: typeof audioPath === 'string' ? audioPath : (audioLoaded || getAudioPathForScene(project, activeScene)),
         })
       })
       const data = await res.json()
@@ -366,19 +533,19 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
     if (!activeScene) return
     setIsAutoPipelineRunning(true)
 
-    setPipelineStep('1/4 Озвучка...')
-    const audioPath = await runVoiceGen()
+    setPipelineStep('1/4 Озвучка всех сцен...')
+    const { scenes: voiceScenes, activeAudio } = await runVoiceGenAllScenes(project.scenes)
 
-    if (audioPath) {
-      setPipelineStep('2/4 Whisper Alignment...')
-      await runSync(audioPath)
-    }
+    setPipelineStep('2/4 Whisper Alignment...')
+    const syncedScenes = await runSyncAllScenes(voiceScenes)
+
+    const currentActiveScene = syncedScenes.find(s => s.id === activeSceneId) || activeScene
 
     setPipelineStep('3/4 Remotion TSX...')
-    const code = await runCodeGen()
+    const code = await runCodeGen(currentActiveScene)
 
     setPipelineStep('4/4 Рендер MP4...')
-    await runRender(code || activeScene.remotionCode || '', audioPath || '')
+    await runRender(code || currentActiveScene.remotionCode || '', activeAudio || audioLoaded || '')
 
     setIsAutoPipelineRunning(false)
     setPipelineStep('')
@@ -421,7 +588,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           <Button
             variant="dashed"
             disabled={isRendering}
-            onClick={() => runRender(activeScene?.remotionCode || '')}
+            onClick={() => runRender()}
           >
             {isRendering ? `Рендер... ${renderProgress}%` : 'Только Рендер'}
           </Button>
@@ -442,12 +609,22 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           </div>
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
             {project.scenes.map((scene, idx) => {
-              const hasAudio = Boolean(scene.fragments.some(f => f.audioFileName) || audioLoaded)
-              const hasSync = Boolean(scene.fragments.some(f => f.startTime !== undefined))
-              const hasCode = Boolean(scene.remotionCode)
+              const isSceneActive = activeSceneId === scene.id
+              const hasAudio = Boolean(scene.fragments.some(f => f.audioFileName) || (isSceneActive && audioLoaded))
+              const hasSync = Boolean(scene.fragments.some(f => f.startTime !== undefined && f.startTime !== null))
+              const hasCode = Boolean(scene.remotionCode && scene.remotionCode.trim().length > 0)
 
               return (
-                <div key={scene.id} onClick={() => setActiveSceneId(scene.id)} className="flex flex-col gap-1 group relative">
+                <div
+                  key={scene.id}
+                  draggable
+                  onDragStart={handleSceneDragStart(idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleSceneDrop(idx)}
+                  onClick={() => setActiveSceneId(scene.id)}
+                  className="flex flex-col gap-1 group relative"
+                >
+                  <Icon name="drag_indicator" className="text-[12px] text-on-surface-variant/30 absolute -left-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
                   <div className="flex items-center justify-between">
                     <input
                       className="text-xs font-semibold bg-transparent text-primary outline-none focus:border-b border-primary/50 w-full"
@@ -469,13 +646,13 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                     isActive={activeSceneId === scene.id}
                   />
                   <div className="flex gap-1 pl-1">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${hasAudio ? 'border-secondary/40 text-secondary bg-secondary/10' : 'border-white/10 text-on-surface-variant/40'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasAudio ? 'border-secondary/40 text-secondary bg-secondary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>
                       🎙️ Аудио
                     </span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${hasSync ? 'border-primary/40 text-primary bg-primary/10' : 'border-white/10 text-on-surface-variant/40'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasSync ? 'border-primary/40 text-primary bg-primary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>
                       ⏱️ Тайминги
                     </span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${hasCode ? 'border-accent/40 text-accent bg-accent/10' : 'border-white/10 text-on-surface-variant/40'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasCode ? 'border-accent/40 text-accent bg-accent/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>
                       💻 TSX
                     </span>
                   </div>
@@ -544,12 +721,12 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   value={activeScene?.remotionCode || ''}
                   onChange={(e) => {
                     if (!activeScene) return
-                    saveProject({
+                    onUpdateProject({
                       ...project,
                       scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: e.target.value } : s)
                     })
                   }}
-                  placeholder="// Введите или сгенерируйте TSX код Remotion..."
+                  placeholder="// TSX код компонента сгенерируется здесь..."
                   spellCheck={false}
                 />
               </div>
@@ -573,7 +750,15 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
               </div>
 
               {activeScene?.fragments.map((frag, i) => (
-                <div key={frag.id} className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl flex flex-col gap-2 relative group">
+                <div
+                  key={frag.id}
+                  draggable
+                  onDragStart={handleFragDragStart(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleFragDrop(i)}
+                  className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl flex flex-col gap-2 relative group"
+                >
+                  <Icon name="drag_indicator" className="text-[12px] text-on-surface-variant/30 absolute -left-0.5 top-6 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-mono text-secondary">
                       Фрагмент {i + 1} ({frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s)
@@ -634,17 +819,46 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
                   ))}
                 </Select>
               </FieldGroup>
-              <Button variant="dashed" disabled={isGeneratingAudio} onClick={() => runVoiceGen()}>
-                {isGeneratingAudio ? <Spinner /> : 'Сгенерировать голос'}
+              <Button variant="dashed" disabled={isGeneratingAudio} onClick={runVoiceGenAllScenes}>
+                {isGeneratingAudio ? <Spinner /> : 'Сгенерировать голос для всех сцен'}
               </Button>
             </section>
 
             <div className="h-px bg-white/5" />
 
             <section className="flex flex-col gap-3">
-              <span className="font-label text-xs uppercase tracking-wider text-primary">2. Синхронизация (Whisper)</span>
-              <Button variant="dashed" disabled={isSyncing || !audioLoaded} onClick={() => runSync(audioLoaded || '')}>
-                {isSyncing ? <Spinner /> : 'Синхронизировать тайминги'}
+              <div className="flex justify-between items-center">
+                <span className="font-label text-xs uppercase tracking-wider text-primary">2. Синхронизация (Whisper)</span>
+                <div className="flex items-center gap-2">
+                  {project.scenes.some(s => s.fragments.some(f => f.startTime !== undefined && f.startTime !== null)) && (
+                    <button
+                      className="text-[11px] text-on-surface-variant hover:text-error flex items-center gap-1 transition-colors"
+                      onClick={handleResetAllSync}
+                      title="Сбросить все тайминги"
+                    >
+                      <Icon name="restart_alt" className="text-[14px]" /> Сбросить
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2.5 p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl">
+                <label className="flex items-center justify-between text-xs text-on-surface-variant cursor-pointer">
+                  Использовать WhisperX ИИ
+                  <input type="checkbox" checked={useWhisper} onChange={e => setUseWhisper(e.target.checked)} className="accent-primary size-3.5" />
+                </label>
+                <label className="flex items-center justify-between text-xs text-on-surface-variant cursor-pointer">
+                  Авто-освобождение VRAM
+                  <input type="checkbox" checked={autoOffloadVram} onChange={e => setAutoOffloadVram(e.target.checked)} className="accent-primary size-3.5" />
+                </label>
+                <button
+                  onClick={handleUnloadVram}
+                  className="text-[11px] text-secondary hover:underline flex items-center gap-1 mt-1 self-start"
+                >
+                  <Icon name="memory" className="text-[14px]" /> Очистить VRAM вручную
+                </button>
+              </div>
+              <Button variant="dashed" disabled={isSyncing} onClick={runSyncAllScenes}>
+                {isSyncing ? <Spinner /> : 'Синхронизировать все сцены'}
               </Button>
             </section>
 
@@ -685,7 +899,7 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
             <section className="flex flex-col gap-3">
               <span className="font-label text-xs uppercase tracking-wider text-primary">4. Финальный Рендер</span>
-              <Button variant="primary" disabled={isRendering} onClick={() => runRender(activeScene?.remotionCode || '')}>
+              <Button variant="primary" disabled={isRendering} onClick={() => runRender()}>
                 {isRendering ? <Spinner /> : 'Собрать MP4'}
               </Button>
             </section>

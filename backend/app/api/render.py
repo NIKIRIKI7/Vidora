@@ -18,12 +18,20 @@ SCENE_FILE = REMO_DIR / "src" / "scenes" / "current.tsx"
 OUT_DIR = REMO_DIR / "out"
 
 def _resolve_path(path: str, project_path: str = "") -> str:
-    if os.path.isabs(path):
-        return path
+    if not path:
+        return ""
+    norm_path = os.path.normpath(path)
+    if os.path.isabs(norm_path):
+        return norm_path
+    
     base_dir = os.getcwd()
     if project_path:
-        base_dir = os.path.join(base_dir, project_path)
-    return os.path.normpath(os.path.join(base_dir, path))
+        norm_proj = os.path.normpath(project_path)
+        if norm_path == norm_proj or norm_path.startswith(norm_proj + os.sep) or norm_path.startswith(norm_proj + "/"):
+            return os.path.normpath(os.path.join(base_dir, norm_path))
+        base_dir = os.path.join(base_dir, norm_proj)
+        
+    return os.path.normpath(os.path.join(base_dir, norm_path))
 
 def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEventLoop):
     print(f"\n[RENDER API] === Старт задачи рендера: {task_id} ===")
@@ -149,8 +157,11 @@ async def cancel_render(task_id: str):
             raise HTTPException(status_code=500, detail=f"Ошибка отмены: {str(e)}")
     raise HTTPException(status_code=404, detail="Процесс рендера не найден")
 
-@router.get("/media")
+@router.api_route("/media", methods=["GET", "HEAD"])
 async def serve_media(path: str):
+    resolved = _resolve_path(path)
+    if os.path.exists(resolved):
+        return FileResponse(resolved)
     if os.path.exists(path):
         return FileResponse(path)
-    raise HTTPException(status_code=404, detail="Медиафайл не найден")
+    raise HTTPException(status_code=404, detail=f"Медиафайл не найден по пути: {path}")

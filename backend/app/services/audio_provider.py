@@ -64,6 +64,18 @@ class OmniVoiceProvider(BaseTTSProvider):
     }
 
     @classmethod
+    def unload_model(cls):
+        if cls._model is not None:
+            print("[OmniVoice] [VRAM] Освобождение GPU VRAM от модели OmniVoice...")
+            del cls._model
+            cls._model = None
+            import gc, torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print("[OmniVoice] [OK] GPU VRAM очищена.")
+
+    @classmethod
     def _load_model(cls):
         import torch
         from omnivoice import OmniVoice

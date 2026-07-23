@@ -53,6 +53,7 @@ class AudioGenerationRequest(BaseModel):
     ref_audio_path: Optional[str] = Field(None, description="Absolute path to reference audio for cloning")
     ref_text: Optional[str] = Field(None, description="Text spoken in reference audio")
     project_path: str = Field(..., description="Absolute path to the project directory from Electron")
+    auto_offload_vram: bool = True
 
 class CodeGenerationRequest(BaseModel):
     target_id: str = Field(..., description="Scene ID or Fragment ID")
@@ -75,6 +76,8 @@ class AudioSyncRequest(BaseModel):
     audio_path: str
     fragments: List[SyncFragment]
     project_path: str = ""
+    use_whisper: bool = True
+    auto_offload_vram: bool = True
 
 class AudioConcatRequest(BaseModel):
     audio_paths: List[str]

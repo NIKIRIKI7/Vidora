@@ -13,6 +13,7 @@ warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest
 from app.services.audio_service import AudioService
+from app.services.audio_provider import OmniVoiceProvider
 
 WHISPER_MODEL_DIR = str(Path(__file__).resolve().parents[2] / "ai-models")
 os.environ.setdefault("HF_HOME", WHISPER_MODEL_DIR)
@@ -22,12 +23,20 @@ router = APIRouter(prefix="/api/v1/audio", tags=["audio"])
 audio_service = AudioService()
 
 def _resolve_path(path: str, project_path: str = "") -> str:
-    if os.path.isabs(path):
-        return path
+    if not path:
+        return ""
+    norm_path = os.path.normpath(path)
+    if os.path.isabs(norm_path):
+        return norm_path
+    
     base_dir = os.getcwd()
     if project_path:
-        base_dir = os.path.join(base_dir, project_path)
-    return os.path.normpath(os.path.join(base_dir, path))
+        norm_proj = os.path.normpath(project_path)
+        if norm_path == norm_proj or norm_path.startswith(norm_proj + os.sep) or norm_path.startswith(norm_proj + "/"):
+            return os.path.normpath(os.path.join(base_dir, norm_path))
+        base_dir = os.path.join(base_dir, norm_proj)
+        
+    return os.path.normpath(os.path.join(base_dir, norm_path))
 
 def _run_ffmpeg(cmd: list, desc: str = "ffmpeg") -> str:
     print(f"[AUDIO API] {desc}: {' '.join(cmd)}")
@@ -37,6 +46,38 @@ def _run_ffmpeg(cmd: list, desc: str = "ffmpeg") -> str:
         print(f"[AUDIO API] {desc} failed (code {result.returncode}): {err[:500]}")
         raise RuntimeError(f"FFmpeg error: {err[:500]}")
     return result.stdout or ""
+
+def _free_vram():
+    import gc, torch
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+def _make_fallback_response(fragments, reason: str = ""):
+    results, cur_time = [], 0.0
+    for frag in fragments:
+        dur = max(len(frag.text.split()) / 2.5, 1.0)
+        results.append({
+            "id": frag.id,
+            "startTime": round(cur_time, 3),
+            "endTime": round(cur_time + dur, 3),
+        })
+        cur_time += dur + 0.1
+    return {
+        "status": "ok",
+        "fragments_timings": results,
+        "fallback": True,
+        "reason": reason
+    }
+
+@router.post("/vram/unload")
+async def unload_vram_endpoint():
+    print("[VRAM] Запрос на ручную очистку памяти GPU...")
+    OmniVoiceProvider.unload_model()
+    _free_vram()
+    return {"status": "ok", "detail": "VRAM полностью очищена"}
+
+
 
 @router.post("/generate")
 async def generate_audio(request: AudioGenerationRequest):
@@ -136,56 +177,71 @@ async def concat_audio(request: AudioConcatRequest):
 @router.post("/sync")
 async def sync_audio(request: AudioSyncRequest):
     audio_path = _resolve_path(request.audio_path, request.project_path)
+    print(f"\n[AUDIO SYNC] === Старт синхронизации сцены: '{request.scene_id}' ===")
+    print(f"[AUDIO SYNC] Whisper: {request.use_whisper} | Auto Offload VRAM: {request.auto_offload_vram}")
+
+    if not request.use_whisper:
+        print("[AUDIO SYNC] [CONFIG] Whisper отключен в UI. Применение FALLBACK.")
+        return _make_fallback_response(request.fragments, reason="Whisper отключен в настройках UI")
 
     if not os.path.exists(audio_path):
-        results, cur_time = [], 0.0
-        for frag in request.fragments:
-            dur = max(len(frag.text.split()) / 2.5, 1.0)
-            results.append({
-                "id": frag.id,
-                "startTime": round(cur_time, 3),
-                "endTime": round(cur_time + dur, 3),
-            })
-            cur_time += dur + 0.1
-        return {"status": "ok", "fragments_timings": results, "fallback": True}
+        print(f"[AUDIO SYNC] [WARN] Аудиофайл НЕ НАЙДЕН: '{audio_path}'. Применение FALLBACK.")
+        return _make_fallback_response(request.fragments, reason="Файл аудио не найден")
+
+    if request.auto_offload_vram:
+        print("[AUDIO SYNC] [VRAM] Выгрузка OmniVoice из памяти GPU...")
+        OmniVoiceProvider.unload_model()
 
     try:
         import whisperx
         import torch
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
+        print(f"[AUDIO SYNC] [INFO] Загрузка WhisperX (device={device}, compute_type={compute_type})...")
 
         model = whisperx.load_model("base", device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
         audio = whisperx.load_audio(audio_path)
-        result = model.transcribe(audio, batch_size=8)
 
-        model_a, metadata = whisperx.load_align_model(
-            language_code=result["language"], device=device, model_dir=WHISPER_MODEL_DIR
-        )
-        result = whisperx.align(
-            result["segments"], model_a, metadata, audio, device, return_char_alignments=False
-        )
+        print("[AUDIO SYNC] [INFO] Транскрибация речи...")
+        result = model.transcribe(audio, batch_size=8)
+        lang = result.get("language", "ru")
 
         recognized_words = []
-        for segment in result["segments"]:
-            for w in segment.get("words", []):
-                if "start" in w and "end" in w:
-                    recognized_words.append(w)
+        try:
+            print(f"[AUDIO SYNC] [INFO] Выравнивание (Alignment) для языка '{lang}'...")
+            model_a, metadata = whisperx.load_align_model(
+                language_code=lang, device=device, model_dir=WHISPER_MODEL_DIR
+            )
+            aligned_res = whisperx.align(
+                result["segments"], model_a, metadata, audio, device, return_char_alignments=False
+            )
+            for segment in aligned_res.get("segments", []):
+                for w in segment.get("words", []):
+                    if "start" in w and "end" in w:
+                        recognized_words.append(w)
+        except Exception as align_err:
+            print(f"[AUDIO SYNC] [WARN] Модель выравнивания не загрузилась ({align_err}). Используем слова Whisper.")
+            for segment in result.get("segments", []):
+                for w in segment.get("words", []):
+                    if "start" in w and "end" in w:
+                        recognized_words.append(w)
 
         all_reco_texts = [w["word"].strip().lower() for w in recognized_words]
 
+        if not recognized_words:
+            print("[AUDIO SYNC] [WARN] Слова не распознаны. Переход на FALLBACK.")
+            return _make_fallback_response(request.fragments, reason="Слова не распознаны в аудио")
+
         results = []
         reco_cursor = 0
-
         for frag in request.fragments:
             frag_words = frag.text.lower().split()
             if not frag_words:
                 continue
-
             best_start = None
             best_ratio = 0.0
             search_end = len(all_reco_texts) - len(frag_words) + 1
-
             for i in range(reco_cursor, search_end):
                 chunk = all_reco_texts[i:i + len(frag_words)]
                 ratio = difflib.SequenceMatcher(None, frag_words, chunk).ratio()
@@ -212,16 +268,10 @@ async def sync_audio(request: AudioSyncRequest):
                 "endTime": round(end_time, 3),
             })
 
-    except ImportError:
-        results, cur_time = [], 0.0
-        for frag in request.fragments:
-            dur = max(len(frag.text.split()) / 2.5, 1.0)
-            results.append({
-                "id": frag.id,
-                "startTime": round(cur_time, 3),
-                "endTime": round(cur_time + dur, 3),
-            })
-            cur_time += dur + 0.1
-        return {"status": "ok", "fragments_timings": results, "fallback": True}
+        print(f"[AUDIO SYNC] [OK] WHISPERX УСПЕШНО сработал!")
+        return {"status": "ok", "fragments_timings": results, "fallback": False}
 
-    return {"status": "ok", "fragments_timings": results}
+    except Exception as e:
+        print(f"[AUDIO SYNC] [ERROR] Ошибка WhisperX ({type(e).__name__}: {e}). Переход на FALLBACK.")
+        _free_vram()
+        return _make_fallback_response(request.fragments, reason=str(e))
