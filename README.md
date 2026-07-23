@@ -34,18 +34,36 @@
 
 Ключевое отличие Vidora — **локальный запуск**, **структурированный Markdown-сценарий как единственный источник правды** и **полная генерация** (озвучка + анимация + синхронизация) одной командой.
 
+## Pipeline
+
+Vidora собирает видео за 4 шага:
+
+| Шаг | Компонент | Что делает |
+|-----|-----------|------------|
+| 1. Озвучка | OmniVoice TTS | Генерирует WAV-речь для каждой сцены |
+| 2. Синхронизация | WhisperX forced alignment | Привязывает тайминги фрагментов к аудиодорожке |
+| 3. Генерация кода | Ollama + qwen2.5-coder | Пишет Remotion TSX-компонент по описанию сцены |
+| 4. Рендер | Remotion + FFmpeg | Собирает MP4, накладывает аудио |
+
+Кнопка **«Сгенерировать всё»** в редакторе выполняет все шаги последовательно.
+
 ## Быстрый старт
 
 ```bash
-# фронтенд
+# всё сразу
 cd frontend
-pnpm install
-pnpm dev
+pnpm dev:all
 
-# бэкенд
+# или по отдельности:
+pnpm dev              # фронтенд (Vite, порт 5173)
+pnpm backend:dev      # бэкенд (FastAPI, порт 8355)
+```
+
+```bash
+# бэкенд вручную (если нет pnpm)
 cd backend
 pip install -r requirements.txt
-python -m app.main
+.venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 8355 --reload
 ```
 
 Сценарий пишется в формате `SCENARIO.md` — спецификация в [docs/SCENARIO_RULES.md](docs/SCENARIO_RULES.md).
@@ -118,10 +136,15 @@ ollama list | grep qwen2.5-coder
 ```
 Vidora/
 ├── backend/          # Python FastAPI (TTS, LLM, рендер, синхронизация)
+│   ├── app/          # Маршруты API, сервисы, схемы
+│   └── remotion-project/  # Remotion-проект для рендера видео
 ├── frontend/         # React + Electron (редактор, UI)
-├── docs/             # Спецификации, дизайн-система, примеры
-├── plugins/          # Плагины (будущее)
-└── references/       # Референсы (будущее)
+│   └── src/
+│       ├── entities/project/   # Zustand-store, типы
+│       ├── features/           # File System API
+│       ├── widgets/            # EditorWorkspace, ProjectCreator
+│       └── shared/ui/          # Дизайн-система (Button, Modal, Dropdown...)
+└── docs/             # Спецификации, дизайн-система, примеры
 ```
 
 ---
