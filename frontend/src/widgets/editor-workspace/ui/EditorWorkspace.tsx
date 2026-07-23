@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, ChangeEvent } from 'react'
 import { SceneCard, Icon, Button, Modal, FieldGroup, Input, Dropdown, DropdownItem, Spinner, Slider, Select } from '@shared/ui'
 import { generateRemotionPrompt, generateFragmentPrompt, generateProjectPrompt } from '../lib/generateRemotionPrompt'
 import { useNotificationStore } from '@entities/project'
+import { saveAudioToDisk, saveSceneCodeToDisk } from '@features/file-system'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice } from '@entities/project'
 
 const API = 'http://127.0.0.1:8355'
@@ -25,6 +26,21 @@ const formatTimecode = (totalSeconds: number): string => {
   const seconds = Math.floor(totalSeconds % 60)
   const pad = (num: number) => num.toString().padStart(2, '0')
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
+const formatShortTimecode = (sec: number): string => {
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${m}:${pad(s)}`
+}
+
+const parseTcString = (str: string): number | null => {
+  const parts = str.split(':').map(Number)
+  if (parts.some(isNaN)) return null
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  return null
 }
 
 const getAudioPathForScene = (project: ProjectSettings, scene: Scene): string => {
@@ -222,16 +238,35 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
 
   const handleFragmentTextChange = (fragId: string, newText: string, newVisualNote?: string) => {
     if (!activeScene) return
-    const updated = {
+
+    const updatedFragments = activeScene.fragments.map(f => {
+      if (f.id !== fragId) return f
+
+      const vNote = newVisualNote !== undefined ? newVisualNote : f.visualNote
+      let newStart = f.startTime
+      let newEnd = f.endTime
+
+      const match = vNote.match(/^(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?)\s*-\s*(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?)/)
+      if (match) {
+        const parsedStart = parseTcString(match[1])
+        const parsedEnd = parseTcString(match[4])
+        if (parsedStart !== null) newStart = parsedStart
+        if (parsedEnd !== null) newEnd = parsedEnd
+      }
+
+      return {
+        ...f,
+        text: newText,
+        visualNote: vNote,
+        startTime: newStart,
+        endTime: newEnd,
+      }
+    })
+
+    onUpdateProject({
       ...project,
-      scenes: project.scenes.map(s => s.id === activeScene.id ? {
-        ...s,
-        fragments: s.fragments.map(f => f.id === fragId ? {
-          ...f, text: newText, visualNote: newVisualNote !== undefined ? newVisualNote : f.visualNote
-        } : f)
-      } : s)
-    }
-    onUpdateProject(updated)
+      scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
+    })
   }
 
   const handleResetAllSync = () => {
@@ -364,6 +399,20 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           if (scene.id === activeSceneId) {
             activeSceneAudioPath = relativeAudioPath
           }
+
+          if (project.projectDir) {
+            try {
+              const mediaUrl = `${API}/api/v1/render/media?path=${encodeURIComponent(relativeAudioPath)}`
+              const audioRes = await fetch(mediaUrl)
+              if (audioRes.ok) {
+                const blob = await audioRes.blob()
+                const audioFile = new File([blob], data.audio_url, { type: 'audio/wav' })
+                await saveAudioToDisk(project.projectDir, audioFile)
+              }
+            } catch (fsErr) {
+              console.warn('Не удалось записать аудиофайл в директорию пользователя:', fsErr)
+            }
+          }
         }
       }
 
@@ -428,7 +477,27 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           const timingMap = Object.fromEntries(data.fragments_timings.map((t: any) => [t.id, t]))
           syncedFragments = scene.fragments.map(f => {
             const t = timingMap[f.id]
-            return t ? { ...f, startTime: t.startTime, endTime: t.endTime } : f
+            if (!t) return f
+
+            const startSec = t.startTime
+            const endSec = t.endTime
+
+            let newVisualNote = f.visualNote
+            const startTc = formatShortTimecode(startSec)
+            const endTc = formatShortTimecode(endSec)
+            const tcPrefix = `${startTc} - ${endTc}: `
+
+            const tcRegex = /^(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?)\s*-\s*(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?):?\s*/
+            if (tcRegex.test(f.visualNote)) {
+              newVisualNote = f.visualNote.replace(tcRegex, tcPrefix)
+            }
+
+            return {
+              ...f,
+              startTime: startSec,
+              endTime: endSec,
+              visualNote: newVisualNote,
+            }
           })
           sceneDuration = Math.max(...syncedFragments.map(f => f.endTime || 0), 0)
         }
@@ -489,6 +558,9 @@ export const EditorWorkspace = ({ project, projects, onSwitchProject, onNewProje
           ...project,
           scenes: project.scenes.map(s => s.id === sceneToUse.id ? { ...s, remotionCode: data.tsx_code } : s)
         })
+        if (project.projectDir) {
+          await saveSceneCodeToDisk(project.projectDir, sceneToUse.id, data.tsx_code)
+        }
         showNotification('TSX код сгенерирован', 'success')
         return data.tsx_code
       }
