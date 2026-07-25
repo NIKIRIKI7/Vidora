@@ -60,6 +60,12 @@ export interface CustomVoice {
   tags?: string[]
 }
 
+export interface ApiKeys {
+  elevenlabs?: string
+  anthropic?: string
+  openai?: string
+}
+
 export interface PromptTemplates {
   scene: string
   fragment: string

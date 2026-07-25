@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { CustomVoice, ProjectSettings, Scene, SceneFragment, VideoFormat } from '@entities/project'
-import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull, useProjectStore } from '@entities/project'
+import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull, useProjectStore, useSettingsStore } from '@entities/project'
 import { generateRemotionPrompt } from '../lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import {
@@ -69,6 +69,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const showNotification = useNotificationStore(s => s.showNotification)
   const undo = useProjectStore(s => s.undo)
   const redo = useProjectStore(s => s.redo)
+  const ttsEngine = useSettingsStore(s => s.ttsEngine)
+  const llmEngine = useSettingsStore(s => s.llmEngine)
+  const apiKeys = useSettingsStore(s => s.apiKeys)
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
   const { renderProgress, setRenderProgress, renderListenersRef } = useRenderWebSocket()
 
@@ -549,6 +552,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
             speed, num_steps: numSteps, guidance_scale: guidanceScale, duration,
             denoise, preprocess_prompt: preprocessPrompt, postprocess_output: postprocessOutput,
             project_path: projectPath, auto_offload_vram: autoOffloadVram,
+            engine: ttsEngine, api_keys: apiKeys,
         }
         
         const res = await fetch(`${API}/api/v1/audio/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -624,6 +628,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
                 postprocess_output: postprocessOutput,
                 project_path: projectPath,
                 auto_offload_vram: autoOffloadVram,
+                engine: ttsEngine, api_keys: apiKeys,
             }
 
             const res = await fetch(`${API}/api/v1/audio/generate`, {
@@ -769,6 +774,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           prompt: generateRemotionPrompt(project, sceneToUse),
           project_data: project,
           project_path: getProjectPath(project),
+          engine: llmEngine, api_keys: apiKeys,
         }),
         signal: abortControllerRef.current.signal,
       })
@@ -1107,6 +1113,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleUpdateMarkdown,
     handleUpdateFragmentBRoll,
     handleUnlinkFragmentBRoll,
-    handleNudgeTiming
+    handleNudgeTiming,
+    ttsEngine, llmEngine, apiKeys,
   }
 }

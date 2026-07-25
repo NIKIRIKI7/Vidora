@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ProjectSettings } from '@entities/project'
+import { useState, useEffect, useCallback } from 'react'
+import type { ProjectSettings, ApiKeys } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
@@ -9,6 +9,19 @@ import { EditorHeader } from './EditorHeader'
 import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
 import { VoiceboxModal } from './VoiceboxModal'
+import { API } from '../lib/helpers'
+
+// ponytail: flat model DB, no class hierarchy
+const AI_MODELS_DB = {
+  omnivoice: { name: 'OmniVoice (Локально)', type: 'local', vram: 4, voice_id: 'aria' },
+  silero: { name: 'Silero (Локально)', type: 'local', vram: 1, voice_id: 'kseniya' },
+  elevenlabs: { name: 'ElevenLabs (Облако)', type: 'cloud', key_provider: 'elevenlabs' as keyof ApiKeys, default_voice: '21m00Tcm4TlvDq8ikWAM' },
+  openai: { name: 'OpenAI TTS (Облако)', type: 'cloud', key_provider: 'openai' as keyof ApiKeys, default_voice: 'nova' },
+  ollama: { name: 'Ollama qwen2.5-coder (Локально)', type: 'local', vram: 4 },
+  claude: { name: 'Claude Sonnet (Облако)', type: 'cloud', key_provider: 'anthropic' as keyof ApiKeys },
+} as const
+
+type AiEngineId = keyof typeof AI_MODELS_DB
 
 interface Props {
   project: ProjectSettings
@@ -29,9 +42,23 @@ export const EditorWorkspace = ({
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
   
-  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts'>('project')
-  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts } = useSettingsStore()
+  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines'>('project')
+  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey } = useSettingsStore()
   const isLocalPrompts = project.promptOverrides !== undefined
+  const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
+  const [pulling, setPulling] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch(`${API}/api/v1/system/hardware`).then(r => r.ok && r.json()).then(setHardware).catch(() => {})
+  }, [])
+
+  const handlePull = useCallback(async (engine: string) => {
+    setPulling(engine)
+    try {
+      await fetch(`${API}/api/v1/system/pull`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine }) })
+    } catch { /* server will handle pull async */ }
+    setTimeout(() => setPulling(null), 2000)
+  }, [])
 
   return (
     <div className="h-dvh w-full flex flex-col overflow-hidden bg-background">
@@ -159,6 +186,12 @@ export const EditorWorkspace = ({
           >
             Промпты LLM
           </button>
+          <button 
+            onClick={() => setSettingsTab('ai-engines')} 
+            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'ai-engines' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
+          >
+            AI Движки
+          </button>
         </div>
 
         <div className="flex flex-col gap-4 pb-2">
@@ -246,7 +279,7 @@ export const EditorWorkspace = ({
                 Удалить проект
               </Button>
             </>
-          ) : (
+          ) : settingsTab === 'prompts' ? (
             <>
               <Switch
                 label="Использовать индивидуальные промпты для этого проекта"
@@ -300,6 +333,103 @@ export const EditorWorkspace = ({
                   <Icon name="restore" className="text-[16px] mr-1" /> Сбросить глобальные промпты
                 </Button>
               )}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-4 bg-surface-container-lowest rounded-xl p-3">
+                <div className={`w-2 h-2 rounded-full ${hardware ? 'bg-success' : 'bg-warning'}`} />
+                <div className="text-xs text-on-surface-variant">
+                  {hardware
+                    ? `${hardware.device} · ${hardware.vram_gb.toFixed(1)} GB VRAM · ${hardware.ram_gb.toFixed(1)} GB RAM · ${hardware.gpu_type}`
+                    : 'Проверка оборудования...'}
+                </div>
+              </div>
+
+              <div className="text-[10px] text-on-surface-variant mb-3 font-mono">TTS — Модели озвучки</div>
+              {(['omnivoice', 'silero', 'elevenlabs', 'openai'] as AiEngineId[]).map(id => {
+                const info = AI_MODELS_DB[id]
+                const isActive = ttsEngine === id
+                return (
+                  <div key={id} className={`flex items-center gap-3 p-2.5 rounded-xl mb-2 cursor-pointer transition-colors ${isActive ? 'bg-primary/10 border border-primary/30' : 'bg-surface-container-lowest hover:bg-surface-container-low'}`}
+                    onClick={() => setTtsEngine(id)}>
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${info.type === 'local'
+                      ? (hardware && hardware.vram_gb >= info.vram ? 'bg-success' : 'bg-error')
+                      : 'bg-warning'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-on-surface truncate">{info.name}</div>
+                      {info.type === 'local' ? (
+                        <div className="text-[10px] text-on-surface-variant mt-0.5">
+                          {hardware && hardware.vram_gb >= info.vram ? 'Установлено' : `Требуется ${info.vram} GB VRAM`}
+                        </div>
+                      ) : info.key_provider && apiKeys[info.key_provider as keyof ApiKeys] ? (
+                        <div className="text-[10px] text-success mt-0.5">API ключ задан</div>
+                      ) : (
+                        <div className="text-[10px] text-warning mt-0.5">Требуется API ключ</div>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-on-surface-variant bg-white/5 px-2 py-0.5 rounded shrink-0">{info.type === 'local' ? 'local' : 'cloud'}</div>
+                    {info.type === 'local' && !(hardware && hardware.vram_gb >= info.vram) && (
+                      <Button variant="dashed" className="text-[10px] py-1 px-2 shrink-0" onClick={(e) => { e.stopPropagation(); void handlePull(id) }} disabled={pulling === id}>
+                        {pulling === id ? '...' : 'Pull'}
+                      </Button>
+                    )}
+                    {info.type === 'cloud' && info.key_provider && (
+                      <input
+                        type="password"
+                        value={apiKeys[info.key_provider as keyof ApiKeys] || ''}
+                        onChange={e => setApiKey(info.key_provider as keyof ApiKeys, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        placeholder={`${info.key_provider as string} API key`}
+                        className="w-24 bg-surface border border-white/10 rounded text-[10px] px-1.5 py-1 text-on-surface outline-none shrink-0"
+                      />
+                    )}
+                  </div>
+                )
+              })}
+
+              <div className="h-px bg-white/10 my-3" />
+
+              <div className="text-[10px] text-on-surface-variant mb-3 font-mono">LLM — Генерация кода</div>
+              {(['ollama', 'claude', 'openai'] as AiEngineId[]).map(id => {
+                const info = AI_MODELS_DB[id]
+                const isActive = llmEngine === id
+                return (
+                  <div key={id} className={`flex items-center gap-3 p-2.5 rounded-xl mb-2 cursor-pointer transition-colors ${isActive ? 'bg-primary/10 border border-primary/30' : 'bg-surface-container-lowest hover:bg-surface-container-low'}`}
+                    onClick={() => setLlmEngine(id)}>
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${info.type === 'local'
+                      ? (hardware && hardware.vram_gb >= info.vram ? 'bg-success' : 'bg-error')
+                      : 'bg-warning'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-on-surface truncate">{info.name}</div>
+                      {info.type === 'local' ? (
+                        <div className="text-[10px] text-on-surface-variant mt-0.5">
+                          {hardware && hardware.vram_gb >= info.vram ? 'Установлено' : `Требуется ${info.vram} GB VRAM`}
+                        </div>
+                      ) : info.key_provider && apiKeys[info.key_provider as keyof ApiKeys] ? (
+                        <div className="text-[10px] text-success mt-0.5">API ключ задан</div>
+                      ) : (
+                        <div className="text-[10px] text-warning mt-0.5">Требуется API ключ</div>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-on-surface-variant bg-white/5 px-2 py-0.5 rounded shrink-0">{info.type === 'local' ? 'local' : 'cloud'}</div>
+                    {info.type === 'local' && !(hardware && hardware.vram_gb >= info.vram) && (
+                      <Button variant="dashed" className="text-[10px] py-1 px-2 shrink-0" onClick={(e) => { e.stopPropagation(); void handlePull(id) }} disabled={pulling === id}>
+                        {pulling === id ? '...' : 'Pull'}
+                      </Button>
+                    )}
+                    {info.type === 'cloud' && info.key_provider && (
+                      <input
+                        type="password"
+                        value={apiKeys[info.key_provider as keyof ApiKeys] || ''}
+                        onChange={e => setApiKey(info.key_provider as keyof ApiKeys, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        placeholder={`${info.key_provider as string} API key`}
+                        className="w-24 bg-surface border border-white/10 rounded text-[10px] px-1.5 py-1 text-on-surface outline-none shrink-0"
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </>
           )}
         </div>

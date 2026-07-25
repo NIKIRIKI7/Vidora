@@ -1,12 +1,20 @@
 import os
 import wave
 from app.schemas import AudioGenerationRequest
-from app.services.audio_provider import BaseTTSProvider, OmniVoiceProvider
+from app.services.audio_provider import BaseTTSProvider, TTSProviderFactory
 from app.ws_manager import manager
 
 class AudioService:
     def __init__(self, provider: BaseTTSProvider = None):
-        self.provider = provider or OmniVoiceProvider()
+        if provider:
+            self.provider = provider
+        else:
+            self.provider = None
+
+    def _get_provider(self, request: AudioGenerationRequest) -> BaseTTSProvider:
+        if self.provider:
+            return self.provider
+        return TTSProviderFactory.get_provider(request.engine)
 
     async def generate(self, request: AudioGenerationRequest) -> dict:
         await manager.broadcast({
@@ -26,7 +34,9 @@ class AudioService:
         filename = f"{request.file_prefix}_{request.fragment_id[:6]}.wav"
         output_path = os.path.join(voice_dir, filename)
 
-        await self.provider.generate_tts(
+        api_keys_dict = request.api_keys.model_dump() if request.api_keys else {}
+        provider = self._get_provider(request)
+        await provider.generate_tts(
             text=request.text,
             voice_model=request.voice_model,
             guidance_scale=request.guidance_scale,
@@ -39,6 +49,7 @@ class AudioService:
             output_path=output_path,
             ref_audio_path=request.ref_audio_path,
             ref_text=request.ref_text,
+            api_keys=api_keys_dict,
         )
 
         duration = 0.0

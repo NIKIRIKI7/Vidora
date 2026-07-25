@@ -5,8 +5,10 @@ import asyncio
 import concurrent.futures
 import logging
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import numpy as np
+import httpx
 
 class BaseTTSProvider(ABC):
     @abstractmethod
@@ -24,6 +26,7 @@ class BaseTTSProvider(ABC):
         output_path: str,
         ref_audio_path: str = None,
         ref_text: str = None,
+        api_keys: dict = None,
     ) -> None:
         pass
 
@@ -190,6 +193,64 @@ class OmniVoiceProvider(BaseTTSProvider):
             wav.setsampwidth(2)
             wav.setframerate(model.sampling_rate if hasattr(model, 'sampling_rate') else 24000)
             wav.writeframes(waveform_int16.tobytes())
+
+class SileroProvider(BaseTTSProvider):
+    _model = None
+
+    @classmethod
+    def _get_model(cls):
+        if cls._model is None:
+            import torch
+            cls._model = torch.hub.load(repo_or_dir='snakers4/silero-models', model='silero_tts', language='ru', speaker='v4_ru')
+        return cls._model
+
+    async def generate_tts(self, text, voice_model, guidance_scale, num_steps, speed, duration, denoise, preprocess_prompt, postprocess_output, output_path, ref_audio_path=None, ref_text=None, api_keys=None):
+        import torch
+        model = self._get_model()
+        sample_rate = 48000
+        speaker = 'kseniya' if voice_model in ('', 'aria') else voice_model
+        audio = model.apply_tts(text=text, speaker=speaker, sample_rate=sample_rate)
+        if audio.dim() == 1:
+            audio = audio.unsqueeze(0)
+        import torchaudio
+        torchaudio.save(output_path, audio, sample_rate)
+        print(f"[Silero] TTS done: {output_path}")
+
+class ElevenLabsProvider(BaseTTSProvider):
+    async def generate_tts(self, text, voice_model, guidance_scale, num_steps, speed, duration, denoise, preprocess_prompt, postprocess_output, output_path, ref_audio_path=None, ref_text=None, api_keys=None):
+        api_key = (api_keys or {}).get('elevenlabs', os.environ.get('ELEVENLABS_API_KEY', ''))
+        voice_id = voice_model or '21m00Tcm4TlvDq8ikWAM'
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        async with httpx.AsyncClient() as client:
+            res = await client.post(url, headers={"xi-api-key": api_key}, json={"text": text, "model_id": "eleven_monolingual_v1", "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}}, timeout=60.0)
+            if res.status_code != 200:
+                raise RuntimeError(f"ElevenLabs API error: {res.status_code}")
+            with open(output_path, 'wb') as f:
+                f.write(res.content)
+        print(f"[ElevenLabs] TTS done: {output_path}")
+
+class OpenAIProvider(BaseTTSProvider):
+    async def generate_tts(self, text, voice_model, guidance_scale, num_steps, speed, duration, denoise, preprocess_prompt, postprocess_output, output_path, ref_audio_path=None, ref_text=None, api_keys=None):
+        api_key = (api_keys or {}).get('openai', os.environ.get('OPENAI_API_KEY', ''))
+        voice = voice_model or 'nova'
+        async with httpx.AsyncClient() as client:
+            res = await client.post("https://api.openai.com/v1/audio/speech", headers={"Authorization": f"Bearer {api_key}"}, json={"model": "tts-1", "input": text, "voice": voice, "response_format": "wav"}, timeout=60.0)
+            if res.status_code != 200:
+                raise RuntimeError(f"OpenAI TTS API error: {res.status_code}")
+            with open(output_path, 'wb') as f:
+                f.write(res.content)
+        print(f"[OpenAI TTS] done: {output_path}")
+
+class TTSProviderFactory:
+    @staticmethod
+    def get_provider(engine: Optional[str]) -> BaseTTSProvider:
+        if engine == "silero":
+            return SileroProvider()
+        elif engine == "elevenlabs":
+            return ElevenLabsProvider()
+        elif engine == "openai":
+            return OpenAIProvider()
+        return OmniVoiceProvider()
 
 # Инициализация при старте сервера
 try:

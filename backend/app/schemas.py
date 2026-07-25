@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class AppColors(BaseModel):
     primary: str
@@ -38,6 +38,11 @@ class ProjectData(BaseModel):
     scenes: List[Scene]
     montage: MontageSettings
 
+class ApiKeys(BaseModel):
+    elevenlabs: Optional[str] = None
+    anthropic: Optional[str] = None
+    openai: Optional[str] = None
+
 class AudioGenerationRequest(BaseModel):
     fragment_id: str
     text: str
@@ -54,12 +59,16 @@ class AudioGenerationRequest(BaseModel):
     ref_text: Optional[str] = Field(None, description="Text spoken in reference audio")
     project_path: str = Field(..., description="Absolute path to the project directory from Electron")
     auto_offload_vram: bool = True
+    engine: Optional[str] = None
+    api_keys: Optional[ApiKeys] = None
 
 class CodeGenerationRequest(BaseModel):
     target_id: str = Field(..., description="Scene ID or Fragment ID")
     prompt: str
     project_data: ProjectData
     project_path: str = Field(..., description="Absolute path to the project directory from Electron")
+    engine: Optional[str] = None
+    api_keys: Optional[ApiKeys] = None
 
 class AudioProcessRequest(BaseModel):
     scene_id: str

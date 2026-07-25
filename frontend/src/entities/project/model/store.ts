@@ -101,10 +101,22 @@ export const DEFAULT_PROMPTS: PromptTemplates = {
   project: `# Remotion TSX Video Generator (Project)\nGenerate production-ready TSX files.\n\n## Settings\n- Format: {{FORMAT}}\n- FPS: {{FPS}}\n- Colors: {{COLORS}}\n\n## [СЦЕНЫ ПРОЕКТА]\n{{SCENES_LIST}}\n\nGenerate ONLY the complete TSX code.`
 }
 
+interface ApiKeys {
+  elevenlabs?: string
+  anthropic?: string
+  openai?: string
+}
+
 interface SettingsStore {
   globalPrompts: PromptTemplates
   setGlobalPrompts: (prompts: Partial<PromptTemplates>) => void
   resetGlobalPrompts: () => void
+  ttsEngine: string
+  llmEngine: string
+  apiKeys: ApiKeys
+  setTtsEngine: (engine: string) => void
+  setLlmEngine: (engine: string) => void
+  setApiKey: (provider: keyof ApiKeys, key: string) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -112,7 +124,13 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       globalPrompts: DEFAULT_PROMPTS,
       setGlobalPrompts: (p) => set((s) => ({ globalPrompts: { ...s.globalPrompts, ...p } })),
-      resetGlobalPrompts: () => set({ globalPrompts: DEFAULT_PROMPTS })
+      resetGlobalPrompts: () => set({ globalPrompts: DEFAULT_PROMPTS }),
+      ttsEngine: 'omnivoice',
+      llmEngine: 'ollama',
+      apiKeys: {},
+      setTtsEngine: (engine) => set({ ttsEngine: engine }),
+      setLlmEngine: (engine) => set({ llmEngine: engine }),
+      setApiKey: (provider, key) => set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: key } })),
     }),
     { name: 'vidora-settings' }
   )
