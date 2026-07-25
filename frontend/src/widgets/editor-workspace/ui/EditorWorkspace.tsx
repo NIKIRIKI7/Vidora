@@ -1,5 +1,5 @@
 import type { ProjectSettings } from '@entities/project'
-import { Button, Modal } from '@shared/ui'
+import { Button, Modal, FieldGroup, Slider, Switch, Input } from '@shared/ui'
 import { useEditorWorkspace } from '../model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -98,6 +98,7 @@ export const EditorWorkspace = ({
           onFragDragStart={model.handleFragDragStart}
           onFragDrop={model.handleFragDrop}
           onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
+          onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
           onRunVoiceGen={() => model.runVoiceGenAllScenes()}
           onResetAllSync={model.handleResetAllSync}
           onResetAudio={model.handleResetAudio}
@@ -129,7 +130,34 @@ export const EditorWorkspace = ({
       />
 
       <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки проекта">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 pb-2">
+          {/* ponytail: inline state updates for metadata, no local buffering needed */}
+          <FieldGroup label="Название видео (Title)">
+            <Input 
+              value={project.metadata?.title || ''} 
+              onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, title: e.target.value } })} 
+            />
+          </FieldGroup>
+          
+          <FieldGroup label="Описание (Description)">
+            <textarea 
+              className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary/50 transition-all"
+              rows={3}
+              value={project.metadata?.description || ''} 
+              onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, description: e.target.value } })} 
+            />
+          </FieldGroup>
+          
+          <FieldGroup label="Теги (через запятую)">
+            <Input 
+              value={(project.metadata?.tags || []).join(', ')} 
+              onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } })} 
+              placeholder="tech, review, rtx5090"
+            />
+          </FieldGroup>
+
+          <div className="h-px bg-white/10 my-2" />
+
           <Button
             variant="dashed"
             className="text-error border-error/30 hover:bg-error/10"
@@ -137,6 +165,28 @@ export const EditorWorkspace = ({
           >
             Удалить проект
           </Button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={model.isAiSettingsOpen} onClose={() => model.setIsAiSettingsOpen(false)} title="⚙️ Настройки OmniVoice">
+        <div className="flex flex-col gap-5 pb-2">
+          <FieldGroup label={`Шаги инференса (num_steps): ${model.numSteps}`}>
+            <Slider min={8} max={64} step={1} value={model.numSteps} onChange={e => model.setNumSteps(Number(e.target.value))} />
+          </FieldGroup>
+          <FieldGroup label={`Guidance Scale: ${model.guidanceScale.toFixed(1)}`}>
+            <Slider min={0} max={10} step={0.1} value={model.guidanceScale} onChange={e => model.setGuidanceScale(Number(e.target.value))} />
+          </FieldGroup>
+          <FieldGroup label={`Скорость (speed): ${model.speed.toFixed(2)}x`}>
+            <Slider min={0.5} max={2.0} step={0.05} value={model.speed} onChange={e => model.setSpeed(Number(e.target.value))} />
+          </FieldGroup>
+          <FieldGroup label={`Длительность (duration): ${model.duration === 0 ? 'Авто' : model.duration.toFixed(1) + 'с'}`}>
+            <Slider min={0} max={30} step={0.5} value={model.duration} onChange={e => model.setDuration(Number(e.target.value))} />
+          </FieldGroup>
+          <div className="flex flex-col gap-3 mt-2 border-t border-white/10 pt-4">
+            <Switch checked={model.denoise} onChange={model.setDenoise} label="Шумоподавление (Denoise)" />
+            <Switch checked={model.preprocessPrompt} onChange={model.setPreprocessPrompt} label="Предобработка промпта (Preprocess)" />
+            <Switch checked={model.postprocessOutput} onChange={model.setPostprocessOutput} label="Постобработка (Postprocess)" />
+          </div>
         </div>
       </Modal>
     </div>

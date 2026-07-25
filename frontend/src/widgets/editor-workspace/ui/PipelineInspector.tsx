@@ -22,6 +22,7 @@ interface Props {
   onFragDragStart: (idx: number) => () => void
   onFragDrop: (idx: number) => () => void
   onOpenVoicebox: () => void
+  onOpenAiSettings: () => void
   onRunVoiceGen: () => void
   onResetAllSync: () => void
   onResetAudio: () => void
@@ -54,6 +55,7 @@ export const PipelineInspector = ({
   onFragDragStart,
   onFragDrop,
   onOpenVoicebox,
+  onOpenAiSettings,
   onRunVoiceGen,
   onResetAllSync,
   onResetAudio,
@@ -141,13 +143,22 @@ export const PipelineInspector = ({
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center">
           <span className="font-label text-xs uppercase tracking-wider text-primary">1. Озвучка (OmniVoice)</span>
-          <button
-            className="text-xs text-secondary hover:bg-secondary/10 px-2 py-1 rounded-md transition-all flex items-center gap-1 font-medium active:scale-95"
-            onClick={onOpenVoicebox}
-          >
-            <Icon name="record_voice_over" className="text-[16px]" />
-            <span>Voicebox</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className="text-[11px] text-on-surface-variant hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-white/5 border border-white/10"
+              onClick={onOpenAiSettings}
+              title="Параметры нейросети"
+            >
+              <Icon name="tune" className="text-[14px]" /> Параметры
+            </button>
+            <button
+              className="text-xs text-secondary hover:bg-secondary/10 px-2 py-1 rounded-md transition-all flex items-center gap-1 font-medium active:scale-95"
+              onClick={onOpenVoicebox}
+            >
+              <Icon name="record_voice_over" className="text-[16px]" />
+              <span>Voicebox</span>
+            </button>
+          </div>
         </div>
 
         <FieldGroup label="Голосовая модель">

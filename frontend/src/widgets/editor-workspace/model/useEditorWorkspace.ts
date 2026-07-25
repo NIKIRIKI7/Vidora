@@ -26,8 +26,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [centerView, setCenterView] = useState<CenterViewMode>('player')
   const [voiceModel, setVoiceModel] = useState('aria')
-  const [speed] = useState(1.0)
-  const [numSteps] = useState(32)
+  const [speed, setSpeed] = useState(1.0)
+  const [numSteps, setNumSteps] = useState(32)
+  const [guidanceScale, setGuidanceScale] = useState(3.0)
+  const [duration, setDuration] = useState(0.0)
+  const [denoise, setDenoise] = useState(true)
+  const [preprocessPrompt, setPreprocessPrompt] = useState(true)
+  const [postprocessOutput, setPostprocessOutput] = useState(true)
+  const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false)
   const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
   const [playWithAudio, setPlayWithAudio] = useState(true)
   const [isVoiceboxOpen, setIsVoiceboxOpen] = useState(false)
@@ -446,6 +452,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           ref_text: customVoice ? customVoice.refText : null,
           speed,
           num_steps: numSteps,
+          guidance_scale: guidanceScale,
+          duration,
+          denoise,
+          preprocess_prompt: preprocessPrompt,
+          postprocess_output: postprocessOutput,
           project_path: projectPath,
           auto_offload_vram: autoOffloadVram,
         }
@@ -830,6 +841,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     activeScene,
     centerView,
     voiceModel,
+    speed,
+    numSteps,
+    guidanceScale,
+    duration,
+    denoise,
+    preprocessPrompt,
+    postprocessOutput,
+    isAiSettingsOpen,
     audioLoaded,
     playWithAudio,
     isVoiceboxOpen,
@@ -857,6 +876,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setActiveSceneId,
     setCenterView,
     setVoiceModel,
+    setSpeed,
+    setNumSteps,
+    setGuidanceScale,
+    setDuration,
+    setDenoise,
+    setPreprocessPrompt,
+    setPostprocessOutput,
+    setIsAiSettingsOpen,
     setPlayWithAudio,
     setIsVoiceboxOpen,
     setNewVoiceName,
