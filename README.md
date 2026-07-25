@@ -1,86 +1,73 @@
-# Vidora
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%"
+       alt="Vidora — AI video pipeline from Markdown">
+</p>
 
-**AI-видеоредактор на основе Markdown-сценария.**
+---
 
-Напиши сценарий в структурированном Markdown — Vidora сам сгенерирует голос (TTS), анимацию (Remotion + LLM), синхронизирует звук с видео и соберёт готовый MP4.
+**Vidora** — это AI-пайплайн, который превращает Markdown-сценарии в готовые MP4-видео: синтез речи (TTS), анимация через Remotion, профессиональный аудиомастеринг и экспорт — в одном CLI и десктоп-приложении.
 
 ## Возможности
 
-- **Markdown → видео** — парсинг SCENARIO.md с YAML-фронтматером, сценами и фрагментами
-- **AI озвучка** — локальный OmniVoice TTS (F5-TTS) с выбором голоса, клонированием, настройкой скорости/тона
-- **AI анимация** — Ollama (qwen2.5-coder) генерирует Remotion TSX-компоненты по описанию сцены
-- **Обработка аудио** — FFmpeg: денойз, нормализация (LUFS), удаление тишины, эквалайзер
-- **Синхронизация** — whisperX forced alignment привязывает субтитры и анимацию к таймингам речи
-- **Remotion-рендер** — сборка MP4 с прогрессом через WebSocket в реальном времени
-- **Локально и нативно** — все AI-модели работают на машине пользователя; Electron-десктоп с бандлом Python-бэкенда
-- **Редактор** — трёхпанельный интерфейс: сцены, скрипт/код, превью и управление генерацией
+- **Markdown → видео** — пиши сценарий в `SCENARIO.md` с YAML-разметкой, получай готовый ролик
+- **AI-озвучка** — OmniVoice TTS (F5-TTS) с разными голосами, темпами и тональностью
+- **AI-анимация** — Ollama (qwen2.5-coder) генерирует Remotion TSX-сцену под твой сценарий
+- **Аудиомастеринг** — FFmpeg: нормализация LUFS, компрессия, хайпасс, удаление тишины
+- **Форсированное выравнивание** — WhisperX forced alignment субтитров к аудиодорожке
+- **Remotion-рендер** — React-компоненты в MP4 через WebSocket
+- **Десктоп-редактор** — Electron + React с визуальным редактором сцен, таймлайном и сток-библиотекой
 
-## Стек
+## Чем Vidora отличается
 
-**Фронтенд:** React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Zustand 5, Electron 43  
-**Бэкенд:** Python 3.11+, FastAPI, WebSockets, OmniVoice, whisperX, FFmpeg, Ollama  
-**Видео:** Remotion (программный рендеринг MP4 из React-компонентов)  
-**Архитектура:** Feature-Sliced Design (FSD)
+| Продукт | Подход | Vidora лучше |
+|---------|--------|-------------|
+| Runway Gen-3 / Pika Labs | Текст → видео через diffusion | Контролируемый монтаж, точный сценарий, свой голос |
+| Synthesia / HeyGen | Аватар + TTS | Без аватаров, полный контроль анимации, open-source |
+| Descript | Мультитрек + AI-редактор | Программируемый пайплайн, Remotion-анимация, кодовая гибкость |
+| Invideo AI | Текст → видео через шаблоны | Свой TTS, своя анимация, прозрачный пайплайн |
+| Manim (3B1B) | Python для анимаций | TTS + анимация + мастеринг в одном флоу |
 
-## Аналоги
+Vidora — это **программируемая альтернатива**: Markdown-сценарий → TTS + анимация + мастеринг под твоим контролем.
 
-| Продукт | Подход | Отличия от Vidora |
-|---------|--------|-------------------|
-| **Runway Gen-3** / **Pika Labs** | Текст → видео через diffusion | Облачные, не дают контроля над сценарием покадрово, дорогие подписки |
-| **Synthesia** / **HeyGen** | Аватар + TTS по сценарию | Только talking head, закрытый код, облачная подписка |
-| **Descript** | Редактор с AI-функциями | Требует ручного монтажа, не генерирует анимацию |
-| **Invideo AI** | Текст → видео через шаблоны | Облачный, шаблонный визуал, без локального рантайма |
-| **Manim** (3B1B) | Python-код → анимация | Требует программирования, нет TTS и голосового движка |
+## Пайплайн
 
-Ключевое отличие Vidora — **локальный запуск**, **структурированный Markdown-сценарий как единственный источник правды** и **полная генерация** (озвучка + анимация + синхронизация) одной командой.
+Проходит 4 стадии:
 
-## Pipeline
+| Стадия | Инструмент | Результат |
+|--------|-----------|-----------|
+| 1. Озвучка | OmniVoice TTS | WAV-файл с голосом по тексту сценария |
+| 2. Выравнивание | WhisperX forced alignment | Синхронизация слов с таймкодами |
+| 3. Анимация | Ollama + qwen2.5-coder | Remotion TSX-сцена под текст |
+| 4. Сборка | Remotion + FFmpeg | MP4 с анимацией, озвучкой и мастерингом |
 
-Vidora собирает видео за 4 шага:
-
-| Шаг | Компонент | Что делает |
-|-----|-----------|------------|
-| 1. Озвучка | OmniVoice TTS | Генерирует WAV-речь для каждой сцены |
-| 2. Синхронизация | WhisperX forced alignment | Привязывает тайминги фрагментов к аудиодорожке |
-| 3. Генерация кода | Ollama + qwen2.5-coder | Пишет Remotion TSX-компонент по описанию сцены |
-| 4. Рендер | Remotion + FFmpeg | Собирает MP4, накладывает аудио |
-
-Кнопка **«Сгенерировать всё»** в редакторе выполняет все шаги последовательно.
+Каждый этап можно запустить отдельно и перезапускать независимо.
 
 ## Быстрый старт
 
 ```bash
-# всё сразу
+# Фронтенд + бэкенд одновременно
 cd frontend
 pnpm dev:all
 
-# или по отдельности:
-pnpm dev              # фронтенд (Vite, порт 5173)
-pnpm backend:dev      # бэкенд (FastAPI, порт 8355)
+# По отдельности:
+pnpm dev              # Vite-клиент (порт 5173)
+pnpm backend:dev      # FastAPI (порт 8355)
 ```
 
 ```bash
-# бэкенд вручную (если нет pnpm)
+# Бэкенд вручную
 cd backend
 pip install -r requirements.txt
 .venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 8355 --reload
 ```
 
-Сценарий пишется в формате `SCENARIO.md` — спецификация в [docs/SCENARIO_RULES.md](docs/SCENARIO_RULES.md).
+Сценарий пишется в `SCENARIO.md` по правилам из [docs/SCENARIO_RULES.md](docs/SCENARIO_RULES.md).
 
 ## Настройка AI-моделей
 
-Бэкенд использует 4 модели. Все, кроме Ollama, скачиваются автоматически при первом запуске.
+### 1. OmniVoice (TTS)
 
-### 1. OmniVoice (TTS — озвучка)
-
-Автоматически скачивается с HuggingFace при старте бэкенда.
-- **Репозиторий:** [k2-fsa/OmniVoice](https://huggingface.co/k2-fsa/OmniVoice)
-- **Вес:** ~3.2 ГБ (`model.safetensors` + `audio_tokenizer/model.safetensors`)
-- **Куда сохраняется:** `backend/ai-models/OmniVoice/`
-- **Python-пакет:** `omnivoice` (ставится из `requirements.txt`)
-
-Если модель не загрузилась автоматически (медленный интернет, таймаут), скачайте вручную:
+Скачивается с HuggingFace:
 
 ```bash
 cd backend
@@ -90,44 +77,36 @@ snapshot_download('k2-fsa/OmniVoice', local_dir='ai-models/OmniVoice')
 "
 ```
 
-### 2. WhisperX (распознавание речи + forced alignment)
+- Репозиторий: [k2-fsa/OmniVoice](https://huggingface.co/k2-fsa/OmniVoice)
+- Размер: ~3.2 ГБ
+- Путь: `backend/ai-models/OmniVoice/`
+- Python-пакет: `omnivoice` (автоматически из `requirements.txt`)
 
-Две модели скачиваются автоматически через библиотеку `whisperx` при первом вызове синхронизации (`POST /api/v1/audio/sync`):
+### 2. WhisperX (распознавание + forced alignment)
 
-| Модель | Назначение | Размер | Кеш HuggingFace |
-|--------|-----------|--------|-----------------|
-| `Systran/faster-whisper-base` | Транскрипция | ~300 МБ | `ai-models/models--Systran--faster-whisper-base/` |
-| `jonatasgrosman/wav2vec2-large-xlsr-53-russian` | Выравнивание таймингов (русский) | ~1.2 ГБ | `ai-models/models--jonatasgrosman--wav2vec2-large-xlsr-53-russian/` |
+Модели скачиваются автоматически при первом запросе к `/api/v1/audio/sync`.
 
-При необходимости установите whisperX отдельно:
+| Модель | Назначение | HuggingFace |
+|--------|-----------|-------------|
+| `Systran/faster-whisper-base` | Базовая транскрипция | Кеш в `ai-models/` |
+| `jonatasgrosman/wav2vec2-large-xlsr-53-russian` | Русский язык | Кеш в `ai-models/` |
+
+### 3. Ollama + qwen2.5-coder (LLM для генерации сцен)
+
+Установка:
 
 ```bash
-pip install whisperx
-```
-
-### 3. Ollama + qwen2.5-coder (LLM — генерация Remotion-кода)
-
-Модель **не входит в бэкенд** и запускается как отдельный сервис.
-
-```bash
-# Установите Ollama: https://ollama.com
 ollama pull qwen2.5-coder
-
-# Запустите сервер
 ollama serve
 ```
 
-После этого бэкенд будет обращаться к `http://127.0.0.1:11434`.  
-Если Ollama не запущен, кодогенерация вернёт fallback-сообщение (остальные функции не пострадают).
+API доступен на `http://127.0.0.1:11434`. Если Ollama недоступна — используется fallback-генератор (простой шаблон).
 
-### Быстрая проверка
+### Проверка моделей
 
 ```bash
-# Убедитесь, что все модели на месте
 ls backend/ai-models/
-# Должны быть папки: OmniVoice, models--Systran--faster-whisper-base, models--jonatasgrosman--wav2vec2-large-xlsr-53-russian
-
-# Проверьте Ollama
+# Должны быть: OmniVoice, models--Systran--faster-whisper-base, ...
 ollama list | grep qwen2.5-coder
 ```
 
@@ -135,18 +114,25 @@ ollama list | grep qwen2.5-coder
 
 ```
 Vidora/
-├── backend/          # Python FastAPI (TTS, LLM, рендер, синхронизация)
-│   ├── app/          # Маршруты API, сервисы, схемы
-│   └── remotion-project/  # Remotion-проект для рендера видео
-├── frontend/         # React + Electron (редактор, UI)
+├── backend/                     # Python FastAPI (TTS, LLM, рендер, мастеринг)
+│   ├── app/                     # API, вебсокеты, задачи
+│   └── remotion-project/        # Remotion-сборка React-компонентов
+├── frontend/                    # React + Electron/Tauri (десктоп-редактор)
 │   └── src/
-│       ├── entities/project/   # Zustand-store, типы
-│       ├── features/           # File System API
-│       ├── widgets/            # EditorWorkspace, ProjectCreator
-│       └── shared/ui/          # Дизайн-система (Button, Modal, Dropdown...)
-└── docs/             # Спецификации, дизайн-система, примеры
+│       ├── entities/project/    # Zustand-стор, типы
+│       ├── features/            # File System API
+│       ├── widgets/             # EditorWorkspace, ProjectCreator
+│       └── shared/ui/           # Дизайн-система (Button, Modal, Dropdown…)
+└── docs/                        # Документация, шаблоны, правила
 ```
+
+## Стек
+
+**Фронтенд:** React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Zustand 5, Tauri  
+**Бэкенд:** Python 3.11+, FastAPI, WebSockets, OmniVoice, WhisperX, FFmpeg, Ollama  
+**Рендер:** Remotion (React → MP4)  
+**Архитектура:** Feature-Sliced Design (FSD)
 
 ---
 
-**Статус:** v0.1.0 — активная разработка.
+**Версия:** v0.1.0 — активная разработка.

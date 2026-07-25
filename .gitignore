@@ -31,6 +31,17 @@ backend/remotion-project/out/
 backend/*/assets/
 backend/*/code/
 backend/*/voice/
+backend/*/preview/
+
+# Test projects
+backend/TEST1/
+backend/1234/
+test_project/
+
+# Large generated files
+*.mp4
+*.wav
+*.bak
 
 # Environment
 .env

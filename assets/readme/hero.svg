@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="380" viewBox="0 0 1200 380"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Vidora — AI video pipeline from Markdown</title>
+  <desc id="desc">Vidora converts Markdown scripts into produced MP4 videos through a four-stage pipeline: TTS voiceover, forced alignment, Remotion animation, and FFmpeg export.</desc>
+
+  <defs>
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1326"/>
+      <stop offset="100%" stop-color="#0f1830"/>
+    </linearGradient>
+    <linearGradient id="pipeline-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ddb7ff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#4fdbc8" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="accent-bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ddb7ff"/>
+      <stop offset="100%" stop-color="#4fdbc8"/>
+    </linearGradient>
+    <linearGradient id="node-tts" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ddb7ff" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#ddb7ff" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="node-anim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4fdbc8" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#4fdbc8" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="node-video" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffb4ab" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#ffb4ab" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="380" rx="24" fill="url(#bg-grad)"/>
+
+  <!-- Subtle grid pattern -->
+  <g stroke="#1a2540" stroke-width="0.5" opacity="0.4">
+    <line x1="0" y1="76" x2="1200" y2="76"/>
+    <line x1="0" y1="152" x2="1200" y2="152"/>
+    <line x1="0" y1="228" x2="1200" y2="228"/>
+    <line x1="0" y1="304" x2="1200" y2="304"/>
+  </g>
+
+  <!-- Accent bar top -->
+  <rect x="0" y="0" width="1200" height="3" fill="url(#accent-bar)"/>
+
+  <!-- ====== LEFT: TITLE BLOCK ====== -->
+  <g transform="translate(56, 48)">
+
+    <!-- Category badge -->
+    <rect x="0" y="0" width="130" height="26" rx="13" fill="#ddb7ff" fill-opacity="0.12"/>
+    <text x="65" y="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="12" fill="#ddb7ff" text-anchor="middle" font-weight="600">
+      AI VIDEO PIPELINE
+    </text>
+
+    <!-- Project name -->
+    <text x="0" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="72" fill="#dae2fd" font-weight="700" letter-spacing="-2">
+      Vidora
+    </text>
+
+    <!-- Tagline -->
+    <text x="0" y="124" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="22" fill="#8892b0" font-weight="400" letter-spacing="-0.2">
+      From Markdown scripts to produced video
+    </text>
+
+    <!-- Supporting detail -->
+    <text x="0" y="158" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="15" fill="#5a6488" font-weight="400">
+      TTS voiceover · Remotion animation · Audio mastering · One pipeline
+    </text>
+
+    <!-- Metadata tags -->
+    <g transform="translate(0, 196)">
+      <rect x="0" y="0" width="88" height="22" rx="6" fill="#1a2540"/>
+      <text x="10" y="15" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="11" fill="#8892b0">Python</text>
+
+      <rect x="98" y="0" width="106" height="22" rx="6" fill="#1a2540"/>
+      <text x="108" y="15" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="11" fill="#8892b0">TypeScript</text>
+
+      <rect x="214" y="0" width="98" height="22" rx="6" fill="#1a2540"/>
+      <text x="224" y="15" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="11" fill="#8892b0">Remotion</text>
+
+      <rect x="322" y="0" width="76" height="22" rx="6" fill="#1a2540"/>
+      <text x="332" y="15" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="11" fill="#8892b0">FFmpeg</text>
+    </g>
+  </g>
+
+  <!-- ====== RIGHT: PIPELINE VISUALIZATION ====== -->
+  <g transform="translate(660, 48)">
+
+    <!-- Pipeline background card -->
+    <rect x="0" y="0" width="484" height="284" rx="16" fill="url(#pipeline-grad)" stroke="#1a2540" stroke-width="1"/>
+
+    <!-- Pipeline label -->
+    <text x="242" y="28" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="11" fill="#5a6488" text-anchor="middle" font-weight="600" letter-spacing="1.5">
+      PIPELINE
+    </text>
+
+    <!-- Stage 1: Markdown input -->
+    <g transform="translate(24, 48)">
+      <rect x="0" y="0" width="128" height="96" rx="10" fill="#1a2540"/>
+      <rect x="0" y="0" width="128" height="96" rx="10" fill="#ddb7ff" fill-opacity="0.04"/>
+      <text x="64" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="24" fill="#dae2fd" text-anchor="middle" opacity="0.5">[ ]</text>
+      <text x="64" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#dae2fd" text-anchor="middle" font-weight="600">Markdown</text>
+      <text x="64" y="78" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">SCENARIO.md</text>
+    </g>
+
+    <!-- Arrow 1→2 -->
+    <g transform="translate(156, 80)">
+      <line x1="0" y1="16" x2="28" y2="16" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <polygon points="28,16 22,11 22,21" fill="#5a6488"/>
+    </g>
+
+    <!-- Stage 2: TTS -->
+    <g transform="translate(188, 48)">
+      <rect x="0" y="0" width="128" height="96" rx="10" fill="url(#node-tts)" stroke="#ddb7ff" stroke-opacity="0.2" stroke-width="1"/>
+      <text x="64" y="34" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="26" fill="#ddb7ff" text-anchor="middle" filter="url(#glow)">&#x1F50A;</text>
+      <text x="64" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#dae2fd" text-anchor="middle" font-weight="600">TTS</text>
+      <text x="64" y="78" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">OmniVoice</text>
+    </g>
+
+    <!-- Arrow 2→3 -->
+    <g transform="translate(320, 80)">
+      <line x1="0" y1="16" x2="28" y2="16" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <polygon points="28,16 22,11 22,21" fill="#5a6488"/>
+    </g>
+
+    <!-- Stage 3: Animation -->
+    <g transform="translate(352, 48)">
+      <rect x="0" y="0" width="108" height="96" rx="10" fill="url(#node-anim)" stroke="#4fdbc8" stroke-opacity="0.2" stroke-width="1"/>
+      <text x="54" y="34" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="26" fill="#4fdbc8" text-anchor="middle" filter="url(#glow)">&#x25B6;</text>
+      <text x="54" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#dae2fd" text-anchor="middle" font-weight="600">Remotion</text>
+      <text x="54" y="78" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">React TSX</text>
+    </g>
+
+    <!-- Arrow 3→4 -->
+    <g transform="translate(24, 168)">
+      <line x1="0" y1="16" x2="28" y2="16" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <polygon points="28,16 22,11 22,21" fill="#5a6488"/>
+    </g>
+
+    <!-- Stage 4: Output -->
+    <g transform="translate(56, 184)">
+      <rect x="0" y="0" width="128" height="80" rx="10" fill="url(#node-video)" stroke="#ffb4ab" stroke-opacity="0.2" stroke-width="1"/>
+      <rect x="10" y="10" width="108" height="60" rx="6" fill="#0b1326"/>
+      <rect x="10" y="10" width="108" height="60" rx="6" fill="none" stroke="#ffb4ab" stroke-opacity="0.15" stroke-width="1"/>
+      <!-- Progress bar -->
+      <rect x="18" y="38" width="30" height="3" rx="1.5" fill="#ffb4ab"/>
+      <rect x="50" y="38" width="60" height="3" rx="1.5" fill="#2a354f"/>
+      <!-- Play button -->
+      <circle cx="64" cy="24" r="8" fill="#ffb4ab" fill-opacity="0.15"/>
+      <polygon points="61,20 61,28 68,24" fill="#ffb4ab"/>
+      <text x="64" y="56" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="10" fill="#8892b0" text-anchor="middle">MP4 · 1080p</text>
+    </g>
+
+    <!-- Stage labels at bottom of pipeline -->
+    <g transform="translate(24, 160)">
+      <!-- WhisperX alignment -->
+      <rect x="188" y="0" width="128" height="80" rx="10" fill="#1a2540"/>
+      <text x="252" y="24" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="13" fill="#dae2fd" text-anchor="middle" font-weight="600">Forced Alignment</text>
+      <text x="252" y="46" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">WhisperX</text>
+      <text x="252" y="66" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#5a6488" text-anchor="middle">word-level sync</text>
+
+      <!-- Mastering -->
+      <rect x="332" y="0" width="128" height="80" rx="10" fill="#1a2540"/>
+      <text x="396" y="24" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="13" fill="#dae2fd" text-anchor="middle" font-weight="600">Audio Mastering</text>
+      <text x="396" y="46" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">FFmpeg filters</text>
+      <text x="396" y="66" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#5a6488" text-anchor="middle">LUFS normalization</text>
+    </g>
+  </g>
+
+  <!-- Bottom-right version -->
+  <text x="1140" y="368" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="11" fill="#2a354f" text-anchor="end">v0.1.0</text>
+</svg>

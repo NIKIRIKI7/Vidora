@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { ProjectSettings } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
-import { THEME_PRESETS } from '@shared/config'
+import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 import { useEditorWorkspace } from '../model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -198,9 +198,9 @@ export const EditorWorkspace = ({
                   <option value="glitch">Цифровые помехи (Glitch)</option>
                 </Select>
               </FieldGroup>
-              <FieldGroup label="Цветовая тема">
+              <FieldGroup label="Цветовая тема (Пресеты)">
                   <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
-                      {THEME_PRESETS.map(tpl => (
+                      {THEME_PRESETS.map((tpl: ThemePreset) => (
                           <button 
                               key={tpl.name}
                               onClick={() => onUpdateProject({ ...project, montage: { ...project.montage, colors: tpl.colors } })}
@@ -214,6 +214,31 @@ export const EditorWorkspace = ({
                               <span className="text-[10px] text-on-surface-variant group-hover:text-white">{tpl.name.split(' ')[0]}</span>
                           </button>
                       ))}
+                  </div>
+              </FieldGroup>
+
+              <FieldGroup label="Ручная настройка палитры">
+                  <div className="grid grid-cols-3 gap-3 mt-2">
+                     {(['primary', 'secondary', 'accent', 'background', 'surface', 'text'] as const).map(colorKey => (
+                         <div key={colorKey} className="flex flex-col gap-1">
+                             <span className="text-[10px] text-on-surface-variant uppercase">{colorKey}</span>
+                             <div className="flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg p-1">
+                                 <input 
+                                     type="color" 
+                                     value={project.montage?.colors?.[colorKey] || '#000000'} 
+                                     onChange={e => onUpdateProject({ ...project, montage: { ...project.montage, colors: { ...project.montage.colors, [colorKey]: e.target.value } } })}
+                                     className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                                 />
+                                 <input 
+                                     type="text" 
+                                     value={project.montage?.colors?.[colorKey] || '#000000'}
+                                     onChange={e => onUpdateProject({ ...project, montage: { ...project.montage, colors: { ...project.montage.colors, [colorKey]: e.target.value } } })}
+                                     className="w-full bg-transparent text-xs text-on-surface outline-none font-mono uppercase"
+                                     maxLength={7}
+                                 />
+                             </div>
+                         </div>
+                     ))}
                   </div>
               </FieldGroup>
               <div className="h-px bg-white/10 my-2" />

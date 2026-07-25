@@ -75,9 +75,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const handleUpdateMarkdown = (newMd: string) => {
     const parsed = parseMarkdownFull(newMd)
     const mergedScenes = parsed.scenes?.map((newScene, sIdx) => {
-        const oldScene = project.scenes[sIdx] || {}
+        const oldScene: Partial<Scene> = project.scenes[sIdx] || {}
         const mergedFragments = newScene.fragments.map((newFrag, fIdx) => {
-            const oldFrag = oldScene.fragments?.[fIdx] || {}
+            const oldFrag: Partial<SceneFragment> = oldScene.fragments?.[fIdx] || {}
             return { 
                 ...newFrag, 
                 id: oldFrag.id || newFrag.id, 

@@ -3,6 +3,7 @@ import { Button, Input, Select, FieldGroup, Icon, Spinner } from '@shared/ui'
 import { parseMarkdownFull } from '@entities/project'
 import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project'
 import { THEME_PRESETS } from '@shared/config'
+import type { ThemePreset } from '@shared/config'
 
 interface Props {
   onCreate: (project: ProjectSettings) => void
@@ -19,7 +20,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
   const [name, setName] = useState('')
   const [format, setFormat] = useState<VideoFormat>('16:9')
   const [resolution, setResolution] = useState<Resolution>('1080p')
-  const [theme, setTheme] = useState(THEME_PRESETS[0])
+  const [theme, setTheme] = useState<ThemePreset>(THEME_PRESETS[0])
   const [file, setFile] = useState<File | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   
@@ -144,9 +145,9 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           </FieldGroup>
         </div>
 
-        <FieldGroup label="Цветовая тема">
+        <FieldGroup label="Цветовая тема (Пресеты)">
             <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
-                {THEME_PRESETS.map(tpl => (
+                {THEME_PRESETS.map((tpl: ThemePreset) => (
                     <button 
                         key={tpl.name}
                         onClick={() => setTheme(tpl)}
