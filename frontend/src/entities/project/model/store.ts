@@ -27,11 +27,7 @@ export const useProjectStore = create<ProjectStore>()(
     {
       name: 'vidora-projects',
       partialize: (state) => ({
-        projects: state.projects.map((p) => {
-          const copy = { ...p }
-          delete copy.projectDir
-          return copy
-        }),
+        projects: state.projects,
         activeProjectId: state.activeProjectId,
       }),
     }

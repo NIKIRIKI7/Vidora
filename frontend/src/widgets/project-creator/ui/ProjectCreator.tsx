@@ -1,7 +1,6 @@
 import { useState, useRef, type ChangeEvent } from 'react'
 import { Button, Input, Select, FieldGroup, Icon, Spinner } from '@shared/ui'
 import { parseMarkdownFull } from '@entities/project'
-import { createProjectStructure, openProjectStructure } from '@features/file-system'
 import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project'
 
 interface Props {
@@ -15,17 +14,16 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
   const [resolution, setResolution] = useState<Resolution>('1080p')
   const [file, setFile] = useState<File | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const openFileInputRef = useRef<HTMLInputElement>(null)
 
   const handleCreate = async () => {
     if (!name || !file) return
     setIsCreating(true)
     try {
       const text = await file.text()
-      // ponytail: skipping hard fail if file system throws so we can still mock projects in UI
-      const projectDir = await createProjectStructure(name, text)
       const parsed = parseMarkdownFull(text)
-
       onCreate({
         name,
         format,
@@ -40,7 +38,6 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
         },
         scenes: parsed.scenes ?? [],
         rawMarkdown: text,
-        projectDir: projectDir || undefined,
       })
     } catch (e) {
       console.error(e)
@@ -49,14 +46,15 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
     }
   }
 
-  const handleOpen = async () => {
+  const handleOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (!selectedFile) return
+    setIsCreating(true)
     try {
-      const opened = await openProjectStructure()
-      if (!opened) return
-
-      const parsed = parseMarkdownFull(opened.markdownContent)
+      const text = await selectedFile.text()
+      const parsed = parseMarkdownFull(text)
       onCreate({
-        name: opened.projectName,
+        name: parsed.metadata?.title || selectedFile.name.replace(/\.md$/i, ''),
         format: '16:9',
         resolution: '1080p',
         metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
@@ -68,11 +66,12 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           typography: { heading: 'Inter', body: 'Geist' },
         },
         scenes: parsed.scenes ?? [],
-        rawMarkdown: opened.markdownContent,
-        projectDir: opened.projectDirHandle,
+        rawMarkdown: text,
       })
     } catch (e) {
       console.error(e)
+    } finally {
+      setIsCreating(false)
     }
   }
 
@@ -81,6 +80,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
       {onCancel && (
         <Button variant="ghost" icon="close" onClick={onCancel} className="absolute top-6 right-6">Отмена</Button>
       )}
+
       <div className="w-full max-w-[560px] bg-surface-container/40 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-[0_0_50px_rgba(221,183,255,0.1)] flex flex-col gap-6">
         <div className="text-center mb-2">
           <h1 className="text-[32px] font-bold text-primary tracking-tight mb-2">Vidora</h1>
@@ -105,7 +105,6 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
               <option value="9:16">Shorts / Reels (9:16)</option>
             </Select>
           </FieldGroup>
-
           <FieldGroup label="Разрешение">
             <Select
               value={resolution}
@@ -143,7 +142,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           onClick={handleCreate}
           className="mt-4"
         >
-          {isCreating ? <><Spinner className="text-[16px]" /> Инициализация ФС...</> : 'Создать проект'}
+          {isCreating ? <><Spinner className="text-[16px]" /> Инициализация...</> : 'Создать проект'}
         </Button>
 
         <div className="flex items-center gap-4 my-2">
@@ -152,10 +151,11 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           <div className="h-px bg-white/10 flex-1" />
         </div>
 
+        <input type="file" accept=".md" className="hidden" ref={openFileInputRef} onChange={handleOpen} />
         <Button
           variant="dashed"
           icon="folder_open"
-          onClick={handleOpen}
+          onClick={() => openFileInputRef.current?.click()}
           disabled={isCreating}
         >
           Открыть существующий проект

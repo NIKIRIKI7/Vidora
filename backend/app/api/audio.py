@@ -168,10 +168,16 @@ async def concat_audio(request: AudioConcatRequest):
                 if os.path.exists(abs_p):
                     formatted_p = abs_p.replace("\\", "/")
                     f.write(f"file '{formatted_p}'\n")
-        _run_ffmpeg(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path],
-            desc="concat",
-        )
+        try:
+            _run_ffmpeg(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path],
+                desc="concat",
+            )
+        except RuntimeError:
+            _run_ffmpeg(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, out_path],
+                desc="concat (re-encode)",
+            )
         return {"status": "ok", "output_path": out_path}
     except Exception as e:
         print(f"[AUDIO API] Concat status: {e}")

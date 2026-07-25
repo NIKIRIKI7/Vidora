@@ -14,6 +14,7 @@ interface Props {
   onFullAutoPipeline: () => void
   onProjectRender: () => void
   onSingleSceneRender: () => void
+  onExportProject: () => void
 }
 
 export const EditorHeader = ({
@@ -29,11 +30,13 @@ export const EditorHeader = ({
   onFullAutoPipeline,
   onProjectRender,
   onSingleSceneRender,
+  onExportProject,
 }: Props) => (
   <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
     <div className="flex items-center gap-4">
       <span className="font-display text-2xl font-bold text-primary tracking-tight">Vidora</span>
       <div className="h-4 w-px bg-white/20" />
+
       <Dropdown
         trigger={
           <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 font-medium text-sm">
@@ -57,6 +60,7 @@ export const EditorHeader = ({
         </DropdownItem>
       </Dropdown>
     </div>
+
     <div className="flex items-center gap-3">
       <Button
         variant="primary"
@@ -78,6 +82,9 @@ export const EditorHeader = ({
       </Button>
       <Button variant="dashed" disabled={isRendering} onClick={onSingleSceneRender}>
         Только текущая сцена
+      </Button>
+      <Button variant="dashed" disabled={isRendering} onClick={onExportProject}>
+        Экспорт <Icon name="file_export" className="text-[16px] ml-1" />
       </Button>
     </div>
   </header>

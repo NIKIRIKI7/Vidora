@@ -2,7 +2,7 @@ import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 
 export const API = 'http://127.0.0.1:8355'
 
-export const getProjectPath = (p: ProjectSettings) => sanitizeFilename(p.projectDir?.name || p.name || 'vidora_projects')
+export const getProjectPath = (p: ProjectSettings) => sanitizeFilename(p.name || 'vidora_projects')
 
 export const sanitizeFilename = (str: string) => str.trim().replace(/[^a-zA-Z0-9а-яА-Я_\- ]/g, '_')
 

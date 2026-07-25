@@ -4,10 +4,19 @@ interface DropdownProps {
   trigger: ReactNode
   children: ReactNode
   align?: 'left' | 'right'
+  direction?: 'down' | 'up'
   className?: string
+  containerClassName?: string
 }
 
-export const Dropdown = ({ trigger, children, align = 'right', className = '' }: DropdownProps) => {
+export const Dropdown = ({
+  trigger,
+  children,
+  align = 'right',
+  direction = 'down',
+  className = '',
+  containerClassName = ''
+}: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -21,14 +30,19 @@ export const Dropdown = ({ trigger, children, align = 'right', className = '' }:
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const verticalClass = direction === 'up'
+    ? 'bottom-full mb-2 slide-in-from-bottom-2'
+    : 'top-full mt-2 slide-in-from-top-2'
+
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
+    <div className={`relative inline-block ${containerClassName}`} ref={dropdownRef}>
       <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer">
         {trigger}
       </div>
+
       {isOpen && (
         <div
-          className={`absolute z-[100] top-full mt-2 w-56 bg-[#171f33] border border-white/15 rounded-xl shadow-2xl py-1.5 animate-in fade-in slide-in-from-top-2 duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
+          className={`absolute z-[100] ${verticalClass} min-w-[14rem] bg-[#171f33] border border-white/15 rounded-xl shadow-2xl py-1.5 animate-in fade-in duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
           onClick={() => setIsOpen(false)}
         >
           {children}

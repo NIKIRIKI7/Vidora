@@ -67,5 +67,4 @@ export interface ProjectSettings {
   scenes: Scene[]
   customVoices?: CustomVoice[]
   rawMarkdown: string
-  projectDir?: FileSystemDirectoryHandle
 }

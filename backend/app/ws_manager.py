@@ -9,10 +9,11 @@ class ConnectionManager:
         self.active_connections[client_id] = websocket
         print(f"[WS] Клиент подключен: '{client_id}' (всего активных: {len(self.active_connections)})")
 
-    def disconnect(self, client_id: str):
+    def disconnect(self, client_id: str, websocket: WebSocket = None):
         if client_id in self.active_connections:
-            del self.active_connections[client_id]
-            print(f"[WS] Клиент отключен: '{client_id}' (всего активных: {len(self.active_connections)})")
+            if websocket is None or self.active_connections[client_id] == websocket:
+                del self.active_connections[client_id]
+                print(f"[WS] Клиент отключен: '{client_id}' (всего активных: {len(self.active_connections)})")
 
     async def send_personal_message(self, message: dict, client_id: str):
         websocket = self.active_connections.get(client_id)
@@ -21,14 +22,18 @@ class ConnectionManager:
 
     async def broadcast(self, message: dict):
         msg_type = message.get("type", "UNKNOWN")
-        print(f"[WS BROADCAST] Отправка типа '{msg_type}' для {len(self.active_connections)} клиентов")
+        if msg_type != "RENDER_PROGRESS":
+            print(f"[WS BROADCAST] Отправка типа '{msg_type}' для {len(self.active_connections)} клиентов")
+
         disconnected = []
         for client_id, connection in self.active_connections.items():
             try:
                 await connection.send_json(message)
             except Exception as e:
-                print(f"[WS BROADCAST ERROR] Сбой отправки клиенту '{client_id}': {e}")
+                if msg_type != "RENDER_PROGRESS":
+                    print(f"[WS BROADCAST ERROR] Сбой отправки клиенту '{client_id}': {e}")
                 disconnected.append(client_id)
+
         for client_id in disconnected:
             self.disconnect(client_id)
 

@@ -1,5 +1,5 @@
 import type { ProjectSettings, Scene } from '@entities/project'
-import { Button, FieldGroup, Icon, Select, Spinner, Switch } from '@shared/ui'
+import { Button, Dropdown, DropdownItem, FieldGroup, Icon, Select, Spinner, Switch } from '@shared/ui'
 import { generateFragmentPrompt, generateProjectPrompt, generateRemotionPrompt } from '../lib/generateRemotionPrompt'
 
 interface Props {
@@ -24,12 +24,13 @@ interface Props {
   onOpenVoicebox: () => void
   onRunVoiceGen: () => void
   onResetAllSync: () => void
+  onResetAudio: () => void
   onUnloadVram: () => void
   onRunSync: () => void
   onToggleIgnoreTsx: (id: string) => void
   onRunCodeGen: () => void
   onRunProjectRender: () => void
-  onMergeAudioAndVideo: () => void
+  onMergeAudioAndVideo: (target: 'scene' | 'project') => void
   onShowNotification: (msg: string, type?: 'success' | 'error' | 'info') => void
 }
 
@@ -55,6 +56,7 @@ export const PipelineInspector = ({
   onOpenVoicebox,
   onRunVoiceGen,
   onResetAllSync,
+  onResetAudio,
   onUnloadVram,
   onRunSync,
   onToggleIgnoreTsx,
@@ -67,8 +69,9 @@ export const PipelineInspector = ({
     <div className="p-4 border-b border-white/5 flex justify-between items-center">
       <h3 className="font-title-md text-title-md text-on-surface">Инспектор Пайплайна</h3>
     </div>
+
     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar">
-      {/* 0. Сценарий фрагментов */}
+      {/* Fragments */}
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center">
           <span className="font-label text-xs uppercase tracking-wider text-primary">Сценарий фрагментов</span>
@@ -80,6 +83,7 @@ export const PipelineInspector = ({
             <span>Фрагмент</span>
           </button>
         </div>
+
         {activeScene?.fragments.map((frag, i) => (
           <div
             key={frag.id}
@@ -114,6 +118,7 @@ export const PipelineInspector = ({
                 </button>
               </div>
             </div>
+
             <input
               className="text-xs bg-transparent border-b border-white/10 text-on-surface-variant focus:border-primary outline-none py-1"
               value={frag.visualNote}
@@ -132,7 +137,7 @@ export const PipelineInspector = ({
 
       <div className="h-px bg-white/5" />
 
-      {/* 1. Озвучка (OmniVoice) */}
+      {/* Audio Voice Generation */}
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center">
           <span className="font-label text-xs uppercase tracking-wider text-primary">1. Озвучка (OmniVoice)</span>
@@ -141,9 +146,10 @@ export const PipelineInspector = ({
             onClick={onOpenVoicebox}
           >
             <Icon name="record_voice_over" className="text-[16px]" />
-            <span>Voicebox Студия</span>
+            <span>Voicebox</span>
           </button>
         </div>
+
         <FieldGroup label="Голосовая модель">
           <Select value={voiceModel} onChange={e => onChangeVoiceModel(e.target.value)}>
             <option value="aria">Neural - Aria (Женский, Спокойный)</option>
@@ -156,14 +162,24 @@ export const PipelineInspector = ({
             ))}
           </Select>
         </FieldGroup>
-        <Button variant="dashed" disabled={isGeneratingAudio} onClick={onRunVoiceGen}>
-          {isGeneratingAudio ? <Spinner /> : 'Сгенерировать голос для всех сцен'}
-        </Button>
+
+        <div className="flex gap-2">
+          <Button variant="dashed" disabled={isGeneratingAudio} onClick={onRunVoiceGen} className="flex-1">
+            {isGeneratingAudio ? <Spinner /> : 'Сгенерировать голос'}
+          </Button>
+          <button
+            className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors px-2 py-1 rounded hover:bg-white/5 border border-white/10"
+            onClick={onResetAudio}
+            title="Сбросить все аудио"
+          >
+            <Icon name="delete" className="text-[16px]" />
+          </button>
+        </div>
       </section>
 
       <div className="h-px bg-white/5" />
 
-      {/* 2. Синхронизация (Whisper) */}
+      {/* Sync */}
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center">
           <span className="font-label text-xs uppercase tracking-wider text-primary">2. Синхронизация (Whisper)</span>
@@ -179,6 +195,7 @@ export const PipelineInspector = ({
             )}
           </div>
         </div>
+
         <div className="flex flex-col gap-2.5 p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl">
           <label className="flex items-center justify-between text-xs text-on-surface-variant cursor-pointer">
             Использовать WhisperX ИИ
@@ -189,6 +206,7 @@ export const PipelineInspector = ({
               className="accent-primary size-3.5"
             />
           </label>
+
           <label className="flex items-center justify-between text-xs text-on-surface-variant cursor-pointer">
             Авто-освобождение VRAM
             <input
@@ -198,6 +216,7 @@ export const PipelineInspector = ({
               className="accent-primary size-3.5"
             />
           </label>
+
           <button
             onClick={onUnloadVram}
             className="text-[11px] text-secondary hover:bg-secondary/10 px-2 py-0.5 rounded transition-all flex items-center gap-1 mt-1 self-start font-medium"
@@ -205,14 +224,15 @@ export const PipelineInspector = ({
             <Icon name="memory" className="text-[14px]" /> Очистить VRAM вручную
           </button>
         </div>
+
         <Button variant="dashed" disabled={isSyncing} onClick={onRunSync}>
-          {isSyncing ? <Spinner /> : 'Синхронизировать все сцены'}
+          {isSyncing ? <Spinner /> : 'Синхронизировать тайминги'}
         </Button>
       </section>
 
       <div className="h-px bg-white/5" />
 
-      {/* 3. Код Remotion (TSX) */}
+      {/* LLM Code Generation */}
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center">
           <span className="font-label text-xs uppercase tracking-wider text-primary">3. Код Remotion (TSX)</span>
@@ -239,6 +259,7 @@ export const PipelineInspector = ({
             </button>
           </div>
         </div>
+
         {activeScene && (
           <div className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl">
             <Switch
@@ -248,26 +269,44 @@ export const PipelineInspector = ({
             />
           </div>
         )}
+
         <Button
           variant="dashed"
           disabled={isGeneratingCode || Boolean(activeScene?.ignoreTsx)}
           onClick={onRunCodeGen}
         >
-          {isGeneratingCode ? <Spinner /> : 'Сгенерировать TSX через Ollama'}
+          {isGeneratingCode ? <Spinner /> : 'Сгенерировать код через Ollama'}
         </Button>
       </section>
 
       <div className="h-px bg-white/5" />
 
-      {/* 4. Финальный Рендер */}
+      {/* Render Output */}
       <section className="flex flex-col gap-3">
-        <span className="font-label text-xs uppercase tracking-wider text-primary">4. Финальный Рендер</span>
+        <span className="font-label text-xs uppercase tracking-wider text-primary">4. Сборка и Экспорт</span>
         <Button variant="primary" disabled={isRendering} onClick={onRunProjectRender}>
           {isRendering ? <Spinner /> : '🎬 Собрать весь MP4 проект'}
         </Button>
-        <Button variant="dashed" disabled={isMerging || isRendering} onClick={onMergeAudioAndVideo}>
-          {isMerging ? <Spinner /> : '🎵 Объединить аудио и видео'}
-        </Button>
+        <Dropdown
+          align="left"
+          direction="up"
+          containerClassName="w-full"
+          className="w-full"
+          trigger={
+            <div className={isMerging || isRendering ? 'pointer-events-none' : ''}>
+              <Button variant="dashed" disabled={isMerging || isRendering} className="w-full">
+                {isMerging ? <Spinner /> : '🎵 Объединить аудио и видео ("Запечь")'}
+              </Button>
+            </div>
+          }
+        >
+          <DropdownItem onClick={() => onMergeAudioAndVideo('scene')}>
+            Только текущая сцена
+          </DropdownItem>
+          <DropdownItem onClick={() => onMergeAudioAndVideo('project')}>
+            Весь проект
+          </DropdownItem>
+        </Dropdown>
       </section>
     </div>
   </aside>

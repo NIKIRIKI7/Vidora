@@ -41,6 +41,7 @@ export const EditorWorkspace = ({
         onFullAutoPipeline={model.handleFullAutoPipeline}
         onProjectRender={model.runProjectRender}
         onSingleSceneRender={() => model.runRender()}
+        onExportProject={model.handleExportProject}
       />
 
       <main className="flex-1 flex overflow-hidden">
@@ -56,7 +57,6 @@ export const EditorWorkspace = ({
           onDragStart={model.handleSceneDragStart}
           onDrop={model.handleSceneDrop}
         />
-
         <CenterCanvas
           centerView={model.centerView}
           onChangeView={model.setCenterView}
@@ -70,8 +70,14 @@ export const EditorWorkspace = ({
           videoRef={model.videoRef}
           audioRef={model.audioRef}
           onUpdateCode={model.handleUpdateCode}
+          isRendering={model.isRendering}
+          renderType={model.renderType}
+          isAutoPipelineRunning={model.isAutoPipelineRunning}
+          pipelineStep={model.pipelineStep}
+          renderProgress={model.renderProgress}
+          onCancelAll={model.handleCancelAll}
+          isMerging={model.isMerging}
         />
-
         <PipelineInspector
           project={project}
           activeScene={model.activeScene}
@@ -94,6 +100,7 @@ export const EditorWorkspace = ({
           onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
           onRunVoiceGen={() => model.runVoiceGenAllScenes()}
           onResetAllSync={model.handleResetAllSync}
+          onResetAudio={model.handleResetAudio}
           onUnloadVram={model.handleUnloadVram}
           onRunSync={() => model.runSyncAllScenes()}
           onToggleIgnoreTsx={model.toggleIgnoreTsx}

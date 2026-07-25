@@ -50,7 +50,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        manager.disconnect(client_id, websocket)
 
 
 if __name__ == "__main__":
