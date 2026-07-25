@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
 import { Button, Icon, Spinner, ProgressBar } from '@shared/ui'
 import { API } from '../lib/helpers'
 
 interface Props {
-  centerView: 'player' | 'code'
-  onChangeView: (view: 'player' | 'code') => void
+  centerView: 'player' | 'code' | 'markdown'
+  onChangeView: (view: 'player' | 'code' | 'markdown') => void
   playWithAudio: boolean
   onTogglePlayWithAudio: () => void
   playingTargetId: string | null
@@ -23,6 +23,7 @@ interface Props {
   renderProgress: number
   onCancelAll: () => void
   isMerging?: boolean
+  onUpdateMarkdown: (md: string) => void
 }
 
 export const CenterCanvas = ({
@@ -34,6 +35,7 @@ export const CenterCanvas = ({
   renderedVideos,
   audioLoaded,
   activeScene,
+  project,
   videoRef,
   audioRef,
   onUpdateCode,
@@ -44,10 +46,24 @@ export const CenterCanvas = ({
   renderProgress,
   onCancelAll,
   isMerging,
+  onUpdateMarkdown,
 }: Props) => {
   const isBusy = isRendering || isAutoPipelineRunning || isMerging
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
   const shouldRenderAudio = Boolean(audioLoaded && !hasRenderedVideo)
+
+  const [localMd, setLocalMd] = useState(project.rawMarkdown)
+  
+  useEffect(() => { setLocalMd(project.rawMarkdown) }, [project.rawMarkdown])
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (localMd !== project.rawMarkdown) {
+        onUpdateMarkdown(localMd)
+      }
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [localMd, project.rawMarkdown, onUpdateMarkdown])
 
   useEffect(() => {
     const video = videoRef.current
@@ -80,13 +96,19 @@ export const CenterCanvas = ({
             onClick={() => onChangeView('player')}
             className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'player' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
           >
-            🎬 Предпросмотр Видео
+            🎬 Видео
           </button>
           <button
             onClick={() => onChangeView('code')}
             className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'code' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
           >
-            💻 Remotion TSX Код
+            💻 Код TSX
+          </button>
+          <button
+            onClick={() => onChangeView('markdown')}
+            className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'markdown' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
+          >
+            📝 Raw Script
           </button>
         </div>
         {centerView === 'player' && (
@@ -129,12 +151,13 @@ export const CenterCanvas = ({
                 className="w-full h-full object-contain"
               />
             ) : (
-              <div className="text-on-surface-variant/50 font-medium flex flex-col items-center gap-3">
-                <Icon name="movie" className="text-[56px] text-primary/40" />
-                <span>Нажмите «Сгенерировать всё» или «Рендер всего проекта» для сборки</span>
+              <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-500">
+                <div className="w-32 h-32 rounded-full bg-primary/20 blur-3xl absolute animate-pulse" />
+                <Icon name="movie_edit" className="text-[64px] text-primary/40 relative z-10" />
+                <span className="text-on-surface-variant font-medium relative z-10">Сцена не отрендерена</span>
+                <span className="text-xs text-on-surface-variant/50 relative z-10">Нажми Cmd+Enter для сборки</span>
               </div>
             )}
-
             {shouldRenderAudio && (
               <audio
                 ref={audioRef}
@@ -143,6 +166,13 @@ export const CenterCanvas = ({
               />
             )}
           </div>
+        ) : centerView === 'markdown' ? (
+          <textarea 
+            className="w-full h-full max-w-[900px] p-6 font-mono text-[14px] leading-relaxed bg-surface-container-lowest/60 text-on-surface border border-white/10 rounded-xl resize-none outline-none focus:border-primary/50 custom-scrollbar"
+            value={localMd}
+            onChange={e => setLocalMd(e.target.value)}
+            spellCheck={false}
+          />
         ) : (
           <div className="w-full h-full max-w-[900px] flex flex-col gap-2">
             {activeScene?.ignoreTsx ? (
@@ -153,10 +183,10 @@ export const CenterCanvas = ({
               </div>
             ) : (
               <textarea
-                className="w-full h-full font-mono text-[12px] bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50"
+                className="w-full h-full font-mono text-[12px] bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
                 value={activeScene?.remotionCode || ''}
                 onChange={e => onUpdateCode(e.target.value)}
-                placeholder="// TSX Код сцены..."
+                placeholder="import React from 'react'..."
                 spellCheck={false}
               />
             )}

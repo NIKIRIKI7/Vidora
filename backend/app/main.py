@@ -16,6 +16,7 @@ from app.ws_manager import manager
 from app.api.audio import router as audio_router
 from app.api.code import router as code_router
 from app.api.render import router as render_router
+from app.api.media import router as media_router
 
 app = FastAPI(title="Vidora API", version="0.1.0")
 
@@ -37,6 +38,7 @@ app.add_middleware(
 app.include_router(audio_router)
 app.include_router(code_router)
 app.include_router(render_router)
+app.include_router(media_router)
 
 @app.get("/api/health")
 def health():

@@ -13,4 +13,4 @@ export interface RenderPayload {
   output_path?: string
 }
 
-export type CenterViewMode = 'player' | 'code'
+export type CenterViewMode = 'player' | 'code' | 'markdown'

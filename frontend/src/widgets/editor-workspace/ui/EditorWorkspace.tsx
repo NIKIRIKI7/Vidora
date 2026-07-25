@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import type { ProjectSettings } from '@entities/project'
-import { Button, Modal, FieldGroup, Slider, Switch, Input } from '@shared/ui'
+import { useSettingsStore } from '@entities/project'
+import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
 import { useEditorWorkspace } from '../model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -25,6 +27,10 @@ export const EditorWorkspace = ({
   onDeleteProject,
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
+  
+  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts'>('project')
+  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts } = useSettingsStore()
+  const isLocalPrompts = project.promptOverrides !== undefined
 
   return (
     <div className="h-dvh w-full flex flex-col overflow-hidden bg-background">
@@ -77,6 +83,7 @@ export const EditorWorkspace = ({
           renderProgress={model.renderProgress}
           onCancelAll={model.handleCancelAll}
           isMerging={model.isMerging}
+          onUpdateMarkdown={model.handleUpdateMarkdown}
         />
         <PipelineInspector
           project={project}
@@ -100,6 +107,7 @@ export const EditorWorkspace = ({
           onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
           onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
           onRunVoiceGen={() => model.runVoiceGenAllScenes()}
+          onRunVoiceGenFragment={model.runVoiceGenFragment}
           onResetAllSync={model.handleResetAllSync}
           onResetAudio={model.handleResetAudio}
           onUnloadVram={model.handleUnloadVram}
@@ -109,6 +117,7 @@ export const EditorWorkspace = ({
           onRunProjectRender={model.runProjectRender}
           onMergeAudioAndVideo={model.handleMergeAudioAndVideo}
           onShowNotification={model.showNotification}
+          onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
         />
       </main>
 
@@ -129,42 +138,120 @@ export const EditorWorkspace = ({
         onDeleteCustomVoice={model.handleDeleteCustomVoice}
       />
 
-      <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки проекта">
-        <div className="flex flex-col gap-4 pb-2">
-          {/* ponytail: inline state updates for metadata, no local buffering needed */}
-          <FieldGroup label="Название видео (Title)">
-            <Input 
-              value={project.metadata?.title || ''} 
-              onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, title: e.target.value } })} 
-            />
-          </FieldGroup>
-          
-          <FieldGroup label="Описание (Description)">
-            <textarea 
-              className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary/50 transition-all"
-              rows={3}
-              value={project.metadata?.description || ''} 
-              onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, description: e.target.value } })} 
-            />
-          </FieldGroup>
-          
-          <FieldGroup label="Теги (через запятую)">
-            <Input 
-              value={(project.metadata?.tags || []).join(', ')} 
-              onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } })} 
-              placeholder="tech, review, rtx5090"
-            />
-          </FieldGroup>
-
-          <div className="h-px bg-white/10 my-2" />
-
-          <Button
-            variant="dashed"
-            className="text-error border-error/30 hover:bg-error/10"
-            onClick={() => onDeleteProject(project.name)}
+      <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки">
+        <div className="flex border-b border-white/10 mb-5">
+          <button 
+            onClick={() => setSettingsTab('project')} 
+            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'project' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
           >
-            Удалить проект
-          </Button>
+            Проект
+          </button>
+          <button 
+            onClick={() => setSettingsTab('prompts')} 
+            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'prompts' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
+          >
+            Промпты LLM
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 pb-2">
+          {settingsTab === 'project' ? (
+            <>
+              <FieldGroup label="Название видео (Title)">
+                <Input value={project.metadata?.title || ''} onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, title: e.target.value } })} />
+              </FieldGroup>
+              <FieldGroup label="Описание (Description)">
+                <textarea
+                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary/50 transition-all"
+                  rows={3}
+                  value={project.metadata?.description || ''}
+                  onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, description: e.target.value } })}
+                />
+              </FieldGroup>
+              <FieldGroup label="Теги (через запятую)">
+                <Input
+                  value={(project.metadata?.tags || []).join(', ')}
+                  onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } })}
+                  placeholder="tech, review, rtx5090"
+                />
+              </FieldGroup>
+              <FieldGroup label="Тип переходов между сценами (Transitions)">
+                <Select
+                  value={project.montage?.transitions?.[0] || 'none'}
+                  onChange={e => {
+                    const val = e.target.value;
+                    onUpdateProject({ ...project, montage: { ...project.montage, transitions: val === 'none' ? [] : [val] } })
+                  }}
+                >
+                  <option value="none">Без переходов</option>
+                  <option value="fade">Плавное затухание (Fade In/Out)</option>
+                  <option value="slide_left">Свайп влево (Slide Left)</option>
+                  <option value="slide_up">Свайп вверх (Slide Up)</option>
+                  <option value="zoom">Наезд камеры (Zoom In/Out)</option>
+                  <option value="glitch">Цифровые помехи (Glitch)</option>
+                </Select>
+              </FieldGroup>
+              <div className="h-px bg-white/10 my-2" />
+              <Button variant="dashed" className="text-error border-error/30 hover:bg-error/10" onClick={() => onDeleteProject(project.name)}>
+                Удалить проект
+              </Button>
+            </>
+          ) : (
+            <>
+              <Switch
+                label="Использовать индивидуальные промпты для этого проекта"
+                checked={isLocalPrompts}
+                onChange={(checked) => onUpdateProject({ ...project, promptOverrides: checked ? { ...globalPrompts } : undefined })}
+              />
+              
+              <div className="text-[10px] text-on-surface-variant bg-surface-container-lowest/50 border border-white/5 p-3 rounded-lg leading-relaxed font-mono">
+                <span className="text-primary">Доступные переменные:</span><br/>
+                {`{{FORMAT}}, {{WIDTH}}, {{HEIGHT}}, {{DURATION}}, {{DURATION_FRAMES}}, {{FPS}}, {{COLORS}}, {{SCENE_TITLE}}, {{FRAGMENTS}}, {{VISUAL_NOTE}}, {{TEXT}}, {{SCENES_LIST}}`}
+              </div>
+
+              <FieldGroup label="Промпт для Сцены">
+                <textarea
+                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-[12px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
+                  rows={6}
+                  spellCheck={false}
+                  value={isLocalPrompts ? project.promptOverrides?.scene : globalPrompts.scene}
+                  onChange={e => isLocalPrompts 
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, scene: e.target.value } })
+                    : setGlobalPrompts({ scene: e.target.value })}
+                />
+              </FieldGroup>
+
+              <FieldGroup label="Промпт для Фрагмента">
+                <textarea
+                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-[12px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
+                  rows={4}
+                  spellCheck={false}
+                  value={isLocalPrompts ? project.promptOverrides?.fragment : globalPrompts.fragment}
+                  onChange={e => isLocalPrompts 
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, fragment: e.target.value } })
+                    : setGlobalPrompts({ fragment: e.target.value })}
+                />
+              </FieldGroup>
+
+              <FieldGroup label="Промпт для Проекта">
+                <textarea
+                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-[12px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
+                  rows={4}
+                  spellCheck={false}
+                  value={isLocalPrompts ? project.promptOverrides?.project : globalPrompts.project}
+                  onChange={e => isLocalPrompts 
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, project: e.target.value } })
+                    : setGlobalPrompts({ project: e.target.value })}
+                />
+              </FieldGroup>
+
+              {!isLocalPrompts && (
+                <Button variant="dashed" onClick={resetGlobalPrompts} className="mt-2 text-on-surface-variant hover:text-white">
+                  <Icon name="restore" className="text-[16px] mr-1" /> Сбросить глобальные промпты
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </Modal>
 
@@ -182,6 +269,7 @@ export const EditorWorkspace = ({
           <FieldGroup label={`Длительность (duration): ${model.duration === 0 ? 'Авто' : model.duration.toFixed(1) + 'с'}`}>
             <Slider min={0} max={30} step={0.5} value={model.duration} onChange={e => model.setDuration(Number(e.target.value))} />
           </FieldGroup>
+
           <div className="flex flex-col gap-3 mt-2 border-t border-white/10 pt-4">
             <Switch checked={model.denoise} onChange={model.setDenoise} label="Шумоподавление (Denoise)" />
             <Switch checked={model.preprocessPrompt} onChange={model.setPreprocessPrompt} label="Предобработка промпта (Preprocess)" />

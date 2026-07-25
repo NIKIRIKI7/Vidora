@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { CustomVoice, ProjectSettings, Scene, SceneFragment } from '@entities/project'
-import { useNotificationStore, serializeProjectToMarkdown } from '@entities/project'
+import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull } from '@entities/project'
 import { generateRemotionPrompt } from '../lib/generateRemotionPrompt'
+import { useHotkeys } from '@shared/lib/useHotkeys'
 import {
   API,
   formatShortTimecode,
@@ -109,6 +110,47 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     onUpdateProject({ ...project, scenes: updatedScenes })
     setAudioLoaded(null)
     showNotification('Аудио сброшено для всех сцен', 'info')
+  }
+
+  const handleUpdateMarkdown = (newMd: string) => {
+    const parsed = parseMarkdownFull(newMd)
+    const mergedScenes = parsed.scenes?.map((newScene, sIdx) => {
+        const oldScene = project.scenes[sIdx] || {}
+        const mergedFragments = newScene.fragments.map((newFrag, fIdx) => {
+            const oldFrag = oldScene.fragments?.[fIdx] || {}
+            return { 
+                ...newFrag, 
+                id: oldFrag.id || newFrag.id, 
+                audioFileName: oldFrag.audioFileName, 
+                bRollFileName: oldFrag.bRollFileName, 
+                startTime: oldFrag.startTime, 
+                endTime: oldFrag.endTime 
+            }
+        })
+        return { 
+            ...newScene, 
+            id: oldScene.id || newScene.id, 
+            remotionCode: oldScene.remotionCode, 
+            ignoreTsx: oldScene.ignoreTsx, 
+            fragments: mergedFragments 
+        }
+    })
+    onUpdateProject({
+        ...project,
+        rawMarkdown: newMd,
+        metadata: parsed.metadata ?? project.metadata,
+        montage: parsed.montage ?? project.montage,
+        scenes: mergedScenes ?? project.scenes,
+    })
+  }
+
+  const handleUpdateFragmentBRoll = (fragId: string, filename: string) => {
+    if (!activeScene) return
+    const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: filename } : f)
+    onUpdateProject({
+        ...project,
+        scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
+    })
   }
 
   const handleSceneDragStart = (idx: number) => () => setDraggedSceneIdx(idx)
@@ -299,12 +341,13 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('project_path', getProjectPath(project))
+    formData.append('folder', 'refs')
 
     try {
-      const res = await fetch(`${API}/api/v1/audio/upload-ref`, { method: 'POST', body: formData })
+      const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: formData })
       const data = await res.json()
       if (data.status === 'ok') {
-        setNewVoiceAudioPath(data.ref_audio_path)
+        setNewVoiceAudioPath(data.path)
         showNotification('Референсный файл загружен', 'success')
       }
     } catch {
@@ -341,6 +384,59 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     onUpdateProject({ ...project, customVoices: updatedVoices })
     if (voiceModel === voiceId) setVoiceModel('aria')
     showNotification('Голос удален из Voicebox', 'info')
+  }
+
+  const runVoiceGenFragment = async (sceneId: string, fragId: string) => {
+    setIsGeneratingAudio(true)
+    try {
+        const scene = project.scenes.find(s => s.id === sceneId)
+        const frag = scene?.fragments.find(f => f.id === fragId)
+        if (!scene || !frag) return
+        
+        const projectPath = getProjectPath(project)
+        const customVoice = project.customVoices?.find(v => v.id === voiceModel)
+        
+        const payload = {
+            fragment_id: frag.id,
+            file_prefix: `Frag_${sanitizeFilename(scene.title)}`,
+            text: frag.text,
+            voice_model: customVoice ? 'clone' : voiceModel,
+            ref_audio_path: customVoice ? customVoice.refAudioPath : null,
+            ref_text: customVoice ? customVoice.refText : null,
+            speed, num_steps: numSteps, guidance_scale: guidanceScale, duration,
+            denoise, preprocess_prompt: preprocessPrompt, postprocess_output: postprocessOutput,
+            project_path: projectPath, auto_offload_vram: autoOffloadVram,
+        }
+        
+        const res = await fetch(`${API}/api/v1/audio/generate`, { method: 'POST', body: JSON.stringify(payload) })
+        const data = await res.json()
+        if (res.ok && data.status === 'ok') {
+            const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
+            const updatedFragments = scene.fragments.map(f => f.id === frag.id ? { ...f, audioFileName: relativeAudioPath } : f)
+            const updatedScene = { ...scene, fragments: updatedFragments }
+            
+            const audioPaths = updatedScene.fragments.map(f => f.audioFileName).filter(Boolean) as string[]
+            if (audioPaths.length > 0) {
+                const sceneAudioPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(scene.title)}_${scene.id.slice(0, 6)}.wav`
+                await fetch(`${API}/api/v1/audio/concat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio_paths: audioPaths, output_path: sceneAudioPath })
+                })
+                updatedScene.fragments[0].audioFileName = sceneAudioPath
+            }
+            
+            onUpdateProject({
+                ...project,
+                scenes: project.scenes.map(s => s.id === scene.id ? updatedScene : s)
+            })
+            showNotification('Фрагмент успешно переозвучен!', 'success')
+        }
+    } catch (e) {
+        showNotification('Ошибка переозвучки фрагмента', 'error')
+    } finally {
+        setIsGeneratingAudio(false)
+    }
   }
 
   const handleMergeAudioAndVideo = async (target: 'scene' | 'project' = 'scene') => {
@@ -433,50 +529,61 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       const customVoice = project.customVoices?.find(v => v.id === voiceModel)
       const projectPath = getProjectPath(project)
       const updatedScenes = [...targetScenes]
-
       let activeSceneAudioPath: string | null = null
       let successCount = 0
 
       for (let idx = 0; idx < updatedScenes.length; idx++) {
         if (abortControllerRef.current?.signal.aborted) break
         const scene = updatedScenes[idx]
-        const text = scene.fragments.map(f => f.text).join(' ')
-        if (!text.trim()) continue
+        const audioPaths: string[] = []
 
-        const payload = {
-          fragment_id: scene.id,
-          file_prefix: `Scene_${sanitizeFilename(scene.title)}`,
-          text,
-          voice_model: customVoice ? 'clone' : voiceModel,
-          ref_audio_path: customVoice ? customVoice.refAudioPath : null,
-          ref_text: customVoice ? customVoice.refText : null,
-          speed,
-          num_steps: numSteps,
-          guidance_scale: guidanceScale,
-          duration,
-          denoise,
-          preprocess_prompt: preprocessPrompt,
-          postprocess_output: postprocessOutput,
-          project_path: projectPath,
-          auto_offload_vram: autoOffloadVram,
+        for (let fIdx = 0; fIdx < scene.fragments.length; fIdx++) {
+            const frag = scene.fragments[fIdx]
+            if (!frag.text.trim()) continue
+
+            const payload = {
+                fragment_id: frag.id,
+                file_prefix: `Frag_${sanitizeFilename(scene.title)}`,
+                text: frag.text,
+                voice_model: customVoice ? 'clone' : voiceModel,
+                ref_audio_path: customVoice ? customVoice.refAudioPath : null,
+                ref_text: customVoice ? customVoice.refText : null,
+                speed,
+                num_steps: numSteps,
+                guidance_scale: guidanceScale,
+                duration,
+                denoise,
+                preprocess_prompt: preprocessPrompt,
+                postprocess_output: postprocessOutput,
+                project_path: projectPath,
+                auto_offload_vram: autoOffloadVram,
+            }
+
+            const res = await fetch(`${API}/api/v1/audio/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: abortControllerRef.current.signal,
+            })
+            const data = await res.json()
+            if (res.ok && data.status === 'ok') {
+                const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
+                frag.audioFileName = relativeAudioPath
+                audioPaths.push(relativeAudioPath)
+            }
         }
 
-        const res = await fetch(`${API}/api/v1/audio/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: abortControllerRef.current.signal,
-        })
-        const data = await res.json()
-
-        if (res.ok && data.status === 'ok') {
-          successCount++
-          const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
-          const updatedFragments = scene.fragments.map((f: SceneFragment, i: number) =>
-            i === 0 ? { ...f, audioFileName: relativeAudioPath } : f,
-          )
-          updatedScenes[idx] = { ...scene, fragments: updatedFragments }
-          if (scene.id === activeSceneId) activeSceneAudioPath = relativeAudioPath
+        if (audioPaths.length > 0) {
+            successCount++
+            const sceneAudioPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(scene.title)}_${scene.id.slice(0, 6)}.wav`
+            await fetch(`${API}/api/v1/audio/concat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audio_paths: audioPaths, output_path: sceneAudioPath }),
+                signal: abortControllerRef.current.signal,
+            })
+            scene.fragments[0].audioFileName = sceneAudioPath
+            if (scene.id === activeSceneId) activeSceneAudioPath = sceneAudioPath
         }
       }
 
@@ -836,6 +943,10 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     }
   }
 
+  useHotkeys('Space', false, () => setPlayWithAudio(p => !p))
+  useHotkeys('Enter', true, () => runRender())
+  useHotkeys('KeyS', true, () => handleExportProject())
+
   return {
     activeSceneId,
     activeScene,
@@ -920,5 +1031,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleCancelAll,
     handleExportProject,
     showNotification,
+    handleUpdateMarkdown,
+    handleUpdateFragmentBRoll,
+    runVoiceGenFragment,
   }
 }

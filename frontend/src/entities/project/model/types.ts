@@ -58,6 +58,12 @@ export interface CustomVoice {
   tags?: string[]
 }
 
+export interface PromptTemplates {
+  scene: string
+  fragment: string
+  project: string
+}
+
 export interface ProjectSettings {
   name: string
   format: VideoFormat
@@ -67,4 +73,5 @@ export interface ProjectSettings {
   scenes: Scene[]
   customVoices?: CustomVoice[]
   rawMarkdown: string
+  promptOverrides?: Partial<PromptTemplates>
 }

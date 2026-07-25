@@ -8,13 +8,19 @@ interface Props {
   onCancel?: () => void
 }
 
+const TEMPLATES = [
+  { name: 'Tech Обзор', icon: 'smartphone', desc: 'Скринкаст и B-roll', md: '---\ntitle: "Обзор"\nfps: 30\n---\n[Интро] (00:00:00)\n*(Наезд камеры на гаджет)* Сегодня посмотрим на это чудо.' },
+  { name: 'News Recap', icon: 'newspaper', desc: 'Динамичная подача', md: '---\ntitle: "Новости"\nfps: 60\n---\n[Хук] (00:00:00)\n*(Текст глитчует)* Нейросети снова обновили.' },
+  { name: 'Tutorial', icon: 'school', desc: 'Спокойный скринкаст', md: '---\ntitle: "Урок"\nfps: 30\n---\n[Шаг 1] (00:00:00)\n*(Запись терминала)* Открываем консоль и пишем команду.' },
+]
+
 export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
   const [name, setName] = useState('')
   const [format, setFormat] = useState<VideoFormat>('16:9')
   const [resolution, setResolution] = useState<Resolution>('1080p')
   const [file, setFile] = useState<File | null>(null)
   const [isCreating, setIsCreating] = useState(false)
-
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
   const openFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -87,6 +93,31 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           <p className="text-on-surface-variant text-sm">Настройка параметров проекта</p>
         </div>
 
+        <div className="flex gap-3 w-full mb-2">
+            {TEMPLATES.map(tpl => (
+                <button 
+                    key={tpl.name} 
+                    onClick={() => {
+                        const parsed = parseMarkdownFull(tpl.md);
+                        onCreate({ 
+                          ...parsed, 
+                          name: tpl.name, 
+                          format, resolution, 
+                          rawMarkdown: tpl.md,
+                          metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
+                          montage: parsed.montage ?? { fps: '30', animationStyle: 'screencast', transitions: [], colors: { primary: '#ddb7ff', secondary: '#4fdbc8', background: '#0b1326', surface: '#171f33', accent: '#ffb4ab', text: '#dae2fd' }, typography: { heading: 'Inter', body: 'Geist' } },
+                          scenes: parsed.scenes ?? []
+                        });
+                    }}
+                    className="flex-1 bg-surface-container-lowest/50 border border-white/5 hover:border-primary/50 hover:bg-primary/5 p-4 rounded-xl flex flex-col items-center gap-2 transition-all active:scale-95 text-center"
+                >
+                    <Icon name={tpl.icon} className="text-[24px] text-primary" />
+                    <span className="text-xs font-semibold text-on-surface">{tpl.name}</span>
+                    <span className="text-[10px] text-on-surface-variant/60">{tpl.desc}</span>
+                </button>
+            ))}
+        </div>
+
         <FieldGroup label="Название проекта">
           <Input
             placeholder="Например: Обзор M4 Pro"
@@ -97,19 +128,13 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
 
         <div className="grid grid-cols-2 gap-4">
           <FieldGroup label="Формат">
-            <Select
-              value={format}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setFormat(e.target.value as VideoFormat)}
-            >
+            <Select value={format} onChange={(e: ChangeEvent<HTMLSelectElement>) => setFormat(e.target.value as VideoFormat)}>
               <option value="16:9">YouTube (16:9)</option>
               <option value="9:16">Shorts / Reels (9:16)</option>
             </Select>
           </FieldGroup>
           <FieldGroup label="Разрешение">
-            <Select
-              value={resolution}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setResolution(e.target.value as Resolution)}
-            >
+            <Select value={resolution} onChange={(e: ChangeEvent<HTMLSelectElement>) => setResolution(e.target.value as Resolution)}>
               <option value="1080p">Full HD (1080p)</option>
               <option value="1440p">2K (1440p)</option>
               <option value="2160p">4K (2160p)</option>
@@ -118,13 +143,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
         </div>
 
         <FieldGroup label="Сценарий (Markdown)">
-          <input
-            type="file"
-            accept=".md"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] || null)}
-          />
+          <input type="file" accept=".md" className="hidden" ref={fileInputRef} onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] || null)} />
           <button
             className={`w-full py-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 transition-colors ${file ? 'border-secondary/50 bg-secondary/5' : 'border-white/10 hover:border-primary/50 hover:bg-white/5'}`}
             onClick={() => fileInputRef.current?.click()}
@@ -136,12 +155,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           </button>
         </FieldGroup>
 
-        <Button
-          variant="primary"
-          disabled={!name || !file || isCreating}
-          onClick={handleCreate}
-          className="mt-4"
-        >
+        <Button variant="primary" disabled={!name || !file || isCreating} onClick={handleCreate} className="mt-4">
           {isCreating ? <><Spinner className="text-[16px]" /> Инициализация...</> : 'Создать проект'}
         </Button>
 
@@ -152,12 +166,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
         </div>
 
         <input type="file" accept=".md" className="hidden" ref={openFileInputRef} onChange={handleOpen} />
-        <Button
-          variant="dashed"
-          icon="folder_open"
-          onClick={() => openFileInputRef.current?.click()}
-          disabled={isCreating}
-        >
+        <Button variant="dashed" icon="folder_open" onClick={() => openFileInputRef.current?.click()} disabled={isCreating}>
           Открыть существующий проект
         </Button>
       </div>
