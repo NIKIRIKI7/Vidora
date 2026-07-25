@@ -2,6 +2,7 @@ import { useState, useRef, type ChangeEvent } from 'react'
 import { Button, Input, Select, FieldGroup, Icon, Spinner } from '@shared/ui'
 import { parseMarkdownFull } from '@entities/project'
 import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project'
+import { THEME_PRESETS } from '@shared/config'
 
 interface Props {
   onCreate: (project: ProjectSettings) => void
@@ -18,6 +19,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
   const [name, setName] = useState('')
   const [format, setFormat] = useState<VideoFormat>('16:9')
   const [resolution, setResolution] = useState<Resolution>('1080p')
+  const [theme, setTheme] = useState(THEME_PRESETS[0])
   const [file, setFile] = useState<File | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   
@@ -39,7 +41,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           fps: '30',
           animationStyle: 'screencast',
           transitions: [],
-          colors: { primary: '#ddb7ff', secondary: '#4fdbc8', background: '#0b1326', surface: '#171f33', accent: '#ffb4ab', text: '#dae2fd' },
+          colors: theme.colors,
           typography: { heading: 'Inter', body: 'Geist' },
         },
         scenes: parsed.scenes ?? [],
@@ -68,7 +70,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
           fps: '30',
           animationStyle: 'screencast',
           transitions: [],
-          colors: { primary: '#ddb7ff', secondary: '#4fdbc8', background: '#0b1326', surface: '#171f33', accent: '#ffb4ab', text: '#dae2fd' },
+          colors: theme.colors,
           typography: { heading: 'Inter', body: 'Geist' },
         },
         scenes: parsed.scenes ?? [],
@@ -105,7 +107,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
                           format, resolution, 
                           rawMarkdown: tpl.md,
                           metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
-                          montage: parsed.montage ?? { fps: '30', animationStyle: 'screencast', transitions: [], colors: { primary: '#ddb7ff', secondary: '#4fdbc8', background: '#0b1326', surface: '#171f33', accent: '#ffb4ab', text: '#dae2fd' }, typography: { heading: 'Inter', body: 'Geist' } },
+                          montage: parsed.montage ?? { fps: '30', animationStyle: 'screencast', transitions: [], colors: theme.colors, typography: { heading: 'Inter', body: 'Geist' } },
                           scenes: parsed.scenes ?? []
                         });
                     }}
@@ -141,6 +143,25 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
             </Select>
           </FieldGroup>
         </div>
+
+        <FieldGroup label="Цветовая тема">
+            <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
+                {THEME_PRESETS.map(tpl => (
+                    <button 
+                        key={tpl.name}
+                        onClick={() => setTheme(tpl)}
+                        className="flex flex-col items-center gap-1 shrink-0 group"
+                        title={tpl.name}
+                    >
+                        <div className={`w-8 h-8 rounded-full border-2 flex overflow-hidden ${theme.name === tpl.name ? 'border-primary' : 'border-transparent group-hover:border-white/50'}`}>
+                            <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
+                            <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
+                        </div>
+                        <span className={`text-[10px] ${theme.name === tpl.name ? 'text-primary' : 'text-on-surface-variant group-hover:text-white'}`}>{tpl.name.split(' ')[0]}</span>
+                    </button>
+                ))}
+            </div>
+        </FieldGroup>
 
         <FieldGroup label="Сценарий (Markdown)">
           <input type="file" accept=".md" className="hidden" ref={fileInputRef} onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] || null)} />

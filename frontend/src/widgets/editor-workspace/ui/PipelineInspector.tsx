@@ -28,6 +28,7 @@ interface Props {
   onRunVoiceGenFragment: (sceneId: string, fragId: string) => void
   onResetAllSync: () => void
   onResetAudio: () => void
+  onProcessAudio: (action: string) => void
   onUnloadVram: () => void
   onRunSync: () => void
   onToggleIgnoreTsx: (id: string) => void
@@ -36,6 +37,8 @@ interface Props {
   onMergeAudioAndVideo: (target: 'scene' | 'project') => void
   onShowNotification: (msg: string, type?: 'success' | 'error' | 'info') => void
   onUpdateFragmentBRoll: (fragId: string, filename: string) => void
+  onUnlinkFragmentBRoll: (fragId: string) => void
+  onNudgeTiming: (fragId: string, type: 'start' | 'end', delta: number) => void
 }
 
 export const PipelineInspector = ({
@@ -63,6 +66,7 @@ export const PipelineInspector = ({
   onRunVoiceGenFragment,
   onResetAllSync,
   onResetAudio,
+  onProcessAudio,
   onUnloadVram,
   onRunSync,
   onToggleIgnoreTsx,
@@ -70,7 +74,9 @@ export const PipelineInspector = ({
   onRunProjectRender,
   onMergeAudioAndVideo,
   onShowNotification,
-  onUpdateFragmentBRoll
+  onUpdateFragmentBRoll,
+  onUnlinkFragmentBRoll,
+  onNudgeTiming
 }: Props) => (
   <aside className="w-[380px] border-l border-white/10 flex flex-col bg-surface-container/60 backdrop-blur-2xl shrink-0">
     <div className="p-4 border-b border-white/5 flex justify-between items-center">
@@ -116,7 +122,8 @@ export const PipelineInspector = ({
                       onUpdateFragmentBRoll(frag.id, data.filename);
                       onShowNotification('B-Roll привязан!', 'success');
                   }
-              } catch(e) {
+               } catch (e) {
+                  console.error(e);
                   onShowNotification('Ошибка загрузки медиа', 'error');
               }
             }}
@@ -128,9 +135,13 @@ export const PipelineInspector = ({
             />
             
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-mono text-secondary font-medium">
-                Фрагмент {i + 1} ({frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s)
-              </span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => onNudgeTiming(frag.id, 'start', -0.1)} className="text-on-surface-variant hover:text-primary"><Icon name="remove" className="text-[12px]"/></button>
+                <span className="text-[10px] font-mono text-secondary font-medium">
+                  {frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s
+                </span>
+                <button onClick={() => onNudgeTiming(frag.id, 'end', 0.1)} className="text-on-surface-variant hover:text-primary"><Icon name="add" className="text-[12px]"/></button>
+              </div>
               <div className="flex items-center gap-2">
                 <button 
                   className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5"
@@ -157,9 +168,15 @@ export const PipelineInspector = ({
             </div>
 
             {frag.bRollFileName && (
-               <div className="text-[10px] bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full inline-flex self-start gap-1 items-center">
-                   <Icon name="movie" className="text-[12px]" /> {frag.bRollFileName}
-               </div>
+               <button 
+                 onClick={() => onUnlinkFragmentBRoll(frag.id)} 
+                 className="text-[10px] bg-secondary/10 text-secondary border border-secondary/20 hover:border-error hover:bg-error/10 hover:text-error px-2 py-0.5 rounded-full inline-flex self-start gap-1 items-center transition-colors group/broll"
+                 title="Отвязать футаж"
+               >
+                 <Icon name="movie" className="text-[12px] group-hover/broll:hidden" />
+                 <Icon name="close" className="text-[12px] hidden group-hover/broll:block" />
+                 <span className="group-hover/broll:line-through">{frag.bRollFileName.split('/').pop()}</span>
+               </button>
             )}
 
             <input
@@ -238,6 +255,13 @@ export const PipelineInspector = ({
           >
             <Icon name="delete" className="text-[16px]" />
           </button>
+        </div>
+
+        <div className="flex flex-col gap-2 mt-2 border-t border-white/5 pt-3">
+            <span className="text-[10px] text-on-surface-variant uppercase">Постобработка аудио</span>
+            <Button variant="dashed" onClick={() => onProcessAudio('mastering')} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-secondary/50 hover:bg-secondary/10 hover:text-secondary">
+                🎙️ Мастеринг (EQ + Normalize + Silence Cut)
+            </Button>
         </div>
       </section>
 

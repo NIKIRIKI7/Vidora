@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import type { CustomVoice, ProjectSettings, Scene, SceneFragment } from '@entities/project'
-import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull } from '@entities/project'
+import type { CustomVoice, ProjectSettings, Scene, SceneFragment, VideoFormat } from '@entities/project'
+import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull, useProjectStore } from '@entities/project'
 import { generateRemotionPrompt } from '../lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import {
@@ -26,6 +26,8 @@ interface Props {
 export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [centerView, setCenterView] = useState<CenterViewMode>('player')
+  const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
+  
   const [voiceModel, setVoiceModel] = useState('aria')
   const [speed, setSpeed] = useState(1.0)
   const [numSteps, setNumSteps] = useState(32)
@@ -38,41 +40,108 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
   const [playWithAudio, setPlayWithAudio] = useState(true)
   const [isVoiceboxOpen, setIsVoiceboxOpen] = useState(false)
-
   const [newVoiceName, setNewVoiceName] = useState('')
   const [newVoiceText, setNewVoiceText] = useState('')
   const [newVoiceTags, setNewVoiceTags] = useState('')
   const [newVoiceAudioPath, setNewVoiceAudioPath] = useState<string | null>(null)
-
   const [isAutoPipelineRunning, setIsAutoPipelineRunning] = useState(false)
   const [pipelineStep, setPipelineStep] = useState<string>('')
-
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
   const [isMerging, setIsMerging] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-
   const [useWhisper, setUseWhisper] = useState(true)
   const [autoOffloadVram, setAutoOffloadVram] = useState(true)
-
   const [draggedSceneIdx, setDraggedSceneIdx] = useState<number | null>(null)
   const [draggedFragIdx, setDraggedFragIdx] = useState<number | null>(null)
-
   const [isRendering, setIsRendering] = useState(false)
   const [renderType, setRenderType] = useState<'scene' | 'project' | null>(null)
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
-
+  
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const refVoiceInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentTaskIdRef = useRef<string | null>(null)
-
+  
   const showNotification = useNotificationStore(s => s.showNotification)
+  const undo = useProjectStore(s => s.undo)
+  const redo = useProjectStore(s => s.redo)
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
   const { renderProgress, setRenderProgress, renderListenersRef } = useRenderWebSocket()
+
+  const handleUpdateMarkdown = (newMd: string) => {
+    const parsed = parseMarkdownFull(newMd)
+    const mergedScenes = parsed.scenes?.map((newScene, sIdx) => {
+        const oldScene = project.scenes[sIdx] || {}
+        const mergedFragments = newScene.fragments.map((newFrag, fIdx) => {
+            const oldFrag = oldScene.fragments?.[fIdx] || {}
+            return { 
+                ...newFrag, 
+                id: oldFrag.id || newFrag.id, 
+                audioFileName: oldFrag.audioFileName, 
+                bRollFileName: oldFrag.bRollFileName, 
+                startTime: oldFrag.startTime, 
+                endTime: oldFrag.endTime 
+            }
+        })
+        return { 
+            ...newScene, 
+            id: oldScene.id || newScene.id, 
+            remotionCode: oldScene.remotionCode,
+            remotionCodeHistory: oldScene.remotionCodeHistory,
+            historyIndex: oldScene.historyIndex,
+            ignoreTsx: oldScene.ignoreTsx, 
+            fragments: mergedFragments 
+        }
+    })
+    onUpdateProject({
+        ...project,
+        rawMarkdown: newMd,
+        metadata: parsed.metadata ?? project.metadata,
+        montage: parsed.montage ?? project.montage,
+        scenes: mergedScenes ?? project.scenes,
+    })
+  }
+
+  const handleUpdateFragmentBRoll = (fragId: string, filename: string) => {
+    if (!activeScene) return
+    const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: filename } : f)
+    onUpdateProject({
+        ...project,
+        scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
+    })
+  }
+
+  const handleUnlinkFragmentBRoll = (fragId: string) => {
+    if (!activeScene) return
+    const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: undefined } : f)
+    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+  }
+
+  const handleNudgeTiming = (fragId: string, type: 'start' | 'end', delta: number) => {
+    if (!activeScene) return
+    const updatedFragments = [...activeScene.fragments]
+    const idx = updatedFragments.findIndex(f => f.id === fragId)
+    if (idx === -1) return
+    
+    if (type === 'start') {
+        const val = Math.max(0, (updatedFragments[idx].startTime || 0) + delta)
+        updatedFragments[idx] = { ...updatedFragments[idx], startTime: val }
+        if (idx > 0 && updatedFragments[idx - 1].endTime !== undefined) {
+             updatedFragments[idx - 1] = { ...updatedFragments[idx - 1], endTime: val }
+        }
+    } else {
+        const val = Math.max(0, (updatedFragments[idx].endTime || 0) + delta)
+        updatedFragments[idx] = { ...updatedFragments[idx], endTime: val }
+        if (idx < updatedFragments.length - 1 && updatedFragments[idx + 1].startTime !== undefined) {
+             updatedFragments[idx + 1] = { ...updatedFragments[idx + 1], startTime: val }
+        }
+    }
+    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+  }
 
   const handleCancelAll = async () => {
     if (abortControllerRef.current) {
@@ -112,49 +181,33 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     showNotification('Аудио сброшено для всех сцен', 'info')
   }
 
-  const handleUpdateMarkdown = (newMd: string) => {
-    const parsed = parseMarkdownFull(newMd)
-    const mergedScenes = parsed.scenes?.map((newScene, sIdx) => {
-        const oldScene = project.scenes[sIdx] || {}
-        const mergedFragments = newScene.fragments.map((newFrag, fIdx) => {
-            const oldFrag = oldScene.fragments?.[fIdx] || {}
-            return { 
-                ...newFrag, 
-                id: oldFrag.id || newFrag.id, 
-                audioFileName: oldFrag.audioFileName, 
-                bRollFileName: oldFrag.bRollFileName, 
-                startTime: oldFrag.startTime, 
-                endTime: oldFrag.endTime 
-            }
-        })
-        return { 
-            ...newScene, 
-            id: oldScene.id || newScene.id, 
-            remotionCode: oldScene.remotionCode, 
-            ignoreTsx: oldScene.ignoreTsx, 
-            fragments: mergedFragments 
-        }
-    })
-    onUpdateProject({
-        ...project,
-        rawMarkdown: newMd,
-        metadata: parsed.metadata ?? project.metadata,
-        montage: parsed.montage ?? project.montage,
-        scenes: mergedScenes ?? project.scenes,
-    })
-  }
-
-  const handleUpdateFragmentBRoll = (fragId: string, filename: string) => {
+  const handleProcessAudio = async (action: string) => {
     if (!activeScene) return
-    const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: filename } : f)
-    onUpdateProject({
-        ...project,
-        scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
-    })
+    setIsGeneratingAudio(true)
+    try {
+        const audioPath = getAudioPathForScene(project, activeScene)
+        const res = await fetch(`${API}/api/v1/audio/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scene_id: activeScene.id, audio_path: audioPath, action, project_path: getProjectPath(project) })
+        })
+        const data = await res.json()
+        if (data.status === 'ok') {
+            showNotification(`Аудио обработано: ${action}`, 'success')
+            setAudioLoaded(null)
+            setTimeout(() => setAudioLoaded(data.processed_audio_path), 500)
+        } else {
+            showNotification(`Ошибка: ${data.detail}`, 'error')
+        }
+    } catch (e) {
+        console.error(e)
+        showNotification('Ошибка обработки аудио', 'error')
+    } finally {
+        setIsGeneratingAudio(false)
+    }
   }
 
   const handleSceneDragStart = (idx: number) => () => setDraggedSceneIdx(idx)
-
   const handleSceneDrop = (dropIdx: number) => () => {
     if (draggedSceneIdx === null || draggedSceneIdx === dropIdx) {
       setDraggedSceneIdx(null)
@@ -168,7 +221,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   }
 
   const handleFragDragStart = (idx: number) => () => setDraggedFragIdx(idx)
-
   const handleFragDrop = (dropIdx: number) => () => {
     if (!activeScene || draggedFragIdx === null || draggedFragIdx === dropIdx) {
       setDraggedFragIdx(null)
@@ -197,7 +249,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       })
       return
     }
-
     const expectedPath = getAudioPathForScene(project, activeScene)
     fetch(`${API}/api/v1/render/media?path=${encodeURIComponent(expectedPath)}`, { method: 'HEAD' })
       .then(res => {
@@ -206,7 +257,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       .catch(() => {
         if (!isCancelled) setAudioLoaded(null)
       })
-
     return () => {
       isCancelled = true
     }
@@ -289,7 +339,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       const vNote = newVisualNote !== undefined ? newVisualNote : f.visualNote
       let newStart = f.startTime
       let newEnd = f.endTime
-
       const match = vNote.match(
         /^(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?)\s*-\s*(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?)/,
       )
@@ -299,7 +348,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         if (parsedStart !== null) newStart = parsedStart
         if (parsedEnd !== null) newEnd = parsedEnd
       }
-
       return { ...f, text: newText, visualNote: vNote, startTime: newStart, endTime: newEnd }
     })
     onUpdateProject({
@@ -310,9 +358,28 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const handleUpdateCode = (code: string) => {
     if (!activeScene) return
+    const hist = activeScene.remotionCodeHistory || []
+    const idx = activeScene.historyIndex ?? (hist.length - 1)
+    const newHist = [...hist.slice(0, idx + 1), code]
+    
     onUpdateProject({
       ...project,
-      scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, remotionCode: code } : s)),
+      scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, remotionCode: code, remotionCodeHistory: newHist, historyIndex: newHist.length - 1 } : s)),
+    })
+  }
+  
+  const handleCodeHistory = (step: number) => {
+    if (!activeScene) return
+    const hist = activeScene.remotionCodeHistory || []
+    if (hist.length === 0) return
+    
+    let idx = activeScene.historyIndex ?? (hist.length - 1)
+    idx = Math.max(0, Math.min(hist.length - 1, idx + step))
+    
+    const restoredCode = hist[idx]
+    onUpdateProject({
+        ...project,
+        scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: restoredCode, historyIndex: idx } : s)
     })
   }
 
@@ -330,7 +397,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     try {
       const res = await fetch(`${API}/api/v1/audio/vram/unload`, { method: 'POST' })
       if (res.ok) showNotification('VRAM память видеокарты очищена!', 'success')
-    } catch {
+    } catch (e) {
+      console.error(e)
       showNotification('Ошибка очистки VRAM', 'error')
     }
   }
@@ -342,7 +410,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     formData.append('file', file)
     formData.append('project_path', getProjectPath(project))
     formData.append('folder', 'refs')
-
     try {
       const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: formData })
       const data = await res.json()
@@ -350,7 +417,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         setNewVoiceAudioPath(data.path)
         showNotification('Референсный файл загружен', 'success')
       }
-    } catch {
+    } catch (e) {
+      console.error(e)
       showNotification('Ошибка загрузки референса', 'error')
     }
     e.target.value = ''
@@ -386,59 +454,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     showNotification('Голос удален из Voicebox', 'info')
   }
 
-  const runVoiceGenFragment = async (sceneId: string, fragId: string) => {
-    setIsGeneratingAudio(true)
-    try {
-        const scene = project.scenes.find(s => s.id === sceneId)
-        const frag = scene?.fragments.find(f => f.id === fragId)
-        if (!scene || !frag) return
-        
-        const projectPath = getProjectPath(project)
-        const customVoice = project.customVoices?.find(v => v.id === voiceModel)
-        
-        const payload = {
-            fragment_id: frag.id,
-            file_prefix: `Frag_${sanitizeFilename(scene.title)}`,
-            text: frag.text,
-            voice_model: customVoice ? 'clone' : voiceModel,
-            ref_audio_path: customVoice ? customVoice.refAudioPath : null,
-            ref_text: customVoice ? customVoice.refText : null,
-            speed, num_steps: numSteps, guidance_scale: guidanceScale, duration,
-            denoise, preprocess_prompt: preprocessPrompt, postprocess_output: postprocessOutput,
-            project_path: projectPath, auto_offload_vram: autoOffloadVram,
-        }
-        
-        const res = await fetch(`${API}/api/v1/audio/generate`, { method: 'POST', body: JSON.stringify(payload) })
-        const data = await res.json()
-        if (res.ok && data.status === 'ok') {
-            const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
-            const updatedFragments = scene.fragments.map(f => f.id === frag.id ? { ...f, audioFileName: relativeAudioPath } : f)
-            const updatedScene = { ...scene, fragments: updatedFragments }
-            
-            const audioPaths = updatedScene.fragments.map(f => f.audioFileName).filter(Boolean) as string[]
-            if (audioPaths.length > 0) {
-                const sceneAudioPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(scene.title)}_${scene.id.slice(0, 6)}.wav`
-                await fetch(`${API}/api/v1/audio/concat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audio_paths: audioPaths, output_path: sceneAudioPath })
-                })
-                updatedScene.fragments[0].audioFileName = sceneAudioPath
-            }
-            
-            onUpdateProject({
-                ...project,
-                scenes: project.scenes.map(s => s.id === scene.id ? updatedScene : s)
-            })
-            showNotification('Фрагмент успешно переозвучен!', 'success')
-        }
-    } catch (e) {
-        showNotification('Ошибка переозвучки фрагмента', 'error')
-    } finally {
-        setIsGeneratingAudio(false)
-    }
-  }
-
   const handleMergeAudioAndVideo = async (target: 'scene' | 'project' = 'scene') => {
     const projectPath = getProjectPath(project)
     setIsMerging(true)
@@ -450,7 +465,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         const safeTitle = sanitizeFilename(activeScene.title)
         const outputPath = `${projectPath}/preview/Merged_${safeTitle}.mp4`
 
-        // ponytail: prevent ffmpeg from reading and writing to the same file
         if (videoPath === outputPath) {
           videoPath = `${projectPath}/assets/a-roll/${activeScene.id}.mp4`
         }
@@ -473,22 +487,21 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       } else if (target === 'project') {
         const audioPaths = project.scenes.map(s => getAudioPathForScene(project, s))
         const projectAudioPath = `${projectPath}/assets/voice/Project_${sanitizeFilename(project.name)}.wav`
-
+        
         const concatAudioRes = await fetch(`${API}/api/v1/audio/concat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio_paths: audioPaths, output_path: projectAudioPath })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio_paths: audioPaths, output_path: projectAudioPath })
         })
         const concatAudioData = await concatAudioRes.json()
         if (!concatAudioRes.ok || concatAudioData.status !== 'ok') {
-          showNotification(`Ошибка склейки аудио: ${concatAudioData.detail || 'Неизвестная ошибка'}`, 'error')
-          return
+            showNotification(`Ошибка склейки аудио: ${concatAudioData.detail || 'Неизвестная ошибка'}`, 'error')
+            return
         }
-
+        
         let videoPath = renderedVideos[`Project_${project.name}`] || `${projectPath}/preview/Project_${sanitizeFilename(project.name)}.mp4`
         const outputPath = `${projectPath}/preview/Merged_Project_${sanitizeFilename(project.name)}.mp4`
 
-        // ponytail: prevent ffmpeg from reading and writing to the same file
         if (videoPath === outputPath) {
           videoPath = `${projectPath}/preview/Project_${sanitizeFilename(project.name)}.mp4`
         }
@@ -513,6 +526,60 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       if (e instanceof Error && e.name !== 'AbortError') showNotification('Сбой запроса объединения аудио и видео', 'error')
     } finally {
       setIsMerging(false)
+    }
+  }
+
+  const runVoiceGenFragment = async (sceneId: string, fragId: string) => {
+    setIsGeneratingAudio(true)
+    try {
+        const scene = project.scenes.find(s => s.id === sceneId)
+        const frag = scene?.fragments.find(f => f.id === fragId)
+        if (!scene || !frag) return
+        
+        const projectPath = getProjectPath(project)
+        const customVoice = project.customVoices?.find(v => v.id === voiceModel)
+        
+        const payload = {
+            fragment_id: frag.id,
+            file_prefix: `Frag_${sanitizeFilename(scene.title)}`,
+            text: frag.text,
+            voice_model: customVoice ? 'clone' : voiceModel,
+            ref_audio_path: customVoice ? customVoice.refAudioPath : null,
+            ref_text: customVoice ? customVoice.refText : null,
+            speed, num_steps: numSteps, guidance_scale: guidanceScale, duration,
+            denoise, preprocess_prompt: preprocessPrompt, postprocess_output: postprocessOutput,
+            project_path: projectPath, auto_offload_vram: autoOffloadVram,
+        }
+        
+        const res = await fetch(`${API}/api/v1/audio/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        const data = await res.json()
+        if (res.ok && data.status === 'ok') {
+            const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
+            const updatedFragments = scene.fragments.map(f => f.id === frag.id ? { ...f, audioFileName: relativeAudioPath } : f)
+            const updatedScene = { ...scene, fragments: updatedFragments }
+            
+            const audioPaths = updatedScene.fragments.map(f => f.audioFileName).filter(Boolean) as string[]
+            if (audioPaths.length > 0) {
+                const sceneAudioPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(scene.title)}_${scene.id.slice(0, 6)}.wav`
+                await fetch(`${API}/api/v1/audio/concat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio_paths: audioPaths, output_path: sceneAudioPath })
+                })
+                updatedScene.fragments[0].audioFileName = sceneAudioPath
+            }
+            
+            onUpdateProject({
+                ...project,
+                scenes: project.scenes.map(s => s.id === scene.id ? updatedScene : s)
+            })
+            showNotification('Фрагмент успешно переозвучен!', 'success')
+        }
+    } catch (e) {
+        console.error(e)
+        showNotification('Ошибка переозвучки фрагмента', 'error')
+    } finally {
+        setIsGeneratingAudio(false)
     }
   }
 
@@ -593,6 +660,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       if (!abortControllerRef.current?.signal.aborted) {
         showNotification(`Озвучка успешно сгенерирована (${successCount}/${targetScenes.length})!`, 'success')
       }
+
       return { scenes: updatedScenes, activeAudio: activeSceneAudioPath }
     } catch (error: unknown) {
       if (error instanceof Error && error.name !== 'AbortError') {
@@ -614,7 +682,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       let cumulativeTime = 0
       const updatedScenes: Scene[] = []
       const projectPath = getProjectPath(project)
-
       let whisperCount = 0
       let fallbackCount = 0
 
@@ -647,10 +714,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           syncedFragments = scene.fragments.map((f: SceneFragment) => {
             const t = timingMap[f.id]
             if (!t) return f
-
             const tcRegex = /^(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?)\s*-\s*(\d{1,2}:\d{2}(\.\d+)?|\d{1,2}:\d{2}:\d{2}(\.\d+)?):?\s*/
             const tcPrefix = `${formatShortTimecode(t.startTime)} - ${formatShortTimecode(t.endTime)}: `
-
             return {
               ...f,
               startTime: t.startTime,
@@ -667,12 +732,10 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
         const sceneTimecode = formatTimecode(cumulativeTime)
         cumulativeTime += sceneDuration
-
         updatedScenes.push({ ...scene, timecode: sceneTimecode, fragments: syncedFragments })
       }
 
       onUpdateProject({ ...project, scenes: updatedScenes })
-
       if (!abortControllerRef.current?.signal.aborted) {
         showNotification(`Синхронизация завершена! (WhisperX: ${whisperCount}, Fallback: ${fallbackCount})`, fallbackCount > 0 && whisperCount === 0 ? 'info' : 'success')
       }
@@ -710,11 +773,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         signal: abortControllerRef.current.signal,
       })
       const data = await res.json()
-
       if (data.tsx_code) {
+        const hist = sceneToUse.remotionCodeHistory || []
+        const idx = sceneToUse.historyIndex ?? (hist.length - 1)
+        const newHist = [...hist.slice(0, idx + 1), data.tsx_code]
+        
         onUpdateProject({
           ...project,
-          scenes: project.scenes.map(s => (s.id === sceneToUse.id ? { ...s, remotionCode: data.tsx_code } : s)),
+          scenes: project.scenes.map(s => (s.id === sceneToUse.id ? { ...s, remotionCode: data.tsx_code, remotionCodeHistory: newHist, historyIndex: newHist.length - 1 } : s)),
         })
         if (!abortControllerRef.current?.signal.aborted) showNotification('TSX код сгенерирован', 'success')
         return data.tsx_code
@@ -746,7 +812,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         .then(data => {
           if (!data.task_id) return resolve(null)
           currentTaskIdRef.current = data.task_id
-
           renderListenersRef.current.set(data.task_id, (payload: RenderPayload) => {
             if (payload.status === 'done') {
               renderListenersRef.current.delete(data.task_id)
@@ -768,7 +833,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const runRender = async (code?: string, audioPath?: string) => {
     if (!activeScene) return
-
     setRenderType('scene')
     setIsRendering(true)
     setRenderProgress(0)
@@ -789,11 +853,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         signal: abortControllerRef.current.signal,
       })
       const data = await res.json()
-
       if (data.task_id) {
         currentTaskIdRef.current = data.task_id
         setCenterView('player')
-
         renderListenersRef.current.set(data.task_id, (payload) => {
           if (payload.status === 'done' && payload.output_path) {
             setRenderedVideos(prev => ({ ...prev, [payload.target_id!]: payload.output_path! }))
@@ -828,8 +890,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setIsRendering(true)
     setRenderProgress(0)
     abortControllerRef.current = new AbortController()
-    const projectPath = getProjectPath(project)
 
+    const projectPath = getProjectPath(project)
     const renderedSceneVideoPaths: string[] = []
 
     try {
@@ -839,8 +901,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
       for (let i = 0; i < project.scenes.length; i++) {
         if (abortControllerRef.current.signal.aborted) break
-
         const scene = project.scenes[i]
+
         const sceneDurationSec = getWhisperSyncedDuration(scene.fragments) || getSceneDurationFromTimecode(scene.timecode) || getVisualNoteDuration(scene.fragments) || 5
         const durationInFrames = Math.max(Math.ceil(sceneDurationSec * fps), 30)
 
@@ -850,7 +912,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         }
 
         const sceneVideoPath = await renderSingleScenePromise(scene.id, codeToRender, getAudioPathForScene(project, scene), projectPath, abortControllerRef.current.signal)
-
         if (sceneVideoPath) {
           renderedSceneVideoPaths.push(sceneVideoPath)
         } else if (!abortControllerRef.current.signal.aborted) {
@@ -862,6 +923,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       if (abortControllerRef.current.signal.aborted) return
 
       const finalProjectVideoPath = `${projectPath}/preview/Project_${sanitizeFilename(project.name)}.mp4`
+
       const concatRes = await fetch(`${API}/api/v1/render/concat-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -888,7 +950,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const handleFullAutoPipeline = async () => {
     if (!activeScene) return
-
     setIsAutoPipelineRunning(true)
 
     setPipelineStep('1/4 Озвучка всех сцен...')
@@ -923,7 +984,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         body: JSON.stringify({ project_name: getProjectPath(project), markdown: markdownContent })
       })
 
-      if (!res.ok) throw new Error('Ошибка экспорта')
+      if (!res.ok) {
+        showNotification('Ошибка экспорта проекта', 'error')
+        setIsRendering(false)
+        return
+      }
 
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -934,8 +999,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       a.click()
       a.remove()
       window.URL.revokeObjectURL(url)
+
       showNotification('Проект успешно экспортирован!', 'success')
-    } catch (e: unknown) {
+    } catch (e) {
       console.error(e)
       showNotification('Ошибка экспорта проекта', 'error')
     } finally {
@@ -946,11 +1012,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   useHotkeys('Space', false, () => setPlayWithAudio(p => !p))
   useHotkeys('Enter', true, () => runRender())
   useHotkeys('KeyS', true, () => handleExportProject())
+  useHotkeys('KeyZ', true, () => undo())
+  useHotkeys('KeyY', true, () => redo())
 
   return {
     activeSceneId,
     activeScene,
     centerView,
+    previewFormat,
     voiceModel,
     speed,
     numSteps,
@@ -986,6 +1055,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     refVoiceInputRef,
     setActiveSceneId,
     setCenterView,
+    setPreviewFormat,
     setVoiceModel,
     setSpeed,
     setNumSteps,
@@ -1015,14 +1085,17 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleDeleteFragment,
     handleFragmentTextChange,
     handleUpdateCode,
+    handleCodeHistory,
     handleResetAllSync,
     handleResetAudio,
+    handleProcessAudio,
     handleUnloadVram,
     handleUploadRefVoiceAudio,
     handleSaveCustomVoice,
     handleDeleteCustomVoice,
     handleMergeAudioAndVideo,
     runVoiceGenAllScenes,
+    runVoiceGenFragment,
     runSyncAllScenes,
     runCodeGen,
     runRender,
@@ -1033,6 +1106,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     showNotification,
     handleUpdateMarkdown,
     handleUpdateFragmentBRoll,
-    runVoiceGenFragment,
+    handleUnlinkFragmentBRoll,
+    handleNudgeTiming
   }
 }

@@ -27,7 +27,7 @@ export const MainPage = () => {
         setTimeout(ping, 1000)
       }
     }
-    ping()
+    void ping()
   }, [])
 
   if (isBooting) {

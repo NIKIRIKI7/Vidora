@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCurrentFrame, useVideoConfig, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';
+import { useCurrentFrame, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';
 
 export const compositionConfig = {
   id: 'HowItWorks',

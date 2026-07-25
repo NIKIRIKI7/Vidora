@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCurrentFrame, useVideoConfig, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';
+import { useCurrentFrame, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';
 
 export const compositionConfig = {
   id: 'InterfaceControl',
@@ -62,7 +62,7 @@ const Fragment1Panorama: React.FC = () => {
             marginTop: 16, padding: 12, backgroundColor: COLORS.background, borderRadius: 8,
             fontFamily: 'monospace', fontSize: 13, color: COLORS.secondary, opacity: 0.5,
           }}>
-            {'<Sequence from={0}>'}
+            &lt;Sequence from=&#123;0&#125;&gt;
           </div>
         </div>
         <div style={{

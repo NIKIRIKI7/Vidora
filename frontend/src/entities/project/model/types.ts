@@ -48,6 +48,8 @@ export interface Scene {
   fragments: SceneFragment[]
   remotionCode?: string
   ignoreTsx?: boolean
+  remotionCodeHistory?: string[]
+  historyIndex?: number
 }
 
 export interface CustomVoice {

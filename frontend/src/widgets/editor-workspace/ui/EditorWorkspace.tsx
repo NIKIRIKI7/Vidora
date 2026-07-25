@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ProjectSettings } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
+import { THEME_PRESETS } from '@shared/config'
 import { useEditorWorkspace } from '../model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -62,10 +63,13 @@ export const EditorWorkspace = ({
           onToggleIgnoreTsx={model.toggleIgnoreTsx}
           onDragStart={model.handleSceneDragStart}
           onDrop={model.handleSceneDrop}
+          onShowNotification={model.showNotification}
         />
         <CenterCanvas
           centerView={model.centerView}
+          previewFormat={model.previewFormat}
           onChangeView={model.setCenterView}
+          onPreviewFormatChange={model.setPreviewFormat}
           playWithAudio={model.playWithAudio}
           onTogglePlayWithAudio={() => model.setPlayWithAudio(!model.playWithAudio)}
           playingTargetId={model.playingTargetId}
@@ -76,8 +80,8 @@ export const EditorWorkspace = ({
           videoRef={model.videoRef}
           audioRef={model.audioRef}
           onUpdateCode={model.handleUpdateCode}
+          onCodeHistory={model.handleCodeHistory}
           isRendering={model.isRendering}
-          renderType={model.renderType}
           isAutoPipelineRunning={model.isAutoPipelineRunning}
           pipelineStep={model.pipelineStep}
           renderProgress={model.renderProgress}
@@ -110,6 +114,7 @@ export const EditorWorkspace = ({
           onRunVoiceGenFragment={model.runVoiceGenFragment}
           onResetAllSync={model.handleResetAllSync}
           onResetAudio={model.handleResetAudio}
+          onProcessAudio={model.handleProcessAudio}
           onUnloadVram={model.handleUnloadVram}
           onRunSync={() => model.runSyncAllScenes()}
           onToggleIgnoreTsx={model.toggleIgnoreTsx}
@@ -118,6 +123,8 @@ export const EditorWorkspace = ({
           onMergeAudioAndVideo={model.handleMergeAudioAndVideo}
           onShowNotification={model.showNotification}
           onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
+          onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
+          onNudgeTiming={model.handleNudgeTiming}
         />
       </main>
 
@@ -190,6 +197,24 @@ export const EditorWorkspace = ({
                   <option value="zoom">Наезд камеры (Zoom In/Out)</option>
                   <option value="glitch">Цифровые помехи (Glitch)</option>
                 </Select>
+              </FieldGroup>
+              <FieldGroup label="Цветовая тема">
+                  <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
+                      {THEME_PRESETS.map(tpl => (
+                          <button 
+                              key={tpl.name}
+                              onClick={() => onUpdateProject({ ...project, montage: { ...project.montage, colors: tpl.colors } })}
+                              className="flex flex-col items-center gap-1 shrink-0 group"
+                              title={tpl.name}
+                          >
+                              <div className="w-8 h-8 rounded-full border-2 border-transparent group-hover:border-white/50 flex overflow-hidden">
+                                  <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
+                                  <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
+                              </div>
+                              <span className="text-[10px] text-on-surface-variant group-hover:text-white">{tpl.name.split(' ')[0]}</span>
+                          </button>
+                      ))}
+                  </div>
               </FieldGroup>
               <div className="h-px bg-white/10 my-2" />
               <Button variant="dashed" className="text-error border-error/30 hover:bg-error/10" onClick={() => onDeleteProject(project.name)}>

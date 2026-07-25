@@ -141,6 +141,7 @@ async def process_audio(request: AudioProcessRequest):
         "remove_silence": ["ffmpeg", "-y", "-i", audio_path, "-af", "silenceremove=stop_periods=-1:stop_duration=0.3:stop_threshold=-35dB", temp_out],
         "denoise": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn", temp_out],
         "enhance": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,acompressor,equalizer=f=3000:width_type=h:width=200:g=3", temp_out],
+        "mastering": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn,acompressor=ratio=4:makeup=2,loudnorm=I=-14:LRA=11:TP=-1.5,silenceremove=stop_periods=-1:stop_duration=0.2:stop_threshold=-35dB", temp_out],
     }
 
     if request.action not in cmds:

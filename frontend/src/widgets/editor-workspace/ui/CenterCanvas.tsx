@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react'
-import type { ProjectSettings, Scene } from '@entities/project'
+import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
 import { Button, Icon, Spinner, ProgressBar } from '@shared/ui'
 import { API } from '../lib/helpers'
 
 interface Props {
   centerView: 'player' | 'code' | 'markdown'
+  previewFormat: VideoFormat | null
   onChangeView: (view: 'player' | 'code' | 'markdown') => void
+  onPreviewFormatChange: (format: VideoFormat | null) => void
   playWithAudio: boolean
   onTogglePlayWithAudio: () => void
   playingTargetId: string | null
@@ -16,8 +18,8 @@ interface Props {
   videoRef: React.RefObject<HTMLVideoElement | null>
   audioRef: React.RefObject<HTMLAudioElement | null>
   onUpdateCode: (code: string) => void
+  onCodeHistory: (step: number) => void
   isRendering: boolean
-  renderType: 'scene' | 'project' | null
   isAutoPipelineRunning: boolean
   pipelineStep: string
   renderProgress: number
@@ -28,7 +30,9 @@ interface Props {
 
 export const CenterCanvas = ({
   centerView,
+  previewFormat,
   onChangeView,
+  onPreviewFormatChange,
   playWithAudio,
   onTogglePlayWithAudio,
   playingTargetId,
@@ -39,8 +43,8 @@ export const CenterCanvas = ({
   videoRef,
   audioRef,
   onUpdateCode,
+  onCodeHistory,
   isRendering,
-  renderType,
   isAutoPipelineRunning,
   pipelineStep,
   renderProgress,
@@ -53,8 +57,13 @@ export const CenterCanvas = ({
   const shouldRenderAudio = Boolean(audioLoaded && !hasRenderedVideo)
 
   const [localMd, setLocalMd] = useState(project.rawMarkdown)
+  const [prevProjectMd, setPrevProjectMd] = useState(project.rawMarkdown)
+  const currentFormat = previewFormat || project.format
   
-  useEffect(() => { setLocalMd(project.rawMarkdown) }, [project.rawMarkdown])
+  if (project.rawMarkdown !== prevProjectMd) {
+    setLocalMd(project.rawMarkdown)
+    setPrevProjectMd(project.rawMarkdown)
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -111,15 +120,28 @@ export const CenterCanvas = ({
             📝 Raw Script
           </button>
         </div>
+        
         {centerView === 'player' && (
-          <Button
-            variant="ghost"
-            icon={playWithAudio ? 'volume_up' : 'volume_off'}
-            onClick={onTogglePlayWithAudio}
-            className="text-xs"
-          >
-            {playWithAudio ? 'Звук: Вкл' : 'Звук: Выкл'}
-          </Button>
+          <div className="flex gap-4 items-center">
+            <div className="flex gap-1 bg-surface-container-lowest border border-white/5 p-1 rounded-lg">
+                <button 
+                    onClick={() => onPreviewFormatChange('16:9')}
+                    className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '16:9' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}
+                >🖥️ 16:9</button>
+                <button 
+                    onClick={() => onPreviewFormatChange('9:16')}
+                    className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '9:16' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}
+                >📱 9:16</button>
+            </div>
+            <Button
+              variant="ghost"
+              icon={playWithAudio ? 'volume_up' : 'volume_off'}
+              onClick={onTogglePlayWithAudio}
+              className="text-xs py-1"
+            >
+              {playWithAudio ? 'Звук: Вкл' : 'Звук: Выкл'}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -140,7 +162,7 @@ export const CenterCanvas = ({
             </div>
           </div>
         ) : centerView === 'player' ? (
-          <div className="w-full max-w-[840px] aspect-video bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center overflow-hidden">
+          <div className={`w-full bg-black rounded-xl border border-white/10 shadow-2xl relative flex items-center justify-center overflow-hidden ${currentFormat === '9:16' ? 'max-w-[400px] aspect-[9/16]' : 'max-w-[840px] aspect-video'}`}>
             {renderedVideos[playingTargetId || ''] ? (
               <video
                 ref={videoRef}
@@ -182,13 +204,28 @@ export const CenterCanvas = ({
                 <span className="text-xs opacity-60">При рендере будет отображаться черный экран</span>
               </div>
             ) : (
-              <textarea
-                className="w-full h-full font-mono text-[12px] bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
-                value={activeScene?.remotionCode || ''}
-                onChange={e => onUpdateCode(e.target.value)}
-                placeholder="import React from 'react'..."
-                spellCheck={false}
-              />
+              <>
+                 <div className="flex justify-between items-center bg-surface-container-lowest border border-white/10 rounded-lg p-2">
+                      <span className="text-xs text-on-surface-variant ml-2">
+                        Версия кода: {(activeScene?.historyIndex ?? 0) + 1} / {Math.max(1, (activeScene?.remotionCodeHistory?.length || 0))}
+                      </span>
+                      <div className="flex gap-1">
+                          <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(-1)} disabled={(activeScene?.historyIndex ?? 0) <= 0}>
+                              <Icon name="chevron_left" className="text-[16px]" /> Пред
+                          </Button>
+                          <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(1)} disabled={(activeScene?.historyIndex ?? 0) >= (activeScene?.remotionCodeHistory?.length || 1) - 1}>
+                              След <Icon name="chevron_right" className="text-[16px]" />
+                          </Button>
+                      </div>
+                 </div>
+                 <textarea
+                  className="w-full h-full font-mono text-[12px] bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
+                  value={activeScene?.remotionCode || ''}
+                  onChange={e => onUpdateCode(e.target.value)}
+                  placeholder="import React from 'react'..."
+                  spellCheck={false}
+                 />
+              </>
             )}
           </div>
         )}
