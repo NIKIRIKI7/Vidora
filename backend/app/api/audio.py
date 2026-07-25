@@ -53,16 +53,28 @@ def _free_vram():
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-def _make_fallback_response(fragments, reason: str = ""):
+def _get_audio_duration(path: str) -> float:
+    if not os.path.exists(path): return 0.0
+    try:
+        import wave
+        with wave.open(path, 'r') as wav:
+            return wav.getnframes() / float(wav.getframerate())
+    except Exception:
+        return 0.0
+
+def _make_fallback_response(fragments, reason: str = "", audio_dur: float = 0.0):
     results, cur_time = [], 0.0
-    for frag in fragments:
+    for idx, frag in enumerate(fragments):
         dur = max(len(frag.text.split()) / 2.5, 1.0)
+        end_time = cur_time + dur
+        if idx == len(fragments) - 1 and audio_dur > 0:
+            end_time = max(end_time, audio_dur)
         results.append({
             "id": frag.id,
             "startTime": round(cur_time, 3),
-            "endTime": round(cur_time + dur, 3),
+            "endTime": round(end_time, 3),
         })
-        cur_time += dur + 0.1
+        cur_time = end_time + 0.1
     return {
         "status": "ok",
         "fragments_timings": results,
@@ -189,16 +201,17 @@ async def concat_audio(request: AudioConcatRequest):
 @router.post("/sync")
 async def sync_audio(request: AudioSyncRequest):
     audio_path = _resolve_path(request.audio_path, request.project_path)
+    audio_dur = _get_audio_duration(audio_path)
     print(f"\n[AUDIO SYNC] === Старт синхронизации сцены: '{request.scene_id}' ===")
-    print(f"[AUDIO SYNC] Whisper: {request.use_whisper} | Auto Offload VRAM: {request.auto_offload_vram}")
+    print(f"[AUDIO SYNC] Whisper: {request.use_whisper} | Auto Offload VRAM: {request.auto_offload_vram} | Audio Dur: {audio_dur:.2f}s")
 
     if not request.use_whisper:
         print("[AUDIO SYNC] [CONFIG] Whisper отключен в UI. Применение FALLBACK.")
-        return _make_fallback_response(request.fragments, reason="Whisper отключен в настройках UI")
+        return _make_fallback_response(request.fragments, reason="Whisper отключен в настройках UI", audio_dur=audio_dur)
 
     if not os.path.exists(audio_path):
         print(f"[AUDIO SYNC] [WARN] Аудиофайл НЕ НАЙДЕН: '{audio_path}'. Применение FALLBACK.")
-        return _make_fallback_response(request.fragments, reason="Файл аудио не найден")
+        return _make_fallback_response(request.fragments, reason="Файл аудио не найден", audio_dur=audio_dur)
 
     if request.auto_offload_vram:
         print("[AUDIO SYNC] [VRAM] Выгрузка OmniVoice из памяти GPU...")
@@ -244,13 +257,14 @@ async def sync_audio(request: AudioSyncRequest):
         if not recognized_words:
             print("[AUDIO SYNC] [WARN] Слова не распознаны. Переход на FALLBACK.")
             return _make_fallback_response(request.fragments, reason="Слова не распознаны в аудио")
-
         results = []
         reco_cursor = 0
-        for frag in request.fragments:
+
+        for idx, frag in enumerate(request.fragments):
             frag_words = frag.text.lower().split()
             if not frag_words:
                 continue
+
             best_start = None
             best_ratio = 0.0
             search_end = len(all_reco_texts) - len(frag_words) + 1
@@ -266,13 +280,22 @@ async def sync_audio(request: AudioSyncRequest):
             if best_start is not None and best_ratio > 0.3:
                 chunk_words = recognized_words[best_start:best_start + len(frag_words)]
                 start_time = chunk_words[0]["start"]
-                end_time = chunk_words[-1]["end"]
+                # ponytail: Whisper cuts trailing breath/echo. Add 0.3s padding.
+                end_time = chunk_words[-1]["end"] + 0.3
+
+                # ponytail: Final fragment stretches to the exact end of the audio file to prevent FFmpeg truncation
+                if idx == len(request.fragments) - 1 and audio_dur > 0:
+                    end_time = max(end_time, audio_dur)
+
                 reco_cursor = best_start + len(frag_words)
             else:
                 prev_end = results[-1]["endTime"] if results else 0.0
                 dur = max(len(frag_words) * 0.4, 1.0)
                 start_time = prev_end
                 end_time = prev_end + dur
+
+                if idx == len(request.fragments) - 1 and audio_dur > 0:
+                    end_time = max(end_time, audio_dur)
 
             results.append({
                 "id": frag.id,
