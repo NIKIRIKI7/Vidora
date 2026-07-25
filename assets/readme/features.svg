@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Vidora features — TTS, Remotion, mastering, alignment, desktop app</title>
+  <desc id="desc">Five feature cards showing OmniVoice TTS, Remotion animation via LLM, audio mastering via FFmpeg, forced alignment via WhisperX, and cross-platform desktop editor.</desc>
+  <defs>
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1326"/>
+      <stop offset="100%" stop-color="#0f1830"/>
+    </linearGradient>
+    <linearGradient id="card-tts" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ddb7ff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#ddb7ff" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="card-remotion" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4fdbc8" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#4fdbc8" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="card-mastering" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffb4ab" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#ffb4ab" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="card-whisper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#58a6ff" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="card-desktop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f0883e" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#f0883e" stop-opacity="0.02"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" rx="24" fill="url(#bg-grad)" stroke="#1a2540" stroke-width="1"/>
+  <g stroke="#1a2540" stroke-width="0.5" opacity="0.3">
+    <line x1="0" y1="80" x2="1200" y2="80"/>
+    <line x1="0" y1="160" x2="1200" y2="160"/>
+    <line x1="0" y1="240" x2="1200" y2="240"/>
+    <line x1="0" y1="320" x2="1200" y2="320"/>
+  </g>
+  <text x="600" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="13" fill="#5a6488" text-anchor="middle" font-weight="600" letter-spacing="2">CAPABILITIES</text>
+  <!-- Card 1: TTS -->
+  <g transform="translate(28, 56)">
+    <rect width="216" height="150" rx="12" fill="url(#card-tts)" stroke="#ddb7ff" stroke-opacity="0.15" stroke-width="1"/>
+    <circle cx="24" cy="24" r="14" fill="#ddb7ff" fill-opacity="0.15"/>
+    <text x="24" y="29" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="16" fill="#ddb7ff" text-anchor="middle">&#x1F50A;</text>
+    <text x="24" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="15" fill="#dae2fd" font-weight="600">AI Voiceover</text>
+    <text x="12" y="82" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">OmniVoice TTS (F5-TTS)</text>
+    <text x="12" y="100" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Multiple voices, speed &amp; tone</text>
+    <text x="12" y="118" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Voice cloning support</text>
+    <text x="12" y="136" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Custom voicebox</text>
+  </g>
+  <!-- Card 2: Remotion -->
+  <g transform="translate(260, 56)">
+    <rect width="216" height="150" rx="12" fill="url(#card-remotion)" stroke="#4fdbc8" stroke-opacity="0.15" stroke-width="1"/>
+    <circle cx="24" cy="24" r="14" fill="#4fdbc8" fill-opacity="0.15"/>
+    <text x="24" y="29" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="16" fill="#4fdbc8" text-anchor="middle">&#x25B6;</text>
+    <text x="24" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="15" fill="#dae2fd" font-weight="600">AI Animation</text>
+    <text x="12" y="82" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Remotion React → MP4</text>
+    <text x="12" y="100" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">LLM generates TSX scenes</text>
+    <text x="12" y="118" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Ollama + qwen2.5-coder</text>
+    <text x="12" y="136" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Code history &amp; undo/redo</text>
+  </g>
+  <!-- Card 3: Mastering -->
+  <g transform="translate(492, 56)">
+    <rect width="216" height="150" rx="12" fill="url(#card-mastering)" stroke="#ffb4ab" stroke-opacity="0.15" stroke-width="1"/>
+    <circle cx="24" cy="24" r="14" fill="#ffb4ab" fill-opacity="0.15"/>
+    <text x="24" y="29" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="16" fill="#ffb4ab" text-anchor="middle">&#x1F3A7;</text>
+    <text x="24" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="15" fill="#dae2fd" font-weight="600">Audio Mastering</text>
+    <text x="12" y="82" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">FFmpeg filter pipeline</text>
+    <text x="12" y="100" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">LUFS normalization</text>
+    <text x="12" y="118" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Highpass, compressor</text>
+    <text x="12" y="136" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Silence removal</text>
+  </g>
+  <!-- Card 4: Whisper -->
+  <g transform="translate(724, 56)">
+    <rect width="216" height="150" rx="12" fill="url(#card-whisper)" stroke="#58a6ff" stroke-opacity="0.15" stroke-width="1"/>
+    <circle cx="24" cy="24" r="14" fill="#58a6ff" fill-opacity="0.15"/>
+    <text x="24" y="29" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="16" fill="#58a6ff" text-anchor="middle">&#x1F3B5;</text>
+    <text x="24" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="15" fill="#dae2fd" font-weight="600">Forced Alignment</text>
+    <text x="12" y="82" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">WhisperX word-level sync</text>
+    <text x="12" y="100" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Russian language model</text>
+    <text x="12" y="118" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Auto timecode generation</text>
+    <text x="12" y="136" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Fallback duration calc</text>
+  </g>
+  <!-- Card 5: Desktop -->
+  <g transform="translate(956, 56)">
+    <rect width="216" height="150" rx="12" fill="url(#card-desktop)" stroke="#f0883e" stroke-opacity="0.15" stroke-width="1"/>
+    <circle cx="24" cy="24" r="14" fill="#f0883e" fill-opacity="0.15"/>
+    <text x="24" y="29" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="16" fill="#f0883e" text-anchor="middle">&#x1F5A5;</text>
+    <text x="24" y="60" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="15" fill="#dae2fd" font-weight="600">Desktop Editor</text>
+    <text x="12" y="82" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Electron + React 19</text>
+    <text x="12" y="100" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Pexels stock integration</text>
+    <text x="12" y="118" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">Theme presets &amp; palette</text>
+    <text x="12" y="136" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+          font-size="11" fill="#8892b0">FSD architecture</text>
+  </g>
+  <!-- Bottom row: pipeline label -->
+  <g transform="translate(0, 232)">
+    <rect x="28" y="0" width="1144" height="140" rx="12" fill="#0f1830" stroke="#1a2540" stroke-width="1"/>
+    <text x="600" y="28" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="11" fill="#5a6488" text-anchor="middle" font-weight="600" letter-spacing="1.5">END-TO-END PIPELINE</text>
+    <!-- Step 1 -->
+    <g transform="translate(40, 48)">
+      <rect x="0" y="0" width="180" height="72" rx="8" fill="#1a2540"/>
+      <text x="90" y="30" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#dae2fd" text-anchor="middle" font-weight="600">1. Write Script</text>
+      <text x="90" y="52" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">SCENARIO.md</text>
+    </g>
+    <polygon points="224,84 236,78 236,90" fill="#5a6488"/>
+    <line x1="192" y1="84" x2="224" y2="84" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <!-- Step 2 -->
+    <g transform="translate(240, 48)">
+      <rect x="0" y="0" width="180" height="72" rx="8" fill="#1a2540" stroke="#ddb7ff" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="90" y="30" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#ddb7ff" text-anchor="middle" font-weight="600">2. Generate Audio</text>
+      <text x="90" y="52" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">OmniVoice TTS</text>
+    </g>
+    <polygon points="424,84 436,78 436,90" fill="#5a6488"/>
+    <line x1="392" y1="84" x2="424" y2="84" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <!-- Step 3 -->
+    <g transform="translate(440, 48)">
+      <rect x="0" y="0" width="180" height="72" rx="8" fill="#1a2540" stroke="#4fdbc8" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="90" y="30" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#4fdbc8" text-anchor="middle" font-weight="600">3. Animate</text>
+      <text x="90" y="52" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">Remotion + LLM</text>
+    </g>
+    <polygon points="624,84 636,78 636,90" fill="#5a6488"/>
+    <line x1="592" y1="84" x2="624" y2="84" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <!-- Step 4 -->
+    <g transform="translate(640, 48)">
+      <rect x="0" y="0" width="180" height="72" rx="8" fill="#1a2540" stroke="#58a6ff" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="90" y="30" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#58a6ff" text-anchor="middle" font-weight="600">4. Sync &amp; Master</text>
+      <text x="90" y="52" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">WhisperX + FFmpeg</text>
+    </g>
+    <polygon points="824,84 836,78 836,90" fill="#5a6488"/>
+    <line x1="792" y1="84" x2="824" y2="84" stroke="#5a6488" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <!-- Step 5 -->
+    <g transform="translate(840, 48)">
+      <rect x="0" y="0" width="180" height="72" rx="8" fill="#1a2540" stroke="#ffb4ab" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="90" y="30" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="14" fill="#ffb4ab" text-anchor="middle" font-weight="600">5. Export Video</text>
+      <text x="90" y="52" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+            font-size="11" fill="#8892b0" text-anchor="middle">MP4 · 1080p / 4K</text>
+    </g>
+  </g>
+</svg>
