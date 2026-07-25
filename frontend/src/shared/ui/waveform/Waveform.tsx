@@ -1,4 +1,4 @@
-import { Icon } from '../icon/Icon'
+import { Icon } from '../icon'
 
 export const Waveform = ({ playing = false }: { playing?: boolean }) => {
   const bars = [20, 40, 80, 100, 60, 30, 15, 50, 70, 90, 45, 25, 10]

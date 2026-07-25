@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { Icon } from '../icon/Icon'
+import { Icon } from '../icon'
 
 interface ModalProps {
   isOpen: boolean

@@ -1,8 +1,7 @@
 export const createProjectStructure = async (projectName: string, markdownContent: string) => {
   try {
-    const parentDirHandle = await window.showDirectoryPicker({
-      mode: 'readwrite',
-    })
+    const showPicker = (window as unknown as { showDirectoryPicker: (options?: { mode?: string }) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker
+    const parentDirHandle = await showPicker({ mode: 'readwrite' })
 
     const safeProjectName = projectName.replace(/[^a-z0-9а-яё \\-_]/gi, '_').trim()
     const projectDirHandle = await parentDirHandle.getDirectoryHandle(safeProjectName, { create: true })

@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes } from 'react'
-import { Icon } from '../icon/Icon'
+import { Icon } from '../icon'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'glass' | 'icon' | 'dashed'

@@ -5,14 +5,16 @@ import shutil
 import asyncio
 import subprocess
 from pathlib import Path
-from pydantic import BaseModel
 from typing import List
+from pydantic import BaseModel
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
-from app.schemas import RenderRequest
+
+from app.schemas import RenderRequest, AudioVideoMergeRequest
 from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
+
 active_renders = {}
 
 class VideoConcatRequest(BaseModel):
@@ -20,30 +22,65 @@ class VideoConcatRequest(BaseModel):
     video_paths: List[str]
     output_path: str
 
-REMO_DIR = Path(__file__).resolve().parent.parent.parent / "remotion-project"
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+REMO_DIR = BACKEND_DIR / "remotion-project"
 SCENE_FILE = REMO_DIR / "src" / "scenes" / "current.tsx"
 OUT_DIR = REMO_DIR / "out"
+
+def _sanitize(s: str) -> str:
+    return re.sub(r'[^a-zA-Z0-9а-яА-ЯёЁ \-_]', '_', s).strip()
 
 def _resolve_path(path: str, project_path: str = "") -> str:
     if not path:
         return ""
     norm_path = os.path.normpath(path)
-    if os.path.isabs(norm_path):
+    if os.path.isabs(norm_path) and os.path.exists(norm_path):
         return norm_path
-    
-    base_dir = os.getcwd()
+
+    base = str(BACKEND_DIR)
+
+    # 1. Прямой путь относительно BACKEND_DIR
+    c1 = os.path.normpath(os.path.join(base, norm_path))
+    if os.path.exists(c1):
+        return c1
+
+    # 2. Относительно project_path
     if project_path:
         norm_proj = os.path.normpath(project_path)
-        if norm_path == norm_proj or norm_path.startswith(norm_proj + os.sep) or norm_path.startswith(norm_proj + "/"):
-            return os.path.normpath(os.path.join(base_dir, norm_path))
-        base_dir = os.path.join(base_dir, norm_proj)
-        
-    return os.path.normpath(os.path.join(base_dir, norm_path))
+        c2 = os.path.normpath(os.path.join(base, norm_proj, norm_path))
+        if os.path.exists(c2):
+            return c2
+
+        parts = norm_path.split(os.sep)
+        if len(parts) > 1:
+            sub_path = os.path.join(*parts[1:])
+            c3 = os.path.normpath(os.path.join(base, norm_proj, sub_path))
+            if os.path.exists(c3):
+                return c3
+
+            sanitized_proj = _sanitize(norm_proj)
+            c4 = os.path.normpath(os.path.join(base, sanitized_proj, sub_path))
+            if os.path.exists(c4):
+                return c4
+
+    parts = norm_path.split(os.sep)
+    if len(parts) > 1:
+        sanitized_first = _sanitize(parts[0])
+        c5 = os.path.normpath(os.path.join(base, sanitized_first, *parts[1:]))
+        if os.path.exists(c5):
+            return c5
+
+    return c1
 
 def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEventLoop):
     print(f"\n[RENDER API] === Старт задачи рендера: {task_id} ===")
+    print(f"[RENDER API] Target ID: {req.target_id} | Target: {req.target}")
+    print(f"[RENDER API] Project Path: '{req.project_path}'")
+    print(f"[RENDER API] Audio Path: '{req.audio_path}'")
+
     npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
     temp_output = OUT_DIR / f"{task_id}.mp4"
+    merged_output = OUT_DIR / f"{task_id}_merged.mp4"
     cmd = [npx_cmd, "remotion", "render", "src/index.ts", "current", f"out/{task_id}.mp4"]
 
     try:
@@ -52,6 +89,7 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             SCENE_FILE.write_text(req.tsx_code, encoding="utf-8")
 
         OUT_DIR.mkdir(parents=True, exist_ok=True)
+        print(f"[RENDER API] Запуск Remotion CLI (UTF-8)...")
 
         process = subprocess.Popen(
             cmd,
@@ -59,6 +97,7 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
             errors="replace"
         )
         active_renders[task_id] = process
@@ -75,10 +114,17 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             match = re.search(r"(\d+)/(\d+)", text_line)
             if match:
                 frame, total = int(match.group(1)), int(match.group(2))
+                progress = int((frame / total) * 100) if total > 0 else 0
                 asyncio.run_coroutine_threadsafe(
                     manager.broadcast({
                         "type": "RENDER_PROGRESS",
-                        "payload": {"task_id": task_id, "progress": int((frame / total) * 100), "status": "rendering"},
+                        "payload": {
+                            "task_id": task_id,
+                            "progress": progress,
+                            "status": "rendering",
+                            "target_id": req.target_id,
+                            "target": req.target
+                        },
                     }),
                     loop
                 )
@@ -87,16 +133,16 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
         status = "done" if process.returncode == 0 else "error"
 
         if status == "error":
-            print(f"[RENDER API] ОШИБКА РЕНДЕРА:\n" + "\n".join(output_logs[-15:]))
+            print(f"[RENDER API] ❌ ОШИБКА РЕНДЕРА REMOTION:\n" + "\n".join(output_logs[-20:]))
 
         final_file_path = ""
         if status == "done" and temp_output.exists():
             source_video = temp_output
             resolved_audio = _resolve_path(req.audio_path, req.project_path) if req.audio_path else ""
+            print(f"[RENDER API] Поиск аудио для объединения: '{resolved_audio}' (существует: {os.path.exists(resolved_audio)})")
 
             if resolved_audio and os.path.exists(resolved_audio):
-                merged_output = OUT_DIR / f"{task_id}_merged.mp4"
-                print(f"[RENDER API] Склеивание с аудио: {resolved_audio}")
+                print(f"[RENDER API] 🎵 Склеивание с аудио через FFmpeg...")
                 merge_cmd = [
                     "ffmpeg", "-y",
                     "-i", str(temp_output),
@@ -107,23 +153,32 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                     "-shortest",
                     str(merged_output)
                 ]
-                res = subprocess.run(merge_cmd, capture_output=True, text=True)
+                res = subprocess.run(
+                    merge_cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace"
+                )
                 if res.returncode == 0 and merged_output.exists():
                     source_video = merged_output
-                    print("[RENDER API] Видео и аудио успешно объединены!")
+                    print("[RENDER API] ✅ Видео и аудио успешно объединены в MP4!")
                 else:
-                    print(f"[RENDER API] Ошибка склейки FFmpeg: {res.stderr[:300]}")
+                    print(f"[RENDER API] ⚠️ Ошибка склейки FFmpeg: {res.stderr[:500]}")
 
+            proj_dir = _resolve_path(req.project_path)
             if req.target == "project":
-                dest_dir = Path(req.project_path) / "preview"
+                dest_dir = Path(proj_dir) / "preview"
             elif req.target == "b-roll":
-                dest_dir = Path(req.project_path) / "assets" / "b-roll"
+                dest_dir = Path(proj_dir) / "assets" / "b-roll"
             else:
-                dest_dir = Path(req.project_path) / "assets" / "a-roll"
+                dest_dir = Path(proj_dir) / "assets" / "a-roll"
+
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_file = dest_dir / f"{req.target_id}.mp4"
             shutil.copy2(source_video, dest_file)
             final_file_path = str(dest_file)
+            print(f"[RENDER API] ✅ Файл успешно сохранен в папку проекта: {final_file_path}")
 
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({
@@ -139,12 +194,31 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             }), loop
         )
     except Exception as e:
-        print(f"[RENDER API] Exception в фоновой задаче: {e}")
+        print(f"[RENDER API] ❌ Exception в фоновой задаче рендера: {e}")
+        import traceback
+        traceback.print_exc()
         asyncio.run_coroutine_threadsafe(
-            manager.broadcast({"type": "RENDER_PROGRESS", "payload": {"task_id": task_id, "progress": 100, "status": "error"}}), loop
+            manager.broadcast({
+                "type": "RENDER_PROGRESS",
+                "payload": {
+                    "task_id": task_id,
+                    "progress": 100,
+                    "status": "error",
+                    "target_id": req.target_id,
+                    "target": req.target
+                }
+            }), loop
         )
     finally:
         active_renders.pop(task_id, None)
+        try:
+            if temp_output.exists():
+                os.remove(temp_output)
+            if merged_output.exists():
+                os.remove(merged_output)
+            print(f"[RENDER API] 🧹 Временные файлы задачи {task_id} удалены.")
+        except Exception as clean_err:
+            print(f"[RENDER API] Не удалось удалить временный файл: {clean_err}")
 
 async def run_remotion(task_id: str, req: RenderRequest):
     loop = asyncio.get_running_loop()
@@ -153,6 +227,7 @@ async def run_remotion(task_id: str, req: RenderRequest):
 @router.post("/start")
 async def start_render(req: RenderRequest, bg: BackgroundTasks):
     task_id = f"render_{os.urandom(4).hex()}"
+    print(f"\n[RENDER API] Получен запрос на рендер -> Task ID: {task_id}")
     bg.add_task(run_remotion, task_id, req)
     return {"task_id": task_id}
 
@@ -170,21 +245,51 @@ async def concat_video(req: VideoConcatRequest):
                     f.write(f"file '{formatted_p}'\n")
 
         cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path]
-        print(f"[RENDER API] Concat video: {' '.join(cmd)}")
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res.returncode != 0:
             fallback_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c:v", "libx264", "-c:a", "aac", out_path]
-            res2 = subprocess.run(fallback_cmd, capture_output=True, text=True)
+            res2 = subprocess.run(fallback_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if res2.returncode != 0:
                 raise RuntimeError(f"FFmpeg video concat error: {res2.stderr[:300]}")
 
         return {"status": "ok", "output_path": out_path}
     except Exception as e:
-        print(f"[RENDER API] Ошибка склейки видео: {e}")
+        print(f"[RENDER API] ❌ Ошибка склейки видео: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if os.path.exists(list_file):
             os.remove(list_file)
+
+@router.post("/merge-audio-video")
+async def merge_audio_video(req: AudioVideoMergeRequest):
+    video_p = _resolve_path(req.video_path, req.project_path)
+    audio_p = _resolve_path(req.audio_path, req.project_path)
+    out_p = _resolve_path(req.output_path, req.project_path)
+
+    print(f"[RENDER API] Ручное объединение: video='{video_p}', audio='{audio_p}'")
+
+    if not os.path.exists(video_p):
+        raise HTTPException(status_code=404, detail=f"Видеофайл не найден: {video_p}")
+    if not os.path.exists(audio_p):
+        raise HTTPException(status_code=404, detail=f"Аудиофайл не найден: {audio_p}")
+
+    os.makedirs(os.path.dirname(out_p), exist_ok=True)
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_p,
+        "-i", audio_p,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        out_p
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if res.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"FFmpeg merge error: {res.stderr[:300]}")
+
+    return {"status": "ok", "output_path": out_p}
 
 @router.post("/cancel/{task_id}")
 async def cancel_render(task_id: str):

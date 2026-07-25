@@ -1,9 +1,11 @@
+import os
 import re
 import httpx
 from pathlib import Path
 from fastapi import APIRouter
 from app.schemas import CodeGenerationRequest
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(prefix="/api/v1/code", tags=["code"])
 
 @router.post("/generate")
@@ -21,7 +23,8 @@ async def generate_code(request: CodeGenerationRequest):
                 tsx_code = match.group(1) if match else data
 
                 try:
-                    code_dir = Path(request.project_path) / "code" / "a-roll"
+                    proj_path = os.path.normpath(os.path.join(str(BACKEND_DIR), request.project_path)) if not os.path.isabs(request.project_path) else request.project_path
+                    code_dir = Path(proj_path) / "code" / "a-roll"
                     code_dir.mkdir(parents=True, exist_ok=True)
                     code_file = code_dir / f"{request.target_id}.tsx"
                     code_file.write_text(tsx_code, encoding="utf-8")

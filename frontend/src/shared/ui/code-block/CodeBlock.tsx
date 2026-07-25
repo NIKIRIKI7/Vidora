@@ -1,4 +1,4 @@
-import { Icon } from '../icon/Icon'
+import { Icon } from '../icon'
 
 export const CodeBlock = ({ title, code, className = '' }: { title: string; code: string; className?: string }) => (
   <div className={`flex flex-col gap-2 ${className}`}>

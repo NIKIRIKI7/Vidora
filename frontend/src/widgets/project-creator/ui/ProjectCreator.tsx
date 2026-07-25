@@ -1,6 +1,6 @@
 import { useState, useRef, type ChangeEvent } from 'react'
 import { Button, Input, Select, FieldGroup, Icon, Spinner } from '@shared/ui'
-import { parseMarkdownFull } from '../lib/parseMarkdown'
+import { parseMarkdownFull } from '@entities/project'
 import { createProjectStructure, openProjectStructure } from '@features/file-system'
 import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project'
 

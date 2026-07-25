@@ -1,4 +1,4 @@
-import type { Scene, ProjectSettings, SceneFragment, AppColors, FPS } from '@entities/project'
+import type { Scene, ProjectSettings, SceneFragment, AppColors, FPS } from '../model/types'
 
 export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> => {
   const result: Partial<ProjectSettings> = {
@@ -73,9 +73,9 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
     }
 
     if (fragments.length === 0 && rawContent) {
-      fragments.push({ 
-        id: crypto.randomUUID(), 
-        visualNote: 'A-roll: Без ремарок', 
+      fragments.push({
+        id: crypto.randomUUID(),
+        visualNote: 'A-roll: Без ремарок',
         text: rawContent.trim()
       })
     }
