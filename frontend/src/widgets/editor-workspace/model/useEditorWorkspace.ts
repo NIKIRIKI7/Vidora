@@ -57,6 +57,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [isRendering, setIsRendering] = useState(false)
   const [renderType, setRenderType] = useState<'scene' | 'project' | null>(null)
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
+  const [renderedHashes, setRenderedHashes] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
@@ -144,6 +145,16 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         }
     }
     onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+  }
+
+  const hashCode = (str: string) => {
+    let hash = 0
+    for (let i = 0, len = str.length; i < len; i++) {
+        const chr = str.charCodeAt(i)
+        hash = ((hash << 5) - hash) + chr
+        hash |= 0
+    }
+    return hash.toString()
   }
 
   const handleCancelAll = async () => {
@@ -797,6 +808,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setRenderProgress(0)
     abortControllerRef.current = new AbortController()
 
+    const codeToUse = typeof code === 'string' ? code : activeScene.ignoreTsx ? 'import { AbsoluteFill } from "remotion"; export const SceneComponent = () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;' : activeScene.remotionCode || ''
+    const audioToUse = typeof audioPath === 'string' ? audioPath : audioLoaded || getAudioPathForScene(project, activeScene)
+
     try {
       const res = await fetch(`${API}/api/v1/render/start`, {
         method: 'POST',
@@ -806,8 +820,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           target: 'scene',
           target_id: activeScene.id,
           project_path: getProjectPath(project),
-          tsx_code: typeof code === 'string' ? code : activeScene.ignoreTsx ? 'import { AbsoluteFill } from "remotion"; export const SceneComponent = () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;' : activeScene.remotionCode || '',
-          audio_path: typeof audioPath === 'string' ? audioPath : audioLoaded || getAudioPathForScene(project, activeScene),
+          tsx_code: codeToUse,
+          audio_path: audioToUse,
         }),
         signal: abortControllerRef.current.signal,
       })
@@ -818,6 +832,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         renderListenersRef.current.set(data.task_id, (payload) => {
           if (payload.status === 'done' && payload.output_path) {
             setRenderedVideos(prev => ({ ...prev, [payload.target_id!]: payload.output_path! }))
+            const codeHash = hashCode(codeToUse + audioToUse + JSON.stringify(activeScene.fragments))
+            setRenderedHashes(prev => ({ ...prev, [payload.target_id!]: codeHash }))
             setPlayingTargetId(payload.target_id!)
             setIsRendering(false)
             setRenderType(null)
@@ -870,10 +886,23 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           codeToRender = `import { AbsoluteFill } from 'remotion';\nexport const compositionConfig = { id: 'BlackScreen', durationInFrames: ${durationInFrames}, fps: ${fps}, width: ${width}, height: ${height} };\nexport default () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;`
         }
 
+        const audioPathToUse = getAudioPathForScene(project, scene)
+        let sceneVideoPath = renderedVideos[scene.id]
+        const currentHash = hashCode(codeToRender + audioPathToUse + JSON.stringify(scene.fragments))
+
+        if (sceneVideoPath && renderedHashes[scene.id] === currentHash) {
+          showNotification(`Сцена "${scene.title}" взята из кэша ⚡`, 'info')
+          renderedSceneVideoPaths.push(sceneVideoPath)
+          setRenderProgress(Math.round(((i + 1) / project.scenes.length) * 100))
+          continue
+        }
+
         try {
-          const sceneVideoPath = await renderSingleScenePromise(scene.id, codeToRender, getAudioPathForScene(project, scene), projectPath, abortControllerRef.current.signal)
+          sceneVideoPath = await renderSingleScenePromise(scene.id, codeToRender, audioPathToUse, projectPath, abortControllerRef.current.signal)
           if (sceneVideoPath) {
             renderedSceneVideoPaths.push(sceneVideoPath)
+            setRenderedVideos(prev => ({ ...prev, [scene.id]: sceneVideoPath! }))
+            setRenderedHashes(prev => ({ ...prev, [scene.id]: currentHash }))
           }
         } catch (err: any) {
           if (!abortControllerRef.current.signal.aborted) {

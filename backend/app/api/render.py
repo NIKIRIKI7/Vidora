@@ -6,6 +6,7 @@ import zipfile
 import shutil
 import asyncio
 import subprocess
+import multiprocessing
 from pathlib import Path
 from typing import List
 from urllib.parse import quote
@@ -88,7 +89,9 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
     npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
     temp_output = OUT_DIR / f"{task_id}.mp4"
     merged_output = OUT_DIR / f"{task_id}_merged.mp4"
-    cmd = [npx_cmd, "remotion", "render", "src/index.ts", "current", f"out/{task_id}.mp4"]
+    cores = max(1, (multiprocessing.cpu_count() or 4) - 1)
+    cmd = [npx_cmd, "remotion", "render", "src/index.ts", "current", f"out/{task_id}.mp4",
+           "--codec=h264", f"--concurrency={cores}"]
 
     try:
         if req.tsx_code:
