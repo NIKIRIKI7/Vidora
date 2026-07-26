@@ -34,7 +34,7 @@ export const useProjectStore = create<ProjectStore>()(
         const hist = state.history[active] || { past: [], future: [] }
         return {
           projects: state.projects.map(proj => proj.name === p.name ? p : proj),
-          history: { ...state.history, [active]: { past: [...hist.past, current].slice(-15), future: [] } }
+          history: { ...state.history, [active]: { past: [...hist.past, current].slice(-50), future: [] } }
         }
       }),
       deleteProject: (name) => set((state) => {
@@ -73,10 +73,10 @@ export const useProjectStore = create<ProjectStore>()(
     }),
     {
       name: 'vidora-projects',
-      // ponytail: history stays in RAM to avoid QuotaExceededError (5MB localStorage cap)
       partialize: (state) => ({
         projects: state.projects,
         activeProjectId: state.activeProjectId,
+        history: state.history,
       }),
     }
   )
