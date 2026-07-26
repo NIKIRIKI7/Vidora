@@ -397,7 +397,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     if (!activeScene) return
     const hist = activeScene.remotionCodeHistory || []
     const idx = activeScene.historyIndex ?? (hist.length - 1)
-    const newHist = [...hist.slice(0, idx + 1), code]
+    const newHist = [...hist.slice(0, idx + 1), code].slice(-15)
     const hash = hashCode(generateRemotionPrompt(project, activeScene))
     onUpdateProject({
       ...project,
@@ -653,7 +653,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       if (data.tsx_code) {
         const hist = sceneToUse.remotionCodeHistory || []
         const idx = sceneToUse.historyIndex ?? (hist.length - 1)
-        const newHist = [...hist.slice(0, idx + 1), data.tsx_code]
+        const newHist = [...hist.slice(0, idx + 1), data.tsx_code].slice(-15)
         const hash = hashCode(generateRemotionPrompt(project, sceneToUse))
         onUpdateProject({
           ...project,
@@ -740,7 +740,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
               codeToUse = data.tsx_code
               const hist = activeScene.remotionCodeHistory || []
               const idx = activeScene.historyIndex ?? (hist.length - 1)
-              const newHist = [...hist.slice(0, idx + 1), codeToUse]
+              const newHist = [...hist.slice(0, idx + 1), codeToUse].slice(-15)
               const hash = hashCode(generateRemotionPrompt(project, activeScene))
               onUpdateProject({
                 ...project,
@@ -835,7 +835,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
                   codeToRender = data.tsx_code
                   const hist = scene.remotionCodeHistory || []
                   const idx = scene.historyIndex ?? (hist.length - 1)
-                  const newHist = [...hist.slice(0, idx + 1), codeToRender]
+                  const newHist = [...hist.slice(0, idx + 1), codeToRender].slice(-15)
                   const newHash = hashCode(generateRemotionPrompt(project, scene))
 
                   scene.remotionCode = codeToRender
