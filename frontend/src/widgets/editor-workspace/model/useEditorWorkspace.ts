@@ -176,7 +176,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       ...project,
       montage: {
         ...project.montage,
-        audioMix: { bgmPath: '', bgmVolume: 0.3, sidechainThreshold: -18, sidechainRatio: 4, sidechainAttack: 5, sidechainRelease: 50, ...project.montage.audioMix, ...patch }
+        audioMix: { ...project.montage.audioMix, ...patch }
       }
     })
   }
@@ -184,8 +184,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const handleMixBgm = async () => {
     if (!activeScene) return
     const audioPath = getAudioPathForScene(project, activeScene)
-    const mix = project.montage.audioMix ?? { bgmPath: '', bgmVolume: 0.3, sidechainThreshold: -18, sidechainRatio: 4, sidechainAttack: 5, sidechainRelease: 50 }
-    const bgmPath = mix.bgmPath
+    const bgmPath = project.montage.audioMix.bgmPath
     if (!bgmPath) { showNotification('Укажите путь к BGM в настройках микшера', 'error'); return }
     if (!audioPath) { showNotification('Нет аудио для сцены', 'error'); return }
 
@@ -200,11 +199,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           voicePath: audioPath,
           bgmPath,
           outputPath: outPath,
-          bgmVolume: mix.bgmVolume,
-          sidechainThreshold: mix.sidechainThreshold,
-          sidechainRatio: mix.sidechainRatio,
-          sidechainAttack: mix.sidechainAttack,
-          sidechainRelease: mix.sidechainRelease,
+          bgmVolume: project.montage.audioMix.bgmVolume,
+          sidechainThreshold: project.montage.audioMix.sidechainThreshold,
+          sidechainRatio: project.montage.audioMix.sidechainRatio,
+          sidechainAttack: project.montage.audioMix.sidechainAttack,
+          sidechainRelease: project.montage.audioMix.sidechainRelease,
         }),
       })
       const data = await res.json()
