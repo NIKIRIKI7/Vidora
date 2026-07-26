@@ -15,9 +15,13 @@ from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRe
 from app.services.audio_service import AudioService
 from app.services.audio_provider import OmniVoiceProvider
 
+# ponytail: avoid Cyrillic in cache path — torch.jit.load uses fopen() which
+# garbles non-ASCII on Windows. Keep models under ~/.cache (always ASCII).
+CACHE_DIR = str(Path.home() / ".cache" / "vidora-models")
 WHISPER_MODEL_DIR = str(Path(__file__).resolve().parents[2] / "ai-models")
-os.environ.setdefault("HF_HOME", WHISPER_MODEL_DIR)
-os.environ.setdefault("XDG_CACHE_HOME", WHISPER_MODEL_DIR)
+os.environ.setdefault("HF_HOME", CACHE_DIR)
+os.environ.setdefault("XDG_CACHE_HOME", CACHE_DIR)
+os.environ.setdefault("TORCH_HOME", CACHE_DIR)
 
 router = APIRouter(prefix="/api/v1/audio", tags=["audio"])
 audio_service = AudioService()
@@ -40,12 +44,14 @@ def _resolve_path(path: str, project_path: str = "") -> str:
 
 def _run_ffmpeg(cmd: list, desc: str = "ffmpeg") -> str:
     print(f"[AUDIO API] {desc}: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=False)
+    stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
     if result.returncode != 0:
-        err = result.stderr.strip() or "unknown error"
-        print(f"[AUDIO API] {desc} failed (code {result.returncode}): {err[:500]}")
-        raise RuntimeError(f"FFmpeg error: {err[:500]}")
-    return result.stdout or ""
+        stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else "unknown error"
+        err = stderr.strip()[:500]
+        print(f"[AUDIO API] {desc} failed (code {result.returncode}): {err}")
+        raise RuntimeError(f"FFmpeg error: {err}")
+    return stdout
 
 def _free_vram():
     import gc, torch
@@ -127,8 +133,9 @@ async def upload_ref(project_path: str = Form(default="vidora_projects"), file: 
 @router.post("/process")
 async def process_audio(request: AudioProcessRequest):
     audio_path = _resolve_path(request.audio_path, request.project_path)
+
     if not os.path.exists(audio_path):
-        return {"status": "error", "detail": f"\u0424\u0430\u0439\u043b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d: {audio_path}"}
+        return {"status": "error", "detail": f"Файл не найден: {audio_path}"}
 
     backup_path = audio_path + ".bak"
     if not os.path.exists(backup_path):
@@ -138,25 +145,62 @@ async def process_audio(request: AudioProcessRequest):
 
     cmds = {
         "normalize": ["ffmpeg", "-y", "-i", audio_path, "-af", "loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
-        "remove_silence": ["ffmpeg", "-y", "-i", audio_path, "-af", "silenceremove=stop_periods=-1:stop_duration=0.3:stop_threshold=-35dB", temp_out],
         "denoise": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn", temp_out],
         "enhance": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,acompressor,equalizer=f=3000:width_type=h:width=200:g=3", temp_out],
-        "mastering": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn,acompressor=ratio=4:makeup=2,loudnorm=I=-14:LRA=11:TP=-1.5,silenceremove=stop_periods=-1:stop_duration=0.2:stop_threshold=-35dB", temp_out],
+        "mastering": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn,acompressor=ratio=4:makeup=2,loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
     }
 
-    if request.action not in cmds:
-        return {"status": "error", "detail": "\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u043e\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435"}
+    if request.action == "silero_vad":
+        try:
+            import torch
+            import torchaudio
+            print(f"[AUDIO API] Запуск Silero VAD для: {audio_path}")
+            
+            # Загружаем модель VAD
+            model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True, force_reload=False)
+            (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
+            
+            # Модель ожидает частоту 16000 Гц для распознавания
+            wav_16k = read_audio(audio_path, sampling_rate=16000)
+            speech_timestamps = get_speech_timestamps(wav_16k, model, sampling_rate=16000)
+            
+            if not speech_timestamps:
+                print(f"[AUDIO API] Silero VAD: Речь не найдена, копируем оригинал.")
+                shutil.copy2(audio_path, temp_out)
+            else:
+                # Читаем исходный файл (с его родной частотой дискретизации), чтобы сохранить качество
+                wav_orig, sr = torchaudio.load(audio_path)
+                chunks = []
+                for chunk in speech_timestamps:
+                    # Добавляем 0.1s padding (100 мс) до и после найденной речи для плавности
+                    start_idx = max(0, int((chunk['start'] / 16000.0 - 0.1) * sr))
+                    end_idx = min(wav_orig.shape[1], int((chunk['end'] / 16000.0 + 0.1) * sr))
+                    chunks.append(wav_orig[:, start_idx:end_idx])
+                
+                if chunks:
+                    concatenated = torch.cat(chunks, dim=1)
+                    torchaudio.save(temp_out, concatenated, sr)
+                else:
+                    shutil.copy2(audio_path, temp_out)
 
-    try:
-        _run_ffmpeg(cmds[request.action], desc=f"process/{request.action}")
-    except RuntimeError as e:
-        return {"status": "error", "detail": str(e)}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[AUDIO API] Silero VAD Error: {e}")
+            return {"status": "error", "detail": f"Silero VAD error: {str(e)}"}
+            
+    elif request.action in cmds:
+        try:
+            _run_ffmpeg(cmds[request.action], desc=f"process/{request.action}")
+        except RuntimeError as e:
+            return {"status": "error", "detail": str(e)}
+    else:
+        return {"status": "error", "detail": "Неизвестное действие"}
 
     if not os.path.exists(temp_out):
-        return {"status": "error", "detail": "FFmpeg \u043d\u0435 \u0441\u043e\u0437\u0434\u0430\u043b \u0432\u044b\u0445\u043e\u0434\u043d\u043e\u0439 \u0444\u0430\u0439\u043b"}
+        return {"status": "error", "detail": "Выходной файл не создан"}
 
     shutil.move(temp_out, audio_path)
-
     return {"status": "ok", "processed_audio_path": audio_path, "action_applied": request.action}
 
 @router.post("/undo")

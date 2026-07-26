@@ -65,6 +65,7 @@ export const MainPage = () => {
         />
       ) : (
         <EditorWorkspace
+          key={activeProject.name}
           project={activeProject}
           projects={projects}
           onSwitchProject={setActiveProject}

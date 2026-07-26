@@ -8,11 +8,12 @@ import asyncio
 import subprocess
 from pathlib import Path
 from typing import List
+from urllib.parse import quote
 from pydantic import BaseModel
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
-from app.schemas import RenderRequest, AudioVideoMergeRequest
+from app.schemas import RenderRequest
 from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
@@ -158,6 +159,7 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                     "-c:v", "copy",
                     "-c:a", "aac",
                     "-b:a", "192k",
+                    "-apad",
                     "-shortest",
                     str(merged_output)
                 ]
@@ -175,6 +177,30 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                     print("[RENDER API] ✅ Видео и аудио успешно объединены в MP4!")
                 else:
                     print(f"[RENDER API] ⚠️ Ошибка склейки FFmpeg: {res.stderr[:500]}")
+            else:
+                print(f"[RENDER API] 🔇 Аудио не найдено, добавление тихой дорожки...")
+                silent_cmd = [
+                    "ffmpeg", "-y",
+                    "-i", str(temp_output),
+                    "-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=48000",
+                    "-map", "0:v",
+                    "-map", "1:a",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-shortest",
+                    str(merged_output)
+                ]
+                res = subprocess.run(
+                    silent_cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace"
+                )
+                if res.returncode == 0 and merged_output.exists():
+                    source_video = merged_output
+                    print(f"[RENDER API] ✅ Тихая аудиодорожка успешно добавлена!")
 
             proj_dir = _resolve_path(req.project_path)
             if req.target == "project":
@@ -254,10 +280,10 @@ async def concat_video(req: VideoConcatRequest):
                     formatted_p = abs_p.replace("\\", "/")
                     f.write(f"file '{formatted_p}'\n")
 
-        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path]
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", out_path]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res.returncode != 0:
-            fallback_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c:v", "libx264", "-c:a", "aac", out_path]
+            fallback_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c:v", "libx264", "-c:a", "aac", "-b:a", "192k", out_path]
             res2 = subprocess.run(fallback_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if res2.returncode != 0:
                 raise RuntimeError(f"FFmpeg video concat error: {res2.stderr[-1000:]}")
@@ -269,43 +295,6 @@ async def concat_video(req: VideoConcatRequest):
     finally:
         if os.path.exists(list_file):
             os.remove(list_file)
-
-@router.post("/merge-audio-video")
-async def merge_audio_video(req: AudioVideoMergeRequest):
-    video_p = _resolve_path(req.video_path, req.project_path)
-    audio_p = _resolve_path(req.audio_path, req.project_path)
-    out_p = _resolve_path(req.output_path, req.project_path)
-
-    print(f"[RENDER API] Ручное объединение: video='{video_p}', audio='{audio_p}'")
-
-    if not os.path.exists(video_p):
-        raise HTTPException(status_code=404, detail=f"Видеофайл не найден: {video_p}")
-    if not os.path.exists(audio_p):
-        raise HTTPException(status_code=404, detail=f"Аудиофайл не найден: {audio_p}")
-
-    os.makedirs(os.path.dirname(out_p), exist_ok=True)
-
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", video_p,
-        "-i", audio_p,
-        "-map", "0:v",
-        "-map", "1:a",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-shortest",
-        out_p
-    ]
-    print(f"[RENDER API] Запуск FFmpeg для объединения:\n{' '.join(cmd)}")
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    print(f"[RENDER API] FFmpeg stdout: {res.stdout}")
-    print(f"[RENDER API] FFmpeg stderr: {res.stderr}")
-
-    if res.returncode != 0:
-        raise HTTPException(status_code=500, detail=f"FFmpeg merge error: {res.stderr[-1000:]}")
-
-    return {"status": "ok", "output_path": out_p}
 
 @router.post("/cancel/{task_id}")
 async def cancel_render(task_id: str):
@@ -343,10 +332,11 @@ async def export_project(req: ExportRequest):
                     zip_file.write(file_path, str(arcname))
 
     zip_buffer.seek(0)
+    encoded_filename = quote(req.project_name + '.zip')
     return StreamingResponse(
         zip_buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{req.project_name}.zip"'}
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{encoded_filename}"}
     )
 
 @router.api_route("/media", methods=["GET", "HEAD"])

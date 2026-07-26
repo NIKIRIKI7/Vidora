@@ -24,7 +24,6 @@ interface Props {
   pipelineStep: string
   renderProgress: number
   onCancelAll: () => void
-  isMerging?: boolean
   onUpdateMarkdown: (md: string) => void
 }
 
@@ -49,10 +48,9 @@ export const CenterCanvas = ({
   pipelineStep,
   renderProgress,
   onCancelAll,
-  isMerging,
   onUpdateMarkdown,
 }: Props) => {
-  const isBusy = isRendering || isAutoPipelineRunning || isMerging
+  const isBusy = isRendering || isAutoPipelineRunning
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
   const shouldRenderAudio = Boolean(audioLoaded && !hasRenderedVideo)
 
@@ -152,7 +150,7 @@ export const CenterCanvas = ({
             <Spinner className="text-[64px]" />
             <div className="text-center z-10 flex flex-col items-center">
               <h2 className="text-2xl font-semibold text-white mb-2">
-                {isAutoPipelineRunning ? pipelineStep || 'Сборка проекта...' : isMerging ? 'Объединение аудио и видео...' : 'Рендеринг проекта...'}
+                {isAutoPipelineRunning ? pipelineStep || 'Сборка проекта...' : 'Рендеринг проекта...'}
               </h2>
               <p className="text-on-surface-variant text-sm mb-6">Пожалуйста, подождите. Это может занять некоторое время.</p>
               {isRendering && <ProgressBar progress={renderProgress} className="w-64 mb-6" />}

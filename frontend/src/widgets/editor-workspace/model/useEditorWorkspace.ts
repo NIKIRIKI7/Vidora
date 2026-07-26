@@ -49,7 +49,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
-  const [isMerging, setIsMerging] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [useWhisper, setUseWhisper] = useState(true)
   const [autoOffloadVram, setAutoOffloadVram] = useState(true)
@@ -59,8 +58,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [renderType, setRenderType] = useState<'scene' | 'project' | null>(null)
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
-  
   const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  const handleSelectScene = (id: string) => { setActiveSceneId(id); setPlayingTargetId(id) }
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const refVoiceInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -157,7 +157,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setIsGeneratingAudio(false)
     setIsSyncing(false)
     setIsGeneratingCode(false)
-    setIsMerging(false)
     setPipelineStep('Отменено')
 
     if (currentTaskIdRef.current) {
@@ -184,29 +183,58 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     showNotification('Аудио сброшено для всех сцен', 'info')
   }
 
-  const handleProcessAudio = async (action: string) => {
-    if (!activeScene) return
+  // Обновлённая логика аудиообработки, принимающая область действия (текущая сцена или весь проект)
+  const handleProcessAudio = async (action: string, scope: 'scene' | 'project') => {
     setIsGeneratingAudio(true)
+    abortControllerRef.current = new AbortController()
+    let successCount = 0
+
     try {
-        const audioPath = getAudioPathForScene(project, activeScene)
+      const projectPath = getProjectPath(project)
+      const targetScenes = scope === 'scene' ? (activeScene ? [activeScene] : []) : project.scenes
+
+      if (targetScenes.length === 0) {
+        showNotification('Нет сцен для обработки', 'error')
+        return
+      }
+
+      for (const scene of targetScenes) {
+        if (abortControllerRef.current.signal.aborted) break
+        
+        const audioPath = getAudioPathForScene(project, scene)
         const res = await fetch(`${API}/api/v1/audio/process`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scene_id: activeScene.id, audio_path: audioPath, action, project_path: getProjectPath(project) })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            scene_id: scene.id, 
+            audio_path: audioPath, 
+            action, 
+            project_path: projectPath 
+          }),
+          signal: abortControllerRef.current.signal
         })
+        
         const data = await res.json()
         if (data.status === 'ok') {
-            showNotification(`Аудио обработано: ${action}`, 'success')
-            setAudioLoaded(null)
-            setTimeout(() => setAudioLoaded(data.processed_audio_path), 500)
-        } else {
-            showNotification(`Ошибка: ${data.detail}`, 'error')
+          successCount++
         }
-    } catch (e) {
+      }
+      
+      if (!abortControllerRef.current.signal.aborted) {
+        showNotification(`Обработка "${action}" завершена (${successCount}/${targetScenes.length})`, 'success')
+        setAudioLoaded(null)
+        if (activeSceneId) {
+           const active = project.scenes.find(s => s.id === activeSceneId)
+           if (active) setTimeout(() => setAudioLoaded(getAudioPathForScene(project, active)), 500)
+        }
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== 'AbortError') {
         console.error(e)
         showNotification('Ошибка обработки аудио', 'error')
+      }
     } finally {
-        setIsGeneratingAudio(false)
+      setIsGeneratingAudio(false)
     }
   }
 
@@ -455,81 +483,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     onUpdateProject({ ...project, customVoices: updatedVoices })
     if (voiceModel === voiceId) setVoiceModel('aria')
     showNotification('Голос удален из Voicebox', 'info')
-  }
-
-  const handleMergeAudioAndVideo = async (target: 'scene' | 'project' = 'scene') => {
-    const projectPath = getProjectPath(project)
-    setIsMerging(true)
-    try {
-      if (target === 'scene') {
-        if (!activeScene) return
-        let videoPath = renderedVideos[activeScene.id] || `${projectPath}/assets/a-roll/${activeScene.id}.mp4`
-        const audioPath = audioLoaded || getAudioPathForScene(project, activeScene)
-        const safeTitle = sanitizeFilename(activeScene.title)
-        const outputPath = `${projectPath}/preview/Merged_${safeTitle}.mp4`
-
-        if (videoPath === outputPath) {
-          videoPath = `${projectPath}/assets/a-roll/${activeScene.id}.mp4`
-        }
-
-        const res = await fetch(`${API}/api/v1/render/merge-audio-video`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_path: projectPath, video_path: videoPath, audio_path: audioPath, output_path: outputPath }),
-        })
-        const data = await res.json()
-        if (res.ok && data.status === 'ok') {
-          setRenderedVideos(prev => ({ ...prev, [activeScene.id]: data.output_path }))
-          setPlayingTargetId(activeScene.id)
-          showNotification('Аудио и видеоанимация сцены успешно объединены!', 'success')
-        } else if (res.status === 404) {
-          showNotification('Видеофайл сцены не найден. Сначала выполните рендер текущей сцены!', 'error')
-        } else {
-          showNotification(`Ошибка объединения сцены: ${data.detail || 'сбой FFmpeg'}`, 'error')
-        }
-      } else if (target === 'project') {
-        const audioPaths = project.scenes.map(s => getAudioPathForScene(project, s))
-        const projectAudioPath = `${projectPath}/assets/voice/Project_${sanitizeFilename(project.name)}.wav`
-        
-        const concatAudioRes = await fetch(`${API}/api/v1/audio/concat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audio_paths: audioPaths, output_path: projectAudioPath })
-        })
-        const concatAudioData = await concatAudioRes.json()
-        if (!concatAudioRes.ok || concatAudioData.status !== 'ok') {
-            showNotification(`Ошибка склейки аудио: ${concatAudioData.detail || 'Неизвестная ошибка'}`, 'error')
-            return
-        }
-        
-        let videoPath = renderedVideos[`Project_${project.name}`] || `${projectPath}/preview/Project_${sanitizeFilename(project.name)}.mp4`
-        const outputPath = `${projectPath}/preview/Merged_Project_${sanitizeFilename(project.name)}.mp4`
-
-        if (videoPath === outputPath) {
-          videoPath = `${projectPath}/preview/Project_${sanitizeFilename(project.name)}.mp4`
-        }
-
-        const res = await fetch(`${API}/api/v1/render/merge-audio-video`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_path: projectPath, video_path: videoPath, audio_path: projectAudioPath, output_path: outputPath }),
-        })
-        const data = await res.json()
-        if (res.ok && data.status === 'ok') {
-          setRenderedVideos(prev => ({ ...prev, [`Project_${project.name}`]: data.output_path }))
-          setPlayingTargetId(`Project_${project.name}`)
-          showNotification('Аудио и видео всего проекта успешно объединены!', 'success')
-        } else if (res.status === 404) {
-          showNotification('Видеофайл проекта не найден. Сначала выполните «Рендер всего проекта»!', 'error')
-        } else {
-          showNotification(`Ошибка объединения проекта: ${data.detail || 'сбой FFmpeg'}`, 'error')
-        }
-      }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name !== 'AbortError') showNotification('Сбой запроса объединения аудио и видео', 'error')
-    } finally {
-      setIsMerging(false)
-    }
   }
 
   const runVoiceGenFragment = async (sceneId: string, fragId: string) => {
@@ -1049,7 +1002,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     isGeneratingCode,
     isRendering,
     renderType,
-    isMerging,
     renderProgress,
     isSettingsOpen,
     useWhisper,
@@ -1059,8 +1011,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     videoRef,
     audioRef,
     refVoiceInputRef,
-    setActiveSceneId,
-    setCenterView,
+        setActiveSceneId: handleSelectScene,
+        setCenterView,
     setPreviewFormat,
     setVoiceModel,
     setSpeed,
@@ -1097,10 +1049,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleProcessAudio,
     handleUnloadVram,
     handleUploadRefVoiceAudio,
-    handleSaveCustomVoice,
-    handleDeleteCustomVoice,
-    handleMergeAudioAndVideo,
-    runVoiceGenAllScenes,
+        handleSaveCustomVoice,
+        handleDeleteCustomVoice,
+        runVoiceGenAllScenes,
     runVoiceGenFragment,
     runSyncAllScenes,
     runCodeGen,

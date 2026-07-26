@@ -100,8 +100,4 @@ class RenderRequest(BaseModel):
     tsx_code: str = ""
     audio_path: Optional[str] = ""
 
-class AudioVideoMergeRequest(BaseModel):
-    project_path: str = ""
-    video_path: str
-    audio_path: str
-    output_path: str
+

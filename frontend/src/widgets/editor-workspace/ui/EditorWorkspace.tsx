@@ -113,7 +113,6 @@ export const EditorWorkspace = ({
           pipelineStep={model.pipelineStep}
           renderProgress={model.renderProgress}
           onCancelAll={model.handleCancelAll}
-          isMerging={model.isMerging}
           onUpdateMarkdown={model.handleUpdateMarkdown}
         />
         <PipelineInspector
@@ -126,7 +125,6 @@ export const EditorWorkspace = ({
           isSyncing={model.isSyncing}
           isGeneratingCode={model.isGeneratingCode}
           isRendering={model.isRendering}
-          isMerging={model.isMerging}
           onChangeVoiceModel={model.setVoiceModel}
           onChangeUseWhisper={model.setUseWhisper}
           onChangeAutoOffloadVram={model.setAutoOffloadVram}
@@ -147,7 +145,6 @@ export const EditorWorkspace = ({
           onToggleIgnoreTsx={model.toggleIgnoreTsx}
           onRunCodeGen={() => model.runCodeGen()}
           onRunProjectRender={model.runProjectRender}
-          onMergeAudioAndVideo={model.handleMergeAudioAndVideo}
           onShowNotification={model.showNotification}
           onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
           onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
