@@ -14,8 +14,8 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
   
   const { colors, fps } = project.montage
   const { width, height } = getDims(project.resolution, project.format)
-  const durationSec = scene.fragments.reduce((acc, f) => Math.max(acc, f.endTime || 0), 0) || 5
-  const durationFrames = Math.max(Math.ceil(durationSec * Number(fps)), 30)
+  const durationSec = scene.fragments.reduce((acc, f) => acc + ((f.endTime || 5) - (f.startTime || 0)), 0) || 5
+  const durationFrames = Math.ceil(durationSec * Number(fps))
   const fragmentsText = scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}:\nТайминг: ${(frag.startTime ?? 0).toFixed(2)} - ${(frag.endTime ?? 5).toFixed(2)}с\nВизуал: ${frag.visualNote}\nСуфлер: "${frag.text}"`).join('\n')
 
   return tpl
@@ -38,7 +38,7 @@ export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, f
   const { colors, fps } = project.montage
   const { width, height } = getDims(project.resolution, project.format)
   const durationSec = (fragment.endTime || 5) - (fragment.startTime || 0) || 5
-  const durationFrames = Math.max(Math.ceil(durationSec * Number(fps)), 30)
+  const durationFrames = Math.ceil(durationSec * Number(fps))
 
   return tpl
     .replace(/\{\{FORMAT\}\}/g, project.format)
@@ -61,7 +61,7 @@ export const generateProjectPrompt = (project: ProjectSettings): string => {
   const { width, height } = getDims(project.resolution, project.format)
   
   const scenesList = project.scenes.map((scene, si) => {
-    const duration = scene.fragments.reduce((acc, f) => Math.max(acc, f.endTime || 0), 0) || 5
+    const duration = scene.fragments.reduce((acc, f) => acc + ((f.endTime || 5) - (f.startTime || 0)), 0) || 5
     return `### Сцена ${si + 1}: ${scene.title}\nТаймкод: ${scene.timecode} | Длительность: ~${Math.ceil(duration)}с\n${scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}: "${frag.text}"\n  Визуал: ${frag.visualNote}`).join('\n')}`
   }).join('\n\n')
 
