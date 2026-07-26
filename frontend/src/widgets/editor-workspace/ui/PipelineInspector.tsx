@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
-import type { AudioMixSettings } from '@entities/project/model/types'
-import { Button, FieldGroup, Icon, Input, Select, Slider, Spinner, Switch } from '@shared/ui'
+import { Button, FieldGroup, Icon, Select, Spinner, Switch } from '@shared/ui'
 import { generateFragmentPrompt, generateProjectPrompt, generateRemotionPrompt } from '../lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty } from '../lib/helpers'
 
@@ -15,7 +14,6 @@ interface Props {
   isSyncing: boolean
   isGeneratingCode: boolean
   isRendering: boolean
-  audioMix: AudioMixSettings
   onChangeVoiceModel: (v: string) => void
   onChangeUseWhisper: (v: boolean) => void
   onChangeAutoOffloadVram: (v: boolean) => void
@@ -40,17 +38,14 @@ interface Props {
   onUpdateFragmentBRoll: (fragId: string, filename: string) => void
   onUnlinkFragmentBRoll: (fragId: string) => void
   onNudgeTiming: (fragId: string, type: 'start' | 'end', delta: number) => void
-  onUpdateAudioMix: (patch: Partial<AudioMixSettings>) => void
-  onMixBgm: () => void
 }
 
 export const PipelineInspector = ({
   project, activeScene, voiceModel, useWhisper, autoOffloadVram, isGeneratingAudio, isSyncing, isGeneratingCode, isRendering,
-  audioMix,
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onAddFragment, onDeleteFragment, onFragmentTextChange,
   onFragDragStart, onFragDrop, onOpenVoicebox, onOpenAiSettings, onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync,
   onResetAudio, onProcessAudio, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onShowNotification,
-  onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onUpdateAudioMix, onMixBgm,
+  onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming,
 }: Props) => {
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('project')
   const anyAudioDirty = activeScene?.fragments.some(isAudioDirty) ?? false
@@ -169,64 +164,6 @@ export const PipelineInspector = ({
             <button onClick={onUnloadVram} className="text-[11px] text-secondary hover:bg-secondary/10 px-2 py-0.5 rounded transition-all flex items-center gap-1 mt-1 self-start font-medium"><Icon name="memory" className="text-[14px]" /> Очистить VRAM вручную</button>
           </div>
           <Button variant="dashed" disabled={isSyncing} onClick={onRunSync}>{isSyncing ? <Spinner /> : 'Синхронизировать тайминги'}</Button>
-        </section>
-        <div className="h-px bg-white/5" />
-
-        <section className="flex flex-col gap-3">
-          <span className="font-label text-xs uppercase tracking-wider text-primary">2.5. Музыкальный Микшер</span>
-          {activeScene && (
-            <>
-              <FieldGroup label="Путь к BGM (MP3/WAV)">
-                <div className="flex gap-1">
-                  <Input
-                    className="flex-1"
-                    placeholder="/project/assets/bgm/track.mp3"
-                    value={audioMix.bgmPath}
-                    onChange={e => onUpdateAudioMix({ bgmPath: e.target.value })}
-                  />
-                  <Button variant="dashed" className="shrink-0" onClick={() => {
-                    const input = document.createElement('input')
-                    input.type = 'file'
-                    input.accept = 'audio/mpeg,audio/wav,audio/flac'
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0]
-                      if (file) {
-                        const formData = new FormData()
-                        formData.append('file', file)
-                        formData.append('project_path', project.name)
-                        formData.append('folder', 'bgm')
-                        fetch('http://127.0.0.1:8355/api/v1/media/upload', { method: 'POST', body: formData })
-                          .then(r => r.json()).then(d => { if (d.status === 'ok') onUpdateAudioMix({ bgmPath: d.path }); onShowNotification('BGM загружен!') })
-                          .catch(() => onShowNotification('Ошибка загрузки BGM'))
-                      }
-                    }
-                    input.click()
-                  }}><Icon name="upload" className="text-[14px]" /></Button>
-                </div>
-              </FieldGroup>
-              <FieldGroup label={`Громкость BGM: ${Math.round(audioMix.bgmVolume * 100)}%`}>
-                <Slider min={0} max={1} step={0.05} value={audioMix.bgmVolume} onChange={e => onUpdateAudioMix({ bgmVolume: Number(e.target.value) })} />
-              </FieldGroup>
-              <div className="flex flex-col gap-2 p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl">
-                <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">Sidechain Compression</span>
-                <FieldGroup label={`Порог: ${audioMix.sidechainThreshold} dB`}>
-                  <Slider min={-30} max={0} step={1} value={audioMix.sidechainThreshold} onChange={e => onUpdateAudioMix({ sidechainThreshold: Number(e.target.value) })} />
-                </FieldGroup>
-                <FieldGroup label={`Соотношение: ${audioMix.sidechainRatio}:1`}>
-                  <Slider min={1} max={20} step={1} value={audioMix.sidechainRatio} onChange={e => onUpdateAudioMix({ sidechainRatio: Number(e.target.value) })} />
-                </FieldGroup>
-                <FieldGroup label={`Атака: ${audioMix.sidechainAttack} ms`}>
-                  <Slider min={1} max={100} step={1} value={audioMix.sidechainAttack} onChange={e => onUpdateAudioMix({ sidechainAttack: Number(e.target.value) })} />
-                </FieldGroup>
-                <FieldGroup label={`Спад: ${audioMix.sidechainRelease} ms`}>
-                  <Slider min={10} max={500} step={10} value={audioMix.sidechainRelease} onChange={e => onUpdateAudioMix({ sidechainRelease: Number(e.target.value) })} />
-                </FieldGroup>
-              </div>
-              <Button variant="dashed" disabled={isGeneratingAudio || !audioMix.bgmPath} onClick={onMixBgm} className="border-secondary/30 hover:border-secondary hover:bg-secondary/10 hover:text-secondary">
-                {isGeneratingAudio ? <Spinner /> : '🎵 Микшировать с BGM'}
-              </Button>
-            </>
-          )}
         </section>
         <div className="h-px bg-white/5" />
 

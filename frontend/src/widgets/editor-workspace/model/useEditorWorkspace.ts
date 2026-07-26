@@ -16,7 +16,6 @@ import {
   sanitizeFilename,
   hashCode,
 } from '../lib/helpers'
-import type { AudioMixSettings } from '@entities/project/model/types'
 import type { CenterViewMode, FragmentTiming, RenderPayload } from './types'
 import { useRenderWebSocket } from './useRenderWebSocket'
 
@@ -65,7 +64,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [renderedVideos, setRenderedVideos] = useState<Record<string, string>>({})
   const [renderedHashes, setRenderedHashes] = useState<Record<string, string>>({})
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
-  const [timelineSeek, setTimelineSeek] = useState(0)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const handleSelectScene = (id: string) => { setActiveSceneId(id); setPlayingTargetId(id) }
@@ -154,77 +152,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     }
 
     onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
-  }
-
-  const handleTimelineSeek = (time: number) => {
-    setTimelineSeek(time)
-    if (videoRef.current) {
-      videoRef.current.currentTime = time
-    }
-  }
-
-  const handleTimingDirectUpdate = (fragId: string, startTime: number | undefined, endTime: number | undefined) => {
-    if (!activeScene) return
-    const updatedFragments = activeScene.fragments.map(f =>
-      f.id === fragId ? { ...f, startTime, endTime } : f
-    )
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
-  }
-
-  const handleUpdateAudioMix = (patch: Partial<AudioMixSettings>) => {
-    onUpdateProject({
-      ...project,
-      montage: {
-        ...project.montage,
-        audioMix: { ...project.montage.audioMix, ...patch }
-      }
-    })
-  }
-
-  const handleMixBgm = async () => {
-    if (!activeScene) return
-    const audioPath = getAudioPathForScene(project, activeScene)
-    const bgmPath = project.montage.audioMix.bgmPath
-    if (!bgmPath) { showNotification('Укажите путь к BGM в настройках микшера', 'error'); return }
-    if (!audioPath) { showNotification('Нет аудио для сцены', 'error'); return }
-
-    setIsGeneratingAudio(true)
-    try {
-      const projectPath = getProjectPath(project)
-      const outPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(activeScene.title)}_${activeScene.id.slice(0, 6)}_mixed.wav`
-      const res = await fetch(`${API}/api/v1/audio/mix-bgm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          voicePath: audioPath,
-          bgmPath,
-          outputPath: outPath,
-          bgmVolume: project.montage.audioMix.bgmVolume,
-          sidechainThreshold: project.montage.audioMix.sidechainThreshold,
-          sidechainRatio: project.montage.audioMix.sidechainRatio,
-          sidechainAttack: project.montage.audioMix.sidechainAttack,
-          sidechainRelease: project.montage.audioMix.sidechainRelease,
-        }),
-      })
-      const data = await res.json()
-      if (data.status === 'ok') {
-        const updatedFragments = activeScene.fragments.map((f, i) =>
-          i === 0 ? { ...f, audioFileName: outPath } : f
-        )
-        onUpdateProject({
-          ...project,
-          scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)
-        })
-        setAudioLoaded(outPath)
-        showNotification('Микширование с BGM завершено!', 'success')
-      } else {
-        showNotification('Ошибка микширования: ' + (data.detail || 'неизвестная'), 'error')
-      }
-    } catch (e) {
-      showNotification('Ошибка вызова API микширования', 'error')
-    } finally {
-      setIsGeneratingAudio(false)
-    }
   }
 
   const handleCancelAll = async () => {
@@ -999,7 +926,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     denoise, preprocessPrompt, postprocessOutput, isAiSettingsOpen, audioLoaded, playWithAudio, isVoiceboxOpen,
     newVoiceName, newVoiceText, newVoiceTags, newVoiceAudioPath, isAutoPipelineRunning, pipelineStep, isGeneratingAudio,
     isSyncing, isGeneratingCode, isRendering, renderType, renderProgress, isSettingsOpen, useWhisper, autoOffloadVram,
-    renderedVideos, playingTargetId, timelineSeek, videoRef, audioRef, refVoiceInputRef,
+    renderedVideos, playingTargetId, videoRef, audioRef, refVoiceInputRef,
     setActiveSceneId: handleSelectScene, setCenterView, setPreviewFormat, setVoiceModel, setSpeed, setNumSteps,
     setGuidanceScale, setDuration, setDenoise, setPreprocessPrompt, setPostprocessOutput, setIsAiSettingsOpen,
     setPlayWithAudio, setIsVoiceboxOpen, setNewVoiceName, setNewVoiceText, setNewVoiceTags, setIsSettingsOpen,
@@ -1009,7 +936,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleUnloadVram, handleUploadRefVoiceAudio, handleSaveCustomVoice, handleDeleteCustomVoice, runVoiceGenAllScenes,
     runVoiceGenFragment, runSyncAllScenes, runCodeGen, runRender, runProjectRender, handleFullAutoPipeline, handleCancelAll,
     handleExportProject, showNotification, handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll,
-    handleNudgeTiming, handleTimelineSeek, handleTimingDirectUpdate, handleUpdateAudioMix, handleMixBgm,
-    handleCaptureFrame, ttsEngine, llmEngine, apiKeys,
+    handleNudgeTiming, handleCaptureFrame, ttsEngine, llmEngine, apiKeys,
   }
 }

@@ -23,22 +23,12 @@ export interface Metadata {
   thumbnail?: string
 }
 
-export interface AudioMixSettings {
-  bgmPath: string
-  bgmVolume: number
-  sidechainThreshold: number
-  sidechainRatio: number
-  sidechainAttack: number
-  sidechainRelease: number
-}
-
 export interface MontageSettings {
   fps: FPS
   animationStyle: string
   transitions: string[]
   colors: AppColors
   typography: AppTypography
-  audioMix: AudioMixSettings
 }
 
 export interface SceneFragment {

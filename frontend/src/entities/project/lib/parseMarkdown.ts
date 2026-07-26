@@ -1,4 +1,4 @@
-import type { Scene, ProjectSettings, SceneFragment, AppColors, AudioMixSettings, FPS } from '../model/types'
+import type { Scene, ProjectSettings, SceneFragment, AppColors, FPS } from '../model/types'
 
 export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> => {
   const result: Partial<ProjectSettings> = {
@@ -14,14 +14,6 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
       typography: {
         heading: 'Inter',
         body: 'Geist'
-      },
-      audioMix: {
-        bgmPath: '',
-        bgmVolume: 0.3,
-        sidechainThreshold: -18,
-        sidechainRatio: 4,
-        sidechainAttack: 5,
-        sidechainRelease: 50,
       }
     },
     scenes: [],
@@ -53,19 +45,6 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
       if (match) (result.montage!.colors as unknown as Record<string, string>)[key] = match[1]
     }
     ;(['primary', 'secondary', 'background', 'surface', 'accent', 'text'] as const).forEach(extractColor)
-
-    const bgmPathMatch = yamlStr.match(/bgm_path:\s*(.+)/)
-    if (bgmPathMatch) result.montage!.audioMix.bgmPath = bgmPathMatch[1].trim().replace(/^"|"$/g, '')
-    const bgmVolMatch = yamlStr.match(/bgm_volume:\s*([\d.]+)/)
-    if (bgmVolMatch) result.montage!.audioMix.bgmVolume = parseFloat(bgmVolMatch[1])
-    const scThresholdMatch = yamlStr.match(/sidechain_threshold:\s*(-?[\d.]+)/)
-    if (scThresholdMatch) result.montage!.audioMix.sidechainThreshold = parseFloat(scThresholdMatch[1])
-    const scRatioMatch = yamlStr.match(/sidechain_ratio:\s*([\d.]+)/)
-    if (scRatioMatch) result.montage!.audioMix.sidechainRatio = parseFloat(scRatioMatch[1])
-    const scAttackMatch = yamlStr.match(/sidechain_attack:\s*([\d.]+)/)
-    if (scAttackMatch) result.montage!.audioMix.sidechainAttack = parseFloat(scAttackMatch[1])
-    const scReleaseMatch = yamlStr.match(/sidechain_release:\s*([\d.]+)/)
-    if (scReleaseMatch) result.montage!.audioMix.sidechainRelease = parseFloat(scReleaseMatch[1])
   }
 
   const bodyText = markdown.replace(/^---\n[\s\S]+?\n---/, '')
@@ -123,14 +102,6 @@ export const serializeProjectToMarkdown = (project: ProjectSettings): string => 
     `surface: "${montage.colors?.surface || '#171f33'}"`,
     `accent: "${montage.colors?.accent || '#ffb4ab'}"`,
     `text: "${montage.colors?.text || '#dae2fd'}"`,
-    ...(montage.audioMix?.bgmPath ? [`bgm_path: "${montage.audioMix.bgmPath}"`] : []),
-    ...(montage.audioMix ? [
-      `bgm_volume: ${montage.audioMix.bgmVolume ?? 0.3}`,
-      `sidechain_threshold: ${montage.audioMix.sidechainThreshold ?? -18}`,
-      `sidechain_ratio: ${montage.audioMix.sidechainRatio ?? 4}`,
-      `sidechain_attack: ${montage.audioMix.sidechainAttack ?? 5}`,
-      `sidechain_release: ${montage.audioMix.sidechainRelease ?? 50}`,
-    ] : []),
     '---',
     ''
   ].join('\n')

@@ -6,7 +6,6 @@ import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 import { useEditorWorkspace } from '../model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
-import { BottomTimeline } from './BottomTimeline'
 import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
 import { VoiceboxModal } from './VoiceboxModal'
@@ -127,7 +126,6 @@ export const EditorWorkspace = ({
           isSyncing={model.isSyncing}
           isGeneratingCode={model.isGeneratingCode}
           isRendering={model.isRendering}
-          audioMix={project.montage.audioMix}
           onChangeVoiceModel={model.setVoiceModel}
           onChangeUseWhisper={model.setUseWhisper}
           onChangeAutoOffloadVram={model.setAutoOffloadVram}
@@ -152,17 +150,8 @@ export const EditorWorkspace = ({
           onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
           onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
           onNudgeTiming={model.handleNudgeTiming}
-          onUpdateAudioMix={model.handleUpdateAudioMix}
-          onMixBgm={model.handleMixBgm}
         />
       </main>
-
-      <BottomTimeline
-        activeScene={model.activeScene}
-        currentTime={model.timelineSeek}
-        onSeek={model.handleTimelineSeek}
-        onTimingChange={model.handleTimingDirectUpdate}
-      />
 
       <VoiceboxModal
         isOpen={model.isVoiceboxOpen}
