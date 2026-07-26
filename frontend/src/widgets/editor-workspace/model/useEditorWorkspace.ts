@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { CustomVoice, ProjectSettings, Scene, SceneFragment, VideoFormat } from '@entities/project'
 import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull, useProjectStore, useSettingsStore } from '@entities/project'
-import { generateRemotionPrompt } from '../lib/generateRemotionPrompt'
+import { generateRemotionPrompt, getDims } from '../lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import {
   API,
@@ -81,6 +81,15 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
   const { renderProgress, setRenderProgress, renderListenersRef } = useRenderWebSocket()
+
+  const enforceCompositionConfig = (code: string, fps: number, width: number, height: number, durationFrames: number) => {
+    let fixedCode = code
+    fixedCode = fixedCode.replace(/(durationInFrames\s*:\s*)\d+/g, `$1${durationFrames}`)
+    fixedCode = fixedCode.replace(/(fps\s*:\s*)\d+/g, `$1${fps}`)
+    fixedCode = fixedCode.replace(/(width\s*:\s*)\d+/g, `$1${width}`)
+    fixedCode = fixedCode.replace(/(height\s*:\s*)\d+/g, `$1${height}`)
+    return fixedCode
+  }
 
   const handleUpdateMarkdown = (newMd: string) => {
     const parsed = parseMarkdownFull(newMd)
@@ -328,7 +337,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const hash = hashCode(generateRemotionPrompt(project, activeScene))
     onUpdateProject({
       ...project,
-      scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, remotionCode: code, remotionCodeHistory: newHist, historyIndex: newHist.length - 1, lastCodeHash: hash } : s)),
+      scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, remotionCode: code } : s)),
     })
   }
 
@@ -633,6 +642,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     let codeToUse = typeof code === 'string' ? code : activeScene.ignoreTsx ? 'import { AbsoluteFill } from "remotion"; export const SceneComponent = () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;' : activeScene.remotionCode || ''
     const audioToUse = typeof audioPath === 'string' ? audioPath : audioLoaded || getAudioPathForScene(project, activeScene)
 
+    const fps = Number(project.montage?.fps) || 30
+    const { width, height } = getDims(project.resolution, project.format)
+    const sceneDurationSec = getWhisperSyncedDuration(activeScene.fragments) || getSceneDurationFromTimecode(activeScene.timecode) || getVisualNoteDuration(activeScene.fragments) || 5
+    const durationInFrames = Math.max(Math.ceil(sceneDurationSec * fps), 30)
+    if (!activeScene.ignoreTsx) {
+      codeToUse = enforceCompositionConfig(codeToUse, fps, width, height, durationInFrames)
+    }
+
     let retries = 0
     let success = false
 
@@ -664,7 +681,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
             })
             const data = await res.json()
             if (data.tsx_code) {
-              codeToUse = data.tsx_code
+              codeToUse = enforceCompositionConfig(data.tsx_code, fps, width, height, durationInFrames)
               const hist = activeScene.remotionCodeHistory || []
               const idx = activeScene.historyIndex ?? (hist.length - 1)
               const newHist = [...hist.slice(0, idx + 1), codeToUse]
@@ -717,6 +734,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         let codeToRender = scene.remotionCode || ''
         if (scene.ignoreTsx || !codeToRender.trim()) {
           codeToRender = `import { AbsoluteFill } from 'remotion';\nexport const compositionConfig = { id: 'BlackScreen', durationInFrames: ${durationInFrames}, fps: ${fps}, width: ${width}, height: ${height} };\nexport default () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;`
+        } else {
+          codeToRender = enforceCompositionConfig(codeToRender, fps, width, height, durationInFrames)
         }
 
         const audioPathToUse = getAudioPathForScene(project, scene)
@@ -759,7 +778,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
                 })
                 const data = await res.json()
                 if (data.tsx_code) {
-                  codeToRender = data.tsx_code
+                  codeToRender = enforceCompositionConfig(data.tsx_code, fps, width, height, durationInFrames)
                   const hist = scene.remotionCodeHistory || []
                   const idx = scene.historyIndex ?? (hist.length - 1)
                   const newHist = [...hist.slice(0, idx + 1), codeToRender]
