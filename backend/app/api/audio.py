@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore", message=".*Audio is shorter than 30s.*")
 warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest
+from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, MixBgmRequest
 from app.services.audio_service import AudioService
 from app.services.audio_provider import OmniVoiceProvider
 
@@ -355,3 +355,43 @@ async def sync_audio(request: AudioSyncRequest):
         print(f"[AUDIO SYNC] [ERROR] Ошибка WhisperX ({type(e).__name__}: {e}). Переход на FALLBACK.")
         _free_vram()
         return _make_fallback_response(request.fragments, reason=str(e))
+
+@router.post("/mix-bgm")
+async def mix_bgm(request: MixBgmRequest):
+    voice_path = _resolve_path(request.voicePath)
+    bgm_path = _resolve_path(request.bgmPath)
+    out_path = _resolve_path(request.outputPath)
+
+    if not os.path.exists(voice_path):
+        raise HTTPException(status_code=400, detail=f"Voice file not found: {voice_path}")
+    if not os.path.exists(bgm_path):
+        raise HTTPException(status_code=400, detail=f"BGM file not found: {bgm_path}")
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    threshold = max(-30, min(0, request.sidechainThreshold))
+    ratio = max(1, min(20, request.sidechainRatio))
+    attack = max(1, min(100, request.sidechainAttack))
+    release = max(10, min(500, request.sidechainRelease))
+    volume = max(0, min(1, request.bgmVolume))
+
+    # ponytail: ffmpeg sidechaincompress — global lock, per-project bgm if throughput matters
+    # ponytail: the filter lowers BGM volume when voice is active, then returns to bgmVolume
+    filter_chain = (
+        f"[1:a]volume={volume}[bgm];"
+        f"[0:a][bgm]sidechaincompress=threshold={threshold}dB:ratio={ratio}:attack={attack}ms:release={release}ms[out]"
+    )
+    try:
+        _run_ffmpeg([
+            "ffmpeg", "-y",
+            "-i", voice_path,
+            "-i", bgm_path,
+            "-filter_complex", filter_chain,
+            "-map", "[out]",
+            "-ac", "1",
+            "-ar", "24000",
+            out_path,
+        ], desc="mix-bgm")
+        return {"status": "ok", "output_path": out_path}
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))

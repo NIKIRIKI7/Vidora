@@ -92,6 +92,16 @@ class AudioConcatRequest(BaseModel):
     audio_paths: List[str]
     output_path: str
 
+class MixBgmRequest(BaseModel):
+    voicePath: str
+    bgmPath: str
+    outputPath: str
+    bgmVolume: float = 0.3
+    sidechainThreshold: float = -18
+    sidechainRatio: float = 4
+    sidechainAttack: float = 5
+    sidechainRelease: float = 50
+
 class RenderRequest(BaseModel):
     project_id: str
     target: str
