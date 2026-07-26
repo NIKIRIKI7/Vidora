@@ -14,4 +14,4 @@ export interface RenderPayload {
   error?: string
 }
 
-export type CenterViewMode = 'player' | 'code' | 'markdown'
+export type CenterViewMode = 'player' | 'code' | 'split' | 'markdown'

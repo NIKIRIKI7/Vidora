@@ -1,4 +1,5 @@
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
+import { generateRemotionPrompt } from './generateRemotionPrompt'
 
 export const API = 'http://127.0.0.1:8355'
 
@@ -82,4 +83,28 @@ export const getAudioPathForScene = (project: ProjectSettings, scene: Scene): st
   }
   const safeTitle = sanitizeFilename(scene.title)
   return `${projectPath}/assets/voice/Scene_${safeTitle}_${scene.id.slice(0, 6)}.wav`
+}
+
+// ponytail: simple string hash, collision risk is theoretical for this use case
+export const hashCode = (str: string) => {
+  let hash = 0
+  for (let i = 0, len = str.length; i < len; i++) {
+    const chr = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + chr
+    hash |= 0
+  }
+  return hash.toString()
+}
+
+export const isAudioDirty = (frag: SceneFragment) => {
+  if (!frag.audioFileName) return true
+  if (frag.lastAudioHash && frag.lastAudioHash !== hashCode(frag.text)) return true
+  return false
+}
+
+export const isCodeDirty = (project: ProjectSettings, scene: Scene) => {
+  if (scene.ignoreTsx) return false
+  if (!scene.remotionCode) return true
+  if (scene.lastCodeHash && scene.lastCodeHash !== hashCode(generateRemotionPrompt(project, scene))) return true
+  return false
 }

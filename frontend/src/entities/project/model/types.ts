@@ -20,6 +20,7 @@ export interface Metadata {
   title: string
   description: string
   tags: string[]
+  thumbnail?: string
 }
 
 export interface MontageSettings {
@@ -39,6 +40,7 @@ export interface SceneFragment {
   remotionCode?: string
   audioFileName?: string
   bRollFileName?: string
+  lastAudioHash?: string
 }
 
 export interface Scene {
@@ -50,6 +52,7 @@ export interface Scene {
   ignoreTsx?: boolean
   remotionCodeHistory?: string[]
   historyIndex?: number
+  lastCodeHash?: string
 }
 
 export interface CustomVoice {

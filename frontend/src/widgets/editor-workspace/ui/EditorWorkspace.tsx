@@ -114,6 +114,7 @@ export const EditorWorkspace = ({
           renderProgress={model.renderProgress}
           onCancelAll={model.handleCancelAll}
           onUpdateMarkdown={model.handleUpdateMarkdown}
+          onCaptureFrame={model.handleCaptureFrame}
         />
         <PipelineInspector
           project={project}
