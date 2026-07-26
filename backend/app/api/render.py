@@ -141,6 +141,28 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
 
         if status == "error":
             print(f"[RENDER API] ❌ ОШИБКА РЕНДЕРА REMOTION:\n" + "\n".join(output_logs[-20:]))
+            
+            # Извлекаем понятный текст ошибки для UI
+            error_msg = "Неизвестная ошибка рендера. Смотрите консоль."
+            for line in output_logs:
+                if "Error:" in line or "Error " in line or "Exception" in line:
+                    error_msg = line.strip()
+                    break
+
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast({
+                    "type": "RENDER_PROGRESS",
+                    "payload": {
+                        "task_id": task_id,
+                        "progress": 100,
+                        "status": "error",
+                        "target_id": req.target_id,
+                        "target": req.target,
+                        "error": error_msg
+                    }
+                }), loop
+            )
+            return
 
         final_file_path = ""
         if status == "done" and temp_output.exists():
@@ -241,7 +263,8 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                     "progress": 100,
                     "status": "error",
                     "target_id": req.target_id,
-                    "target": req.target
+                    "target": req.target,
+                    "error": f"Internal Error: {str(e)}"
                 }
             }), loop
         )

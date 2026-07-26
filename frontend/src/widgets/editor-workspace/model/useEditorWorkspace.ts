@@ -753,7 +753,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   }
 
   const renderSingleScenePromise = (sceneId: string, code: string, audioPath: string, projectPath: string, signal: AbortSignal): Promise<string | null> => {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       fetch(`${API}/api/v1/render/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -769,7 +769,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       })
         .then(res => res.json())
         .then(data => {
-          if (!data.task_id) return resolve(null)
+          if (!data.task_id) return reject(new Error('Нет task_id'))
           currentTaskIdRef.current = data.task_id
           renderListenersRef.current.set(data.task_id, (payload: RenderPayload) => {
             if (payload.status === 'done') {
@@ -779,13 +779,13 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
             } else if (payload.status === 'error') {
               renderListenersRef.current.delete(data.task_id)
               currentTaskIdRef.current = null
-              resolve(null)
+              reject(new Error(payload.error || 'Неизвестная ошибка рендера'))
             }
           })
         })
         .catch(e => {
           if (e.name !== 'AbortError') console.error('Ошибка вызова рендера', e)
-          resolve(null)
+          reject(e)
         })
     })
   }
@@ -827,7 +827,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
             setIsRendering(false)
             setRenderType(null)
             currentTaskIdRef.current = null
-            showNotification('Ошибка рендера', 'error')
+            showNotification(`Ошибка рендера: ${payload.error || 'Смотри консоль'}`, 'error')
           }
         })
       }
@@ -870,11 +870,17 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           codeToRender = `import { AbsoluteFill } from 'remotion';\nexport const compositionConfig = { id: 'BlackScreen', durationInFrames: ${durationInFrames}, fps: ${fps}, width: ${width}, height: ${height} };\nexport default () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;`
         }
 
-        const sceneVideoPath = await renderSingleScenePromise(scene.id, codeToRender, getAudioPathForScene(project, scene), projectPath, abortControllerRef.current.signal)
-        if (sceneVideoPath) {
-          renderedSceneVideoPaths.push(sceneVideoPath)
-        } else if (!abortControllerRef.current.signal.aborted) {
-          showNotification(`Сбой рендера сцены "${scene.title}"`, 'error')
+        try {
+          const sceneVideoPath = await renderSingleScenePromise(scene.id, codeToRender, getAudioPathForScene(project, scene), projectPath, abortControllerRef.current.signal)
+          if (sceneVideoPath) {
+            renderedSceneVideoPaths.push(sceneVideoPath)
+          }
+        } catch (err: any) {
+          if (!abortControllerRef.current.signal.aborted) {
+            showNotification(`Сбой сборки "${scene.title}": ${err.message}`, 'error')
+          }
+          setIsRendering(false)
+          setRenderType(null)
           return
         }
       }
