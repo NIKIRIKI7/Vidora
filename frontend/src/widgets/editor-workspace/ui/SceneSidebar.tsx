@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ProjectSettings } from '@entities/project'
+import { useSettingsStore } from '@entities/project'
 import { Icon, SceneCard, Input, Button, Spinner } from '@shared/ui'
 import { API, getProjectPath, isCodeDirty, isAudioDirty } from '../lib/helpers'
 
@@ -15,17 +16,24 @@ interface Props {
   onDragStart: (idx: number) => () => void
   onDrop: (idx: number) => () => void
   onShowNotification: (msg: string, type?: 'success'|'error'|'info') => void
+  onExportScene: (id: string) => void
+  onReplaceScene: (id: string) => void
+  onFixAudioPacing?: (id: string) => void
+  onCopyFixPacingPrompt?: (id: string, currentPacing: number, threshold: number) => void
 }
 
 export const SceneSidebar = ({
   project, activeSceneId, audioLoaded, onSelectScene, onAddScene, onDeleteScene,
   onUpdateTitle, onToggleIgnoreTsx, onDragStart, onDrop, onShowNotification,
+  onExportScene, onReplaceScene, onFixAudioPacing, onCopyFixPacingPrompt,
 }: Props) => {
   const [tab, setTab] = useState<'script' | 'stock'>('script')
   const [stockQuery, setStockQuery] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [stockResults, setStockResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
+
+  const { visualPacingThreshold, audioSilenceThreshold, audioWpmMin } = useSettingsStore()
 
   const handleSearchStock = async () => {
     if (!stockQuery) return
@@ -71,6 +79,30 @@ export const SceneSidebar = ({
               const codeDirty = isCodeDirty(project, scene)
               const audioDirty = scene.fragments.some(isAudioDirty)
 
+              // ponytail: visual & audio boredom indicators derived from existing Whisper timings
+              const wordCount = scene.fragments.reduce((acc, f) => acc + f.text.trim().split(/\s+/).filter(Boolean).length, 0)
+              const sceneDuration = scene.fragments[scene.fragments.length - 1]?.endTime
+                ? scene.fragments[scene.fragments.length - 1].endTime! - (scene.fragments[0].startTime || 0)
+                : Math.max(wordCount / 2.5, 1.0)
+              
+              const pacing = sceneDuration / Math.max(1, scene.fragments.length)
+              const isVisualBoring = pacing > visualPacingThreshold
+
+              let maxSilence = 0
+              let speechTime = 0
+              for (let i = 0; i < scene.fragments.length; i++) {
+                const f = scene.fragments[i]
+                if (f.startTime !== undefined && f.endTime !== undefined) {
+                  speechTime += (f.endTime - f.startTime)
+                  if (i > 0 && scene.fragments[i - 1].endTime !== undefined) {
+                    maxSilence = Math.max(maxSilence, f.startTime - scene.fragments[i - 1].endTime!)
+                  }
+                }
+              }
+              
+              const wpm = speechTime > 0 ? (wordCount / (speechTime / 60)) : (wordCount / (sceneDuration / 60))
+              const isAudioBoring = hasSync && (maxSilence > audioSilenceThreshold || (wpm < audioWpmMin && wpm > 0))
+
               return (
                 <div key={scene.id} draggable onDragStart={onDragStart(idx)} onDragOver={e => e.preventDefault()} onDrop={onDrop(idx)} onClick={() => onSelectScene(scene.id)} className="flex flex-col gap-1 group relative">
                   <Icon name="drag_indicator" className="text-[12px] text-on-surface-variant/30 absolute -left-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
@@ -78,7 +110,11 @@ export const SceneSidebar = ({
                     <input className="text-xs font-semibold bg-transparent text-primary outline-none focus:border-b border-primary/50 w-full" value={scene.title} onChange={e => onUpdateTitle(scene.id, e.target.value, scene.timecode)} />
                     <div className="flex items-center gap-1">
                       <button className={`text-[11px] p-1 rounded transition-colors ${isIgnored ? 'text-error font-medium' : 'text-on-surface-variant/40 hover:text-white'}`} onClick={e => { e.stopPropagation(); onToggleIgnoreTsx(scene.id) }} title={isIgnored ? 'TSX игнорируется (черный экран)' : 'Нажмите, чтобы игнорировать TSX'}>{isIgnored ? '⬛ Игнор' : '⬛'}</button>
-                      <button className="text-on-surface-variant hover:text-error opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={e => { e.stopPropagation(); onDeleteScene(scene.id) }} title="Удалить сцену"><Icon name="delete" className="text-[14px]" /></button>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+                        <button className="text-on-surface-variant hover:text-primary transition-colors p-1" onClick={e => { e.stopPropagation(); onExportScene(scene.id) }} title="Экспорт сцены (Markdown)"><Icon name="content_copy" className="text-[14px]" /></button>
+                        <button className="text-on-surface-variant hover:text-primary transition-colors p-1" onClick={e => { e.stopPropagation(); onReplaceScene(scene.id) }} title="Заменить сцену из буфера (Markdown)"><Icon name="content_paste" className="text-[14px]" /></button>
+                        <button className="text-on-surface-variant hover:text-error transition-colors p-1" onClick={e => { e.stopPropagation(); onDeleteScene(scene.id) }} title="Удалить сцену"><Icon name="delete" className="text-[14px]" /></button>
+                      </div>
                     </div>
                   </div>
                   <SceneCard scene={`Сцена ${idx + 1}`} time={scene.timecode} description={scene.fragments[0]?.text.substring(0, 50) + '...'} isActive={isSceneActive} />
@@ -97,6 +133,24 @@ export const SceneSidebar = ({
                       <span className="text-[10px] px-1.5 py-0.5 rounded border border-warning/30 text-warning bg-warning/10 font-medium" title="Код устарел">⚠️ TSX</span>
                     ) : (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasCode ? 'border-accent/40 text-accent bg-accent/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>💻 TSX</span>
+                    )}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors font-medium ${isVisualBoring ? 'border-error/40 text-error bg-error/10' : 'border-secondary/40 text-secondary bg-secondary/10'}`} title={`Визуал: 1 смена кадра в ${pacing.toFixed(1)}с (Порог: ${visualPacingThreshold}с). ${isVisualBoring ? 'Разбейте текст на больше фрагментов.' : 'Отличный темп!'}`}>
+                      {isVisualBoring ? '🐌 Визуал' : '🔥 Визуал'}
+                    </span>
+                    {isVisualBoring && (
+                      <button onClick={(e) => { e.stopPropagation(); onCopyFixPacingPrompt?.(scene.id, pacing, visualPacingThreshold) }} className="text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium" title="Скопировать промпт для ИИ, чтобы он автоматически добавил динамики">
+                        ✨ ИИ
+                      </button>
+                    )}
+                    {hasSync && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors font-medium ${isAudioBoring ? 'border-warning/40 text-warning bg-warning/10' : 'border-secondary/40 text-secondary bg-secondary/10'}`} title={`Тишина: ${maxSilence.toFixed(1)}с (Порог: ${audioSilenceThreshold}с). Темп: ${Math.round(wpm)} WPM (Мин: ${audioWpmMin}).`}>
+                        {isAudioBoring ? '🐌 Аудио' : '🔥 Аудио'}
+                      </span>
+                    )}
+                    {isAudioBoring && (
+                      <button onClick={(e) => { e.stopPropagation(); onFixAudioPacing?.(scene.id) }} className="text-[10px] px-1.5 py-0.5 rounded border border-accent/40 text-accent bg-accent/10 hover:bg-accent/20 transition-colors flex items-center gap-1 font-medium" title="Автоматически вырезать тишину и пересинхронизировать тайминги">
+                        ✂️ Исправить
+                      </button>
                     )}
                   </div>
                 </div>

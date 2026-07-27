@@ -119,3 +119,22 @@ export const serializeProjectToMarkdown = (project: ProjectSettings): string => 
 
   return `${yaml}\n${body}`
 }
+
+export const serializeSceneToMarkdown = (s: Scene): string => {
+  const header = `[${s.title}] (${s.timecode || '00:00:00'})`
+  const frags = s.fragments.map(f => f.visualNote ? `*(${f.visualNote})* ${f.text}` : f.text).join('\n')
+  return `${header}\n${frags}`
+}
+
+export const parseSceneMarkdown = (md: string): Omit<Scene, 'id'> | null => {
+  const match = /\[(.*?)\]\s*\((.*?)\)([\s\S]*)/.exec(md.trim())
+  if (!match) return null
+  const fragments: SceneFragment[] = []
+  const fragmentRegex = /\*\((.*?)\)\*\s*([^*[]+)/g
+  let fragMatch
+  while ((fragMatch = fragmentRegex.exec(match[3].trim())) !== null) {
+    fragments.push({ id: crypto.randomUUID(), visualNote: fragMatch[1].trim(), text: fragMatch[2].trim().replace(/\n/g, ' ') })
+  }
+  if (fragments.length === 0 && match[3].trim()) fragments.push({ id: crypto.randomUUID(), visualNote: 'A-roll: Без ремарок', text: match[3].trim() })
+  return { title: match[1].trim(), timecode: match[2].trim(), fragments }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { CustomVoice, ProjectSettings, Scene, SceneFragment, VideoFormat } from '@entities/project'
-import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull, useProjectStore, useSettingsStore } from '@entities/project'
+import { useNotificationStore, serializeProjectToMarkdown, parseMarkdownFull, useProjectStore, useSettingsStore, serializeSceneToMarkdown, parseSceneMarkdown } from '@entities/project'
 import { generateRemotionPrompt } from '../lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import {
@@ -78,6 +78,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const ttsEngine = useSettingsStore(s => s.ttsEngine)
   const llmEngine = useSettingsStore(s => s.llmEngine)
   const apiKeys = useSettingsStore(s => s.apiKeys)
+  const globalPrompts = useSettingsStore(s => s.globalPrompts)
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
   const { renderProgress, setRenderProgress, renderListenersRef } = useRenderWebSocket()
@@ -189,13 +190,13 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     showNotification('Аудио сброшено для всех сцен', 'info')
   }
 
-  const handleProcessAudio = async (action: string, scope: 'scene' | 'project') => {
+  const handleProcessAudio = async (action: string, scope: 'scene' | 'project', targetSceneId?: string) => {
     setIsGeneratingAudio(true)
     abortControllerRef.current = new AbortController()
     let successCount = 0
     try {
       const projectPath = getProjectPath(project)
-      const targetScenes = scope === 'scene' ? (activeScene ? [activeScene] : []) : project.scenes
+      const targetScenes = scope === 'scene' ? (targetSceneId ? project.scenes.filter(s => s.id === targetSceneId) : (activeScene ? [activeScene] : [])) : project.scenes
       if (targetScenes.length === 0) { showNotification('Нет сцен для обработки', 'error'); return }
 
       for (const scene of targetScenes) {
@@ -347,6 +348,16 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     }))
     onUpdateProject({ ...project, scenes: updatedScenes })
     showNotification('Синхронизация сброшена для всех сцен', 'info')
+  }
+
+  const handleFixAudioPacing = async (sceneId: string) => {
+    await handleProcessAudio('silero_vad', 'scene', sceneId)
+    if (abortControllerRef.current?.signal.aborted) return
+    const scene = project.scenes.find(s => s.id === sceneId)
+    if (scene) {
+      showNotification('Синхронизация новых таймингов...', 'info')
+      await runSyncAllScenes([scene])
+    }
   }
 
   const handleUnloadVram = async () => {
@@ -863,6 +874,43 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     }
   }
 
+  const handleCopyFixPacingPrompt = (sceneId: string, currentPacing: number, threshold: number) => {
+    const scene = project.scenes.find(s => s.id === sceneId)
+    if (!scene) return
+    const md = serializeSceneToMarkdown(scene)
+    const template = project.promptOverrides?.fixPacing || globalPrompts.fixPacing || ''
+    const prompt = template
+      .replace(/\{\{CURRENT_PACING\}\}/g, currentPacing.toFixed(1))
+      .replace(/\{\{THRESHOLD\}\}/g, threshold.toString())
+      .replace(/\{\{SCENE_MARKDOWN\}\}/g, md)
+    
+    navigator.clipboard.writeText(prompt)
+    showNotification('Промпт для ИИ скопирован в буфер!', 'success')
+  }
+
+  const handleExportScene = (sceneId: string) => {
+    const scene = project.scenes.find(s => s.id === sceneId)
+    if (!scene) return
+    navigator.clipboard.writeText(serializeSceneToMarkdown(scene))
+    showNotification('Сцена скопирована в буфер (Markdown)', 'success')
+  }
+
+  const handleReplaceScene = async (sceneId: string) => {
+    try {
+      const text = await navigator.clipboard.readText()
+      const newSceneData = parseSceneMarkdown(text)
+      if (!newSceneData) {
+        showNotification('Буфер не содержит корректной сцены [Название](00:00)', 'error')
+        return
+      }
+      const newScene: Scene = { ...newSceneData, id: crypto.randomUUID() }
+      onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === sceneId ? newScene : s) })
+      showNotification('Сцена успешно заменена', 'success')
+    } catch (e) {
+      showNotification('Ошибка чтения буфера обмена', 'error')
+    }
+  }
+
   const handleCaptureFrame = async () => {
     if (!videoRef.current) return
     const canvas = document.createElement('canvas')
@@ -933,9 +981,10 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setUseWhisper, setAutoOffloadVram, handleSceneDragStart, handleSceneDrop, handleFragDragStart, handleFragDrop,
     toggleIgnoreTsx, handleAddScene, handleDeleteScene, handleUpdateSceneTitle, handleAddFragment, handleDeleteFragment,
     handleFragmentTextChange, handleUpdateCode, handleCodeHistory, handleResetAllSync, handleResetAudio, handleProcessAudio,
-    handleUnloadVram, handleUploadRefVoiceAudio, handleSaveCustomVoice, handleDeleteCustomVoice, runVoiceGenAllScenes,
+    handleUnloadVram, handleFixAudioPacing, handleUploadRefVoiceAudio, handleSaveCustomVoice, handleDeleteCustomVoice, runVoiceGenAllScenes,
     runVoiceGenFragment, runSyncAllScenes, runCodeGen, runRender, runProjectRender, handleFullAutoPipeline, handleCancelAll,
     handleExportProject, showNotification, handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll,
     handleNudgeTiming, handleCaptureFrame, ttsEngine, llmEngine, apiKeys,
+    handleExportScene, handleReplaceScene, handleCopyFixPacingPrompt,
   }
 }

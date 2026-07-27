@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { ProjectSettings, ApiKeys } from '@entities/project'
+import type { ProjectSettings, ApiKeys, Resolution, VideoFormat } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
@@ -43,7 +43,7 @@ export const EditorWorkspace = ({
   const model = useEditorWorkspace({ project, onUpdateProject })
   
   const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines'>('project')
-  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey } = useSettingsStore()
+  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin } = useSettingsStore()
   const isLocalPrompts = project.promptOverrides !== undefined
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
@@ -91,6 +91,10 @@ export const EditorWorkspace = ({
           onDragStart={model.handleSceneDragStart}
           onDrop={model.handleSceneDrop}
           onShowNotification={model.showNotification}
+          onExportScene={model.handleExportScene}
+          onReplaceScene={model.handleReplaceScene}
+          onFixAudioPacing={model.handleFixAudioPacing}
+          onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
         />
         <CenterCanvas
           centerView={model.centerView}
@@ -195,6 +199,41 @@ export const EditorWorkspace = ({
         <div className="flex flex-col gap-4 pb-2">
           {settingsTab === 'project' ? (
             <>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <FieldGroup label="Формат видео">
+                  <Select value={project.format} onChange={e => onUpdateProject({ ...project, format: e.target.value as VideoFormat })}>
+                    <option value="16:9">YouTube (16:9)</option>
+                    <option value="9:16">Shorts / Reels (9:16)</option>
+                  </Select>
+                </FieldGroup>
+                <FieldGroup label="Разрешение">
+                  <Select value={project.resolution} onChange={e => onUpdateProject({ ...project, resolution: e.target.value as Resolution })}>
+                    <option value="1080p">Full HD (1080p)</option>
+                    <option value="1440p">2K (1440p)</option>
+                    <option value="2160p">4K (2160p)</option>
+                  </Select>
+                </FieldGroup>
+                <FieldGroup label="FPS">
+                  <Select value={project.montage?.fps || '30'} onChange={e => onUpdateProject({ ...project, montage: { ...project.montage, fps: e.target.value as '24'|'30'|'60' } })}>
+                    <option value="24">24 FPS</option>
+                    <option value="30">30 FPS</option>
+                    <option value="60">60 FPS</option>
+                  </Select>
+                </FieldGroup>
+              </div>
+              <div className="text-[10px] font-mono text-on-surface-variant mt-2 uppercase tracking-wider">Индикаторы удержания (Pacing)</div>
+              <div className="grid grid-cols-3 gap-4 mb-4 bg-surface-container-lowest/50 p-3 rounded-xl border border-white/5">
+                <FieldGroup label={`Визуал (<= ${visualPacingThreshold.toFixed(1)}с/кадр)`}>
+                  <Slider min={1} max={10} step={0.5} value={visualPacingThreshold} onChange={e => setVisualPacingThreshold(Number(e.target.value))} />
+                </FieldGroup>
+                <FieldGroup label={`Тишина (<= ${audioSilenceThreshold.toFixed(1)}с)`}>
+                  <Slider min={0.5} max={5} step={0.5} value={audioSilenceThreshold} onChange={e => setAudioSilenceThreshold(Number(e.target.value))} />
+                </FieldGroup>
+                <FieldGroup label={`Темп (>= ${audioWpmMin} WPM)`}>
+                  <Slider min={60} max={160} step={5} value={audioWpmMin} onChange={e => setAudioWpmMin(Number(e.target.value))} />
+                </FieldGroup>
+              </div>
+
               <FieldGroup label="Название видео (Title)">
                 <Input value={project.metadata?.title || ''} onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, title: e.target.value } })} />
               </FieldGroup>
@@ -287,7 +326,7 @@ export const EditorWorkspace = ({
               
               <div className="text-[10px] text-on-surface-variant bg-surface-container-lowest/50 border border-white/5 p-3 rounded-lg leading-relaxed font-mono">
                 <span className="text-primary">Доступные переменные:</span><br/>
-                {`{{FORMAT}}, {{WIDTH}}, {{HEIGHT}}, {{DURATION}}, {{DURATION_FRAMES}}, {{FPS}}, {{COLORS}}, {{SCENE_TITLE}}, {{FRAGMENTS}}, {{VISUAL_NOTE}}, {{TEXT}}, {{SCENES_LIST}}`}
+                {`{{FORMAT}}, {{WIDTH}}, {{HEIGHT}}, {{DURATION}}, {{DURATION_FRAMES}}, {{FPS}}, {{COLORS}}, {{SCENE_TITLE}}, {{FRAGMENTS}}, {{VISUAL_NOTE}}, {{TEXT}}, {{SCENES_LIST}}, {{CURRENT_PACING}}, {{THRESHOLD}}, {{SCENE_MARKDOWN}}`}
               </div>
 
               <FieldGroup label="Промпт для Сцены">
@@ -321,8 +360,19 @@ export const EditorWorkspace = ({
                   spellCheck={false}
                   value={isLocalPrompts ? project.promptOverrides?.project : globalPrompts.project}
                   onChange={e => isLocalPrompts 
-                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, project: e.target.value } })
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, project: e.target.value } as any })
                     : setGlobalPrompts({ project: e.target.value })}
+                />
+              </FieldGroup>
+              <FieldGroup label="Промпт для исправления динамики (Pacing)">
+                <textarea
+                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-[12px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
+                  rows={4}
+                  spellCheck={false}
+                  value={isLocalPrompts ? project.promptOverrides?.fixPacing : globalPrompts.fixPacing}
+                  onChange={e => isLocalPrompts 
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, fixPacing: e.target.value } as any })
+                    : setGlobalPrompts({ fixPacing: e.target.value })}
                 />
               </FieldGroup>
 

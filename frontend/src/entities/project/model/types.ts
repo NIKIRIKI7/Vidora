@@ -73,6 +73,7 @@ export interface PromptTemplates {
   scene: string
   fragment: string
   project: string
+  fixPacing: string
 }
 
 export interface ProjectSettings {

@@ -98,7 +98,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
 export const DEFAULT_PROMPTS: PromptTemplates = {
   scene: `# Remotion TSX Video Generator\nGenerate production-ready TSX files.\n\n## Settings\n- Format: {{FORMAT}}\n- Resolution: {{WIDTH}}x{{HEIGHT}}\n- Duration: {{DURATION}}s\n- FPS: {{FPS}}\n- Colors: {{COLORS}}\n\n## Code Structure\n\`\`\`tsx\nimport React from 'react';\nimport { useCurrentFrame, useVideoConfig, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';\n\nconst compositionConfig = { id: 'Scene', durationInFrames: {{DURATION_FRAMES}}, fps: {{FPS}}, width: {{WIDTH}}, height: {{HEIGHT}} };\n// ...\n\`\`\`\n\n## Rules\n1. ALWAYS use Easing.bezier().\n2. NO useState/useEffect.\n3. Use percentages (e.g. width: '100%') or useVideoConfig() to make layouts responsive to both 16:9 and 9:16.\n\n## [СЦЕНА]\nНазвание: {{SCENE_TITLE}}\nТаймкод: {{SCENE_TIMECODE}}\n\n{{FRAGMENTS}}\n\nGenerate ONLY the complete TSX code.`,
   fragment: `# Remotion TSX Video Generator (Fragment)\nGenerate production-ready TSX files.\n\n## Settings\n- Format: {{FORMAT}} ({{WIDTH}}x{{HEIGHT}})\n- Duration: {{DURATION}}s\n- FPS: {{FPS}}\n- Colors: {{COLORS}}\n\n## Code Structure\n\`\`\`tsx\nimport React from 'react';\nimport { useCurrentFrame, useVideoConfig, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';\nconst compositionConfig = { id: 'Fragment', durationInFrames: {{DURATION_FRAMES}}, fps: {{FPS}}, width: {{WIDTH}}, height: {{HEIGHT}} };\n\`\`\`\n\n## [ФРАГМЕНТ]\nСцена: {{SCENE_TITLE}}\nВизуал: {{VISUAL_NOTE}}\nСуфлер: "{{TEXT}}"\n\nGenerate ONLY the complete TSX code.`,
-  project: `# Remotion TSX Video Generator (Project)\nGenerate production-ready TSX files.\n\n## Settings\n- Format: {{FORMAT}}\n- FPS: {{FPS}}\n- Colors: {{COLORS}}\n\n## [СЦЕНЫ ПРОЕКТА]\n{{SCENES_LIST}}\n\nGenerate ONLY the complete TSX code.`
+  project: `# Remotion TSX Video Generator (Project)\nGenerate production-ready TSX files.\n\n## Settings\n- Format: {{FORMAT}}\n- FPS: {{FPS}}\n- Colors: {{COLORS}}\n\n## [СЦЕНЫ ПРОЕКТА]\n{{SCENES_LIST}}\n\nGenerate ONLY the complete TSX code.`,
+  fixPacing: `Эта сцена слишком скучная и медленная (кадр меняется лишь раз в {{CURRENT_PACING}} сек, а нужно не реже чем раз в {{THRESHOLD}} сек).\nПожалуйста, перепиши эту сцену, чтобы она стала динамичнее. Разбей длинные фрагменты текста на более короткие и добавь к каждому новому фрагменту визуальную ремарку *(В таких скобках)*. Текст озвучки менять не нужно, просто добавь больше смен кадра (B-roll, зум, анимация).\n\nИсходная сцена:\n{{SCENE_MARKDOWN}}\n\nВерни только исправленный Markdown-код сцены:`
 }
 
 interface ApiKeys {
@@ -117,6 +118,12 @@ interface SettingsStore {
   setTtsEngine: (engine: string) => void
   setLlmEngine: (engine: string) => void
   setApiKey: (provider: keyof ApiKeys, key: string) => void
+  visualPacingThreshold: number
+  audioSilenceThreshold: number
+  audioWpmMin: number
+  setVisualPacingThreshold: (v: number) => void
+  setAudioSilenceThreshold: (v: number) => void
+  setAudioWpmMin: (v: number) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -131,7 +138,20 @@ export const useSettingsStore = create<SettingsStore>()(
       setTtsEngine: (engine) => set({ ttsEngine: engine }),
       setLlmEngine: (engine) => set({ llmEngine: engine }),
       setApiKey: (provider, key) => set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: key } })),
+      visualPacingThreshold: 4.0,
+      audioSilenceThreshold: 2.0,
+      audioWpmMin: 110,
+      setVisualPacingThreshold: (v) => set({ visualPacingThreshold: v }),
+      setAudioSilenceThreshold: (v) => set({ audioSilenceThreshold: v }),
+      setAudioWpmMin: (v) => set({ audioWpmMin: v }),
     }),
-    { name: 'vidora-settings' }
+    {
+      name: 'vidora-settings',
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as object),
+        globalPrompts: { ...DEFAULT_PROMPTS, ...(persisted as any)?.globalPrompts },
+      }),
+    }
   )
 )
