@@ -3,13 +3,13 @@ import type { ProjectSettings, ApiKeys, Resolution, VideoFormat } from '@entitie
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
-import { useEditorWorkspace } from '../model/useEditorWorkspace'
+import { useEditorWorkspace } from '@widgets/editor-workspace/model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
 import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
 import { VoiceboxModal } from './VoiceboxModal'
-import { API } from '../lib/helpers'
+import { API } from '@widgets/editor-workspace/lib/helpers'
 
 // ponytail: flat model DB, no class hierarchy
 const AI_MODELS_DB = {
@@ -56,7 +56,7 @@ export const EditorWorkspace = ({
     setPulling(engine)
     try {
       await fetch(`${API}/api/v1/system/pull`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine }) })
-    } catch { /* server will handle pull async */ }
+    } catch { /* ignore */ }
     setTimeout(() => setPulling(null), 2000)
   }, [])
 
@@ -360,7 +360,7 @@ export const EditorWorkspace = ({
                   spellCheck={false}
                   value={isLocalPrompts ? project.promptOverrides?.project : globalPrompts.project}
                   onChange={e => isLocalPrompts 
-                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, project: e.target.value } as any })
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, project: e.target.value } })
                     : setGlobalPrompts({ project: e.target.value })}
                 />
               </FieldGroup>
@@ -371,7 +371,7 @@ export const EditorWorkspace = ({
                   spellCheck={false}
                   value={isLocalPrompts ? project.promptOverrides?.fixPacing : globalPrompts.fixPacing}
                   onChange={e => isLocalPrompts 
-                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, fixPacing: e.target.value } as any })
+                    ? onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, fixPacing: e.target.value } })
                     : setGlobalPrompts({ fixPacing: e.target.value })}
                 />
               </FieldGroup>

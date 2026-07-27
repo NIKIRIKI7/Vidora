@@ -1,4 +1,4 @@
-export interface ThemeColors {
+export interface AppColors {
   primary: string
   secondary: string
   background: string
@@ -9,7 +9,7 @@ export interface ThemeColors {
 
 export interface ThemePreset {
   name: string
-  colors: ThemeColors
+  colors: AppColors
 }
 
 export const THEME_PRESETS: ThemePreset[] = [

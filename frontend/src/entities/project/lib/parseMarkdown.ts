@@ -1,4 +1,5 @@
-import type { Scene, ProjectSettings, SceneFragment, AppColors, FPS } from '../model/types'
+import type { Scene, ProjectSettings, SceneFragment, FPS } from '../model/types'
+import type { AppColors } from '@shared/config'
 
 export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> => {
   const result: Partial<ProjectSettings> = {
@@ -41,10 +42,12 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
     if (fpsMatch) result.montage!.fps = fpsMatch[1] as FPS
 
     const extractColor = (key: keyof AppColors) => {
-      const match = yamlStr.match(new RegExp(`${key}:\\s*"([^"]+)"`))
-      if (match) (result.montage!.colors as unknown as Record<string, string>)[key] = match[1]
+      const k = String(key)
+      const match = yamlStr.match(new RegExp(`${k}:\\s*"([^"]+)"`))
+      if (match) (result.montage!.colors as unknown as Record<string, string>)[k] = match[1]
     }
-    ;(['primary', 'secondary', 'background', 'surface', 'accent', 'text'] as const).forEach(extractColor)
+    const colorKeys: (keyof AppColors)[] = ['primary', 'secondary', 'background', 'surface', 'accent', 'text']
+    colorKeys.forEach(k => extractColor(k))
   }
 
   const bodyText = markdown.replace(/^---\n[\s\S]+?\n---/, '')
@@ -67,8 +70,8 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
         id: crypto.randomUUID(),
         visualNote: fragMatch[1].trim(),
         text: fragMatch[2].trim().replace(/\n/g, ' '),
-        startTime: undefined,
-        endTime: undefined,
+        startTime: null,
+        endTime: null,
       })
     }
 

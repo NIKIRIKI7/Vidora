@@ -1,24 +1,22 @@
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { generateRemotionPrompt } from './generateRemotionPrompt'
 
-export const API = 'http://127.0.0.1:8355'
-
-export const getProjectPath = (p: ProjectSettings) => sanitizeFilename(p.name || 'vidora_projects')
+export const pad = (num: number) => num.toString().padStart(2, '0')
+export const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
 
 export const sanitizeFilename = (str: string) => str.trim().replace(/[^a-zA-Z0-9а-яА-Я_\- ]/g, '_')
+export const getProjectPath = (p: ProjectSettings) => sanitizeFilename(p.name || 'vidora_projects')
 
 export const formatTimecode = (totalSeconds: number): string => {
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = Math.floor(totalSeconds % 60)
-  const pad = (num: number) => num.toString().padStart(2, '0')
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
 }
 
 export const formatShortTimecode = (sec: number): string => {
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
-  const pad = (n: number) => n.toString().padStart(2, '0')
   return `${m}:${pad(s)}`
 }
 
@@ -33,13 +31,8 @@ export const parseTcString = (str: string): number | null => {
 }
 
 export const getWhisperSyncedDuration = (fragments: SceneFragment[]): number | null => {
-  const syncedEnds = fragments
-    .map(f => f.endTime)
-    .filter((e): e is number => typeof e === 'number' && e > 0)
-  if (syncedEnds.length > 0) {
-    return Math.max(...syncedEnds)
-  }
-  return null
+  const syncedEnds = fragments.map(f => f.endTime).filter((e): e is number => typeof e === 'number' && e > 0)
+  return syncedEnds.length > 0 ? Math.max(...syncedEnds) : null
 }
 
 export const getSceneDurationFromTimecode = (timecodeStr: string): number | null => {
@@ -48,9 +41,7 @@ export const getSceneDurationFromTimecode = (timecodeStr: string): number | null
   if (rangeMatch) {
     const start = parseTcString(rangeMatch[1])
     const end = parseTcString(rangeMatch[2])
-    if (start !== null && end !== null && end > start) {
-      return end - start
-    }
+    if (start !== null && end !== null && end > start) return end - start
   }
   return null
 }
@@ -61,31 +52,22 @@ export const getVisualNoteDuration = (fragments: SceneFragment[]): number | null
     const match = f.visualNote?.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(\d{1,2}:\d{2}(?::\d{2})?)/)
     if (match) {
       const endSec = parseTcString(match[2])
-      if (endSec !== null && endSec > maxVisualNoteEnd) {
-        maxVisualNoteEnd = endSec
-      }
+      if (endSec !== null && endSec > maxVisualNoteEnd) maxVisualNoteEnd = endSec
     }
   })
-  if (maxVisualNoteEnd > 0) {
-    return maxVisualNoteEnd
-  }
-  return null
+  return maxVisualNoteEnd > 0 ? maxVisualNoteEnd : null
 }
 
 export const getAudioPathForScene = (project: ProjectSettings, scene: Scene): string => {
   const projectPath = getProjectPath(project)
   const firstFragAudio = scene.fragments.find(f => f.audioFileName)?.audioFileName
   if (firstFragAudio) {
-    if (firstFragAudio.includes('/') || firstFragAudio.includes('\\') || firstFragAudio.includes(':')) {
-      return firstFragAudio
-    }
+    if (firstFragAudio.includes('/') || firstFragAudio.includes('\\') || firstFragAudio.includes(':')) return firstFragAudio
     return `${projectPath}/assets/voice/${firstFragAudio}`
   }
-  const safeTitle = sanitizeFilename(scene.title)
-  return `${projectPath}/assets/voice/Scene_${safeTitle}_${scene.id.slice(0, 6)}.wav`
+  return `${projectPath}/assets/voice/Scene_${sanitizeFilename(scene.title)}_${scene.id.slice(0, 6)}.wav`
 }
 
-// ponytail: simple string hash, collision risk is theoretical for this use case
 export const hashCode = (str: string) => {
   let hash = 0
   for (let i = 0, len = str.length; i < len; i++) {
@@ -107,4 +89,16 @@ export const isCodeDirty = (project: ProjectSettings, scene: Scene) => {
   if (!scene.remotionCode) return true
   if (scene.lastCodeHash && scene.lastCodeHash !== hashCode(generateRemotionPrompt(project, scene))) return true
   return false
+}
+
+export const concatSceneAudio = async (projectPath: string, title: string, id: string, audioPaths: string[], signal?: AbortSignal) => {
+  const sceneAudioPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(title)}_${id.slice(0, 6)}.wav`
+  const res = await fetch(`${API}/api/v1/audio/concat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audio_paths: audioPaths, output_path: sceneAudioPath }),
+    signal,
+  })
+  if (!res.ok) throw new Error('Concat failed')
+  return sceneAudioPath
 }

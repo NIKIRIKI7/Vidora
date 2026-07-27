@@ -1,5 +1,5 @@
 import type { SelectHTMLAttributes } from 'react'
-import { Icon } from '../icon'
+import { Icon } from '@shared/ui'
 
 export const Select = ({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) => (
   <div className="relative">

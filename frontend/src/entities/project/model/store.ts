@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { ProjectSettings, PromptTemplates } from './types'
+import { persist, type PersistOptions } from 'zustand/middleware'
+import type { ProjectSettings, PromptTemplates, ApiKeys } from './types'
 
 interface ProjectStore {
   projects: ProjectSettings[]
@@ -16,7 +16,7 @@ interface ProjectStore {
 
 export const useProjectStore = create<ProjectStore>()(
   persist(
-    (set) => ({
+    (set): ProjectStore => ({
       projects: [],
       activeProjectId: null,
       history: {},
@@ -78,7 +78,7 @@ export const useProjectStore = create<ProjectStore>()(
         activeProjectId: state.activeProjectId,
         history: state.history,
       }),
-    }
+    } satisfies PersistOptions<ProjectStore, Pick<ProjectStore, 'projects' | 'activeProjectId' | 'history'>>
   )
 )
 
@@ -102,12 +102,6 @@ export const DEFAULT_PROMPTS: PromptTemplates = {
   fixPacing: `Эта сцена слишком скучная и медленная (кадр меняется лишь раз в {{CURRENT_PACING}} сек, а нужно не реже чем раз в {{THRESHOLD}} сек).\nПожалуйста, перепиши эту сцену, чтобы она стала динамичнее. Разбей длинные фрагменты текста на более короткие и добавь к каждому новому фрагменту визуальную ремарку *(В таких скобках)*. Текст озвучки менять не нужно, просто добавь больше смен кадра (B-roll, зум, анимация).\n\nИсходная сцена:\n{{SCENE_MARKDOWN}}\n\nВерни только исправленный Markdown-код сцены:`
 }
 
-interface ApiKeys {
-  elevenlabs?: string
-  anthropic?: string
-  openai?: string
-}
-
 interface SettingsStore {
   globalPrompts: PromptTemplates
   setGlobalPrompts: (prompts: Partial<PromptTemplates>) => void
@@ -128,7 +122,7 @@ interface SettingsStore {
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set) => ({
+    (set): SettingsStore => ({
       globalPrompts: DEFAULT_PROMPTS,
       setGlobalPrompts: (p) => set((s) => ({ globalPrompts: { ...s.globalPrompts, ...p } })),
       resetGlobalPrompts: () => set({ globalPrompts: DEFAULT_PROMPTS }),
@@ -150,8 +144,8 @@ export const useSettingsStore = create<SettingsStore>()(
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as object),
-        globalPrompts: { ...DEFAULT_PROMPTS, ...(persisted as any)?.globalPrompts },
+        globalPrompts: { ...DEFAULT_PROMPTS, ...(persisted as Partial<SettingsStore>)?.globalPrompts },
       }),
-    }
+    } satisfies PersistOptions<SettingsStore>
   )
 )

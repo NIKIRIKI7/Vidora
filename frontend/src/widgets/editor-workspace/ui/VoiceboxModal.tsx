@@ -39,6 +39,7 @@ export const VoiceboxModal = ({
     <div className="flex flex-col gap-5 w-full pb-4">
       <div className="flex flex-col gap-3">
         <h4 className="text-xs font-label uppercase text-primary">Добавить новый голос</h4>
+
         <FieldGroup label="Имя диктора / Модели">
           <Input
             value={newVoiceName}
@@ -46,6 +47,7 @@ export const VoiceboxModal = ({
             placeholder="Например: Артем (Информационный)"
           />
         </FieldGroup>
+
         <FieldGroup label="Аудио референс (.wav/.mp3)">
           <input
             type="file"
@@ -57,8 +59,9 @@ export const VoiceboxModal = ({
           <Button variant="dashed" icon="upload" onClick={() => refVoiceInputRef.current?.click()}>
             {newVoiceAudioPath ? 'Заменить референс' : 'Загрузить аудиофайл'}
           </Button>
-          {newVoiceAudioPath && <span className="text-[11px] text-secondary font-mono truncate">{newVoiceAudioPath}</span>}
+          {newVoiceAudioPath && <span className="text-xs text-secondary font-mono truncate">{newVoiceAudioPath}</span>}
         </FieldGroup>
+
         <FieldGroup label="Текст референса (опционально)">
           <Input
             value={newVoiceText}
@@ -66,6 +69,7 @@ export const VoiceboxModal = ({
             placeholder="Текст, произнесенный в референсе..."
           />
         </FieldGroup>
+
         <FieldGroup label="Теги (через запятую)">
           <Input
             value={newVoiceTags}
@@ -73,10 +77,12 @@ export const VoiceboxModal = ({
             placeholder="мужской, глубокий, рус"
           />
         </FieldGroup>
+
         <Button variant="primary" onClick={onSaveCustomVoice} className="mt-2">
           Сохранить голос
         </Button>
       </div>
+
       {project.customVoices && project.customVoices.length > 0 && (
         <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
           <h4 className="text-xs font-label uppercase text-on-surface-variant">Сохранённые голоса</h4>
@@ -87,10 +93,10 @@ export const VoiceboxModal = ({
             >
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-on-surface">{v.name}</span>
-                <span className="text-[10px] text-on-surface-variant/60">{v.tags?.join(', ')}</span>
+                <span className="text-xxs text-on-surface-variant/60">{v.tags?.join(', ')}</span>
               </div>
               <button className="text-error hover:text-error/80 p-1" onClick={() => onDeleteCustomVoice(v.id)}>
-                <Icon name="delete" className="text-[16px]" />
+                <Icon name="delete" className="text-base" />
               </button>
             </div>
           ))}

@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import type { ProjectSettings } from '@entities/project'
-import { useSettingsStore } from '@entities/project'
+import type { ProjectSettings } from '@entities/project/model/types'
+import { useSettingsStore } from '@entities/project/model/store'
 import { Icon, SceneCard, Input, Button, Spinner } from '@shared/ui'
-import { API, getProjectPath, isCodeDirty, isAudioDirty } from '../lib/helpers'
+import { API, getProjectPath, isCodeDirty, isAudioDirty } from '@widgets/editor-workspace/lib/helpers'
 
 interface Props {
   project: ProjectSettings
@@ -32,17 +32,16 @@ export const SceneSidebar = ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [stockResults, setStockResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
-
   const { visualPacingThreshold, audioSilenceThreshold, audioWpmMin } = useSettingsStore()
 
   const handleSearchStock = async () => {
     if (!stockQuery) return
     setIsSearching(true)
     try {
-      const res = await fetch(`https://api.pexels.com/videos/search?query=${stockQuery}&per_page=12`, { headers: { Authorization: import.meta.env.VITE_PEXELS_API_KEY || '563492ad6f917000010000011cf8d655f013444ca94b0f4438dd8952' } })
+      const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(stockQuery)}&per_page=15&orientation=portrait`, { headers: { Authorization: 'wU4uRTYq9l3kF48H7mF3uCq6y3mE8B7k6s4F3l1T8w2mE4H1sR9q0bO3' } })
       const data = await res.json()
       setStockResults(data.videos || [])
-    } catch (e) { onShowNotification('Ошибка поиска футажей', 'error') } finally { setIsSearching(false) }
+    } catch { onShowNotification('Ошибка поиска футажей', 'error') } finally { setIsSearching(false) }
   }
 
   const handleDownloadStock = async (url: string, filename: string) => {
@@ -54,7 +53,7 @@ export const SceneSidebar = ({
       })
       const data = await res.json()
       if (data.status === 'ok') onShowNotification(`Футаж скачан! Перетащите ${filename} на фрагмент.`, 'success')
-    } catch (e) { onShowNotification('Ошибка скачивания', 'error') }
+    } catch { onShowNotification('Ошибка скачивания', 'error') }
   }
 
   return (
@@ -63,6 +62,7 @@ export const SceneSidebar = ({
         <button onClick={() => setTab('script')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'script' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Сценарий</button>
         <button onClick={() => setTab('stock')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'stock' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Сток (B-Roll)</button>
       </div>
+
       {tab === 'script' ? (
         <>
           <div className="px-4 py-2 border-b border-white/5 flex justify-end">
@@ -75,16 +75,13 @@ export const SceneSidebar = ({
               const hasSync = Boolean(scene.fragments.some(f => f.startTime !== undefined && f.startTime !== null))
               const isIgnored = Boolean(scene.ignoreTsx)
               const hasCode = Boolean(scene.remotionCode && scene.remotionCode.trim().length > 0)
-
               const codeDirty = isCodeDirty(project, scene)
               const audioDirty = scene.fragments.some(isAudioDirty)
 
-              // ponytail: visual & audio boredom indicators derived from existing Whisper timings
               const wordCount = scene.fragments.reduce((acc, f) => acc + f.text.trim().split(/\s+/).filter(Boolean).length, 0)
               const sceneDuration = scene.fragments[scene.fragments.length - 1]?.endTime
                 ? scene.fragments[scene.fragments.length - 1].endTime! - (scene.fragments[0].startTime || 0)
                 : Math.max(wordCount / 2.5, 1.0)
-              
               const pacing = sceneDuration / Math.max(1, scene.fragments.length)
               const isVisualBoring = pacing > visualPacingThreshold
 
@@ -92,14 +89,13 @@ export const SceneSidebar = ({
               let speechTime = 0
               for (let i = 0; i < scene.fragments.length; i++) {
                 const f = scene.fragments[i]
-                if (f.startTime !== undefined && f.endTime !== undefined) {
+                if (f.startTime != null && f.endTime != null) {
                   speechTime += (f.endTime - f.startTime)
-                  if (i > 0 && scene.fragments[i - 1].endTime !== undefined) {
+                  if (i > 0 && scene.fragments[i - 1].endTime != null) {
                     maxSilence = Math.max(maxSilence, f.startTime - scene.fragments[i - 1].endTime!)
                   }
                 }
               }
-              
               const wpm = speechTime > 0 ? (wordCount / (speechTime / 60)) : (wordCount / (sceneDuration / 60))
               const isAudioBoring = hasSync && (maxSilence > audioSilenceThreshold || (wpm < audioWpmMin && wpm > 0))
 
@@ -124,9 +120,7 @@ export const SceneSidebar = ({
                     ) : (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasAudio ? 'border-secondary/40 text-secondary bg-secondary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>🎙️ Аудио</span>
                     )}
-
                     <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasSync ? 'border-primary/40 text-primary bg-primary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>⏱️ Тайминги</span>
-
                     {isIgnored ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/20 text-on-surface-variant bg-black font-medium" title="Черный экран при рендере">⬛ Чёрный экран</span>
                     ) : codeDirty ? (

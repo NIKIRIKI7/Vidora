@@ -1,9 +1,8 @@
 import { useState, useRef, type ChangeEvent } from 'react'
 import { Button, Input, Select, FieldGroup, Icon, Spinner } from '@shared/ui'
-import { parseMarkdownFull } from '@entities/project'
-import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project'
-import { THEME_PRESETS } from '@shared/config'
-import type { ThemePreset } from '@shared/config'
+import { parseMarkdownFull } from '@entities/project/lib/parseMarkdown'
+import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project/model/types'
+import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 
 interface Props {
   onCreate: (project: ProjectSettings) => void
@@ -16,6 +15,19 @@ const TEMPLATES = [
   { name: 'Tutorial', icon: 'school', desc: 'Спокойный скринкаст', md: '---\ntitle: "Урок"\nfps: 30\n---\n[Шаг 1] (00:00:00)\n*(Запись терминала)* Открываем консоль и пишем команду.' },
 ]
 
+const createProject = (name: string, text: string, format: VideoFormat, resolution: Resolution, colors: ThemePreset['colors']): ProjectSettings => {
+  const parsed = parseMarkdownFull(text)
+  return {
+    name,
+    format,
+    resolution,
+    metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
+    montage: parsed.montage ?? { fps: '30', animationStyle: 'screencast', transitions: [], colors, typography: { heading: 'Inter', body: 'Geist' } },
+    scenes: parsed.scenes ?? [],
+    rawMarkdown: text,
+  }
+}
+
 export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
   const [name, setName] = useState('')
   const [format, setFormat] = useState<VideoFormat>('16:9')
@@ -23,7 +35,6 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
   const [theme, setTheme] = useState<ThemePreset>(THEME_PRESETS[0])
   const [file, setFile] = useState<File | null>(null)
   const [isCreating, setIsCreating] = useState(false)
-  
   const fileInputRef = useRef<HTMLInputElement>(null)
   const openFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -31,23 +42,7 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
     if (!name || !file) return
     setIsCreating(true)
     try {
-      const text = await file.text()
-      const parsed = parseMarkdownFull(text)
-      onCreate({
-        name,
-        format,
-        resolution,
-        metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
-        montage: parsed.montage ?? {
-          fps: '30',
-          animationStyle: 'screencast',
-          transitions: [],
-          colors: theme.colors,
-          typography: { heading: 'Inter', body: 'Geist' },
-        },
-        scenes: parsed.scenes ?? [],
-        rawMarkdown: text,
-      })
+      onCreate(createProject(name, await file.text(), format, resolution, theme.colors))
     } catch (e) {
       console.error(e)
     } finally {
@@ -61,24 +56,9 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
     setIsCreating(true)
     try {
       const text = await selectedFile.text()
-      const parsed = parseMarkdownFull(text)
-      onCreate({
-        name: parsed.metadata?.title || selectedFile.name.replace(/\.md$/i, ''),
-        format: '16:9',
-        resolution: '1080p',
-        metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
-        montage: parsed.montage ?? {
-          fps: '30',
-          animationStyle: 'screencast',
-          transitions: [],
-          colors: theme.colors,
-          typography: { heading: 'Inter', body: 'Geist' },
-        },
-        scenes: parsed.scenes ?? [],
-        rawMarkdown: text,
-      })
-    } catch (e) {
-      console.error(e)
+      onCreate(createProject(selectedFile.name.replace(/\.md$/i, ''), text, format, resolution, theme.colors))
+    } catch (err) {
+      console.error(err)
     } finally {
       setIsCreating(false)
     }
@@ -97,28 +77,17 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
         </div>
 
         <div className="flex gap-3 w-full mb-2">
-            {TEMPLATES.map(tpl => (
-                <button 
-                    key={tpl.name} 
-                    onClick={() => {
-                        const parsed = parseMarkdownFull(tpl.md);
-                        onCreate({ 
-                          ...parsed, 
-                          name: tpl.name, 
-                          format, resolution, 
-                          rawMarkdown: tpl.md,
-                          metadata: parsed.metadata ?? { title: '', description: '', tags: [] },
-                          montage: parsed.montage ?? { fps: '30', animationStyle: 'screencast', transitions: [], colors: theme.colors, typography: { heading: 'Inter', body: 'Geist' } },
-                          scenes: parsed.scenes ?? []
-                        });
-                    }}
-                    className="flex-1 bg-surface-container-lowest/50 border border-white/5 hover:border-primary/50 hover:bg-primary/5 p-4 rounded-xl flex flex-col items-center gap-2 transition-all active:scale-95 text-center"
-                >
-                    <Icon name={tpl.icon} className="text-[24px] text-primary" />
-                    <span className="text-xs font-semibold text-on-surface">{tpl.name}</span>
-                    <span className="text-[10px] text-on-surface-variant/60">{tpl.desc}</span>
-                </button>
-            ))}
+          {TEMPLATES.map(tpl => (
+            <button
+              key={tpl.name}
+              onClick={() => onCreate(createProject(tpl.name, tpl.md, format, resolution, theme.colors))}
+              className="flex-1 bg-surface-container-lowest/50 border border-white/5 hover:border-primary/50 hover:bg-primary/5 p-4 rounded-xl flex flex-col items-center gap-2 transition-all active:scale-95 text-center"
+            >
+              <Icon name={tpl.icon} className="text-[24px] text-primary" />
+              <span className="text-xs font-semibold text-on-surface">{tpl.name}</span>
+              <span className="text-[10px] text-on-surface-variant/60">{tpl.desc}</span>
+            </button>
+          ))}
         </div>
 
         <FieldGroup label="Название проекта">
@@ -146,22 +115,22 @@ export const ProjectCreator = ({ onCreate, onCancel }: Props) => {
         </div>
 
         <FieldGroup label="Цветовая тема (Пресеты)">
-            <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
-                {THEME_PRESETS.map((tpl: ThemePreset) => (
-                    <button 
-                        key={tpl.name}
-                        onClick={() => setTheme(tpl)}
-                        className="flex flex-col items-center gap-1 shrink-0 group"
-                        title={tpl.name}
-                    >
-                        <div className={`w-8 h-8 rounded-full border-2 flex overflow-hidden ${theme.name === tpl.name ? 'border-primary' : 'border-transparent group-hover:border-white/50'}`}>
-                            <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
-                            <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
-                        </div>
-                        <span className={`text-[10px] ${theme.name === tpl.name ? 'text-primary' : 'text-on-surface-variant group-hover:text-white'}`}>{tpl.name.split(' ')[0]}</span>
-                    </button>
-                ))}
-            </div>
+          <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
+            {THEME_PRESETS.map((tpl: ThemePreset) => (
+              <button
+                key={tpl.name}
+                onClick={() => setTheme(tpl)}
+                className="flex flex-col items-center gap-1 shrink-0 group"
+                title={tpl.name}
+              >
+                <div className={`w-8 h-8 rounded-full border-2 flex overflow-hidden ${theme.name === tpl.name ? 'border-primary' : 'border-transparent group-hover:border-white/50'}`}>
+                  <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
+                  <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
+                </div>
+                <span className={`text-[10px] ${theme.name === tpl.name ? 'text-primary' : 'text-on-surface-variant group-hover:text-white'}`}>{tpl.name.split(' ')[0]}</span>
+              </button>
+            ))}
+          </div>
         </FieldGroup>
 
         <FieldGroup label="Сценарий (Markdown)">

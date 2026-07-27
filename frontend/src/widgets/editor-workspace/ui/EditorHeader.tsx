@@ -36,13 +36,12 @@ export const EditorHeader = ({
     <div className="flex items-center gap-4">
       <span className="font-display text-2xl font-bold text-primary tracking-tight">Vidora</span>
       <div className="h-4 w-px bg-white/20" />
-
       <Dropdown
         trigger={
           <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 font-medium text-sm">
-            <Icon name="folder" className="text-secondary text-[18px]" />
+            <Icon name="folder" className="text-secondary text-lg" />
             {project.name}
-            <Icon name="expand_more" className="text-on-surface-variant text-[18px]" />
+            <Icon name="expand_more" className="text-on-surface-variant text-lg" />
           </button>
         }
       >
@@ -53,10 +52,10 @@ export const EditorHeader = ({
         ))}
         <div className="h-px bg-white/10 my-1" />
         <DropdownItem onClick={onNewProject} className="text-primary">
-          <Icon name="add" className="inline text-[16px] mr-1" /> Новый проект
+          <Icon name="add" className="inline text-base mr-1" /> Новый проект
         </DropdownItem>
         <DropdownItem onClick={onOpenSettings}>
-          <Icon name="settings" className="inline text-[16px] mr-1" /> Настройки
+          <Icon name="settings" className="inline text-base mr-1" /> Настройки
         </DropdownItem>
       </Dropdown>
     </div>
@@ -72,6 +71,7 @@ export const EditorHeader = ({
       >
         {isAutoPipelineRunning ? pipelineStep : 'Сгенерировать всё'}
       </Button>
+
       <Button
         variant="dashed"
         disabled={isRendering}
@@ -80,11 +80,13 @@ export const EditorHeader = ({
       >
         {isRendering ? `Рендер... ${renderProgress}%` : '🎬 Рендер всего проекта'}
       </Button>
+
       <Button variant="dashed" disabled={isRendering} onClick={onSingleSceneRender}>
         Только текущая сцена
       </Button>
+
       <Button variant="dashed" disabled={isRendering} onClick={onExportProject}>
-        Экспорт <Icon name="file_export" className="text-[16px] ml-1" />
+        Экспорт <Icon name="file_export" className="text-base ml-1" />
       </Button>
     </div>
   </header>

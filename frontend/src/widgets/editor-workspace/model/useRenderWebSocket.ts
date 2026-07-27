@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { API } from '../lib/helpers'
+import { API } from '@widgets/editor-workspace/lib/helpers'
 import type { RenderPayload } from './types'
 
 export const useRenderWebSocket = () => {
   const [renderProgress, setRenderProgress] = useState(0)
-  const renderListenersRef = useRef<Map<string, (payload: RenderPayload) => void>>(new Map())
+  const renderListenerRef = useRef<((payload: RenderPayload) => void) | null>(null)
   const clientIdRef = useRef(crypto.randomUUID())
 
   useEffect(() => {
@@ -15,30 +15,29 @@ export const useRenderWebSocket = () => {
     const connect = () => {
       if (isDisposed) return
       ws = new WebSocket(`${API.replace('http', 'ws')}/ws/events/${clientIdRef.current}`)
-
+      
       ws.onopen = () => console.log('[WS] ✅ Успешное подключение к событиям бэкенда')
-
+      
       ws.onmessage = e => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.type === 'RENDER_PROGRESS' && msg.payload) {
-            const taskId = msg.payload.task_id
             setRenderProgress(Number(msg.payload.progress) || 0)
-            if (taskId && renderListenersRef.current.has(taskId)) {
-              renderListenersRef.current.get(taskId)!(msg.payload)
+            if (renderListenerRef.current) {
+              renderListenerRef.current(msg.payload)
             }
           }
         } catch (err) {
           console.error('[WS] Ошибка парсинга:', err)
         }
       }
-
+      
       ws.onclose = () => {
         if (!isDisposed) {
           reconnectTimeout = setTimeout(connect, 2000)
         }
       }
-
+      
       ws.onerror = (err) => {
         console.error('[WS] Ошибка сокета:', err)
       }
@@ -57,5 +56,5 @@ export const useRenderWebSocket = () => {
     }
   }, [])
 
-  return { renderProgress, setRenderProgress, renderListenersRef }
+  return { renderProgress, setRenderProgress, renderListenerRef }
 }
