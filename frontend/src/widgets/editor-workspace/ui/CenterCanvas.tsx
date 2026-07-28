@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import type { ProjectSettings, Scene, VideoFormat } from '@entities/project/model/types'
+import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
 import { Button, Icon, Spinner, ProgressBar } from '@shared/ui'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 

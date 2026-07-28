@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ProjectSettings, Scene } from '@entities/project/model/types'
+import type { ProjectSettings, Scene } from '@entities/project'
 import { Button, FieldGroup, Icon, Select, Spinner, Switch } from '@shared/ui'
 import { generateFragmentPrompt, generateProjectPrompt, generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty } from '@widgets/editor-workspace/lib/helpers'
@@ -29,6 +29,7 @@ interface Props {
   onResetAllSync: () => void
   onResetAudio: () => void
   onProcessAudio: (action: string, scope: 'scene' | 'project') => void
+  onProcessAdvancedSilence?: (scope: 'scene' | 'project') => void
   onUnloadVram: () => void
   onRunSync: () => void
   onToggleIgnoreTsx: (id: string) => void
@@ -44,7 +45,7 @@ export const PipelineInspector = ({
   project, activeScene, voiceModel, useWhisper, autoOffloadVram, isGeneratingAudio, isSyncing, isGeneratingCode, isRendering,
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onAddFragment, onDeleteFragment, onFragmentTextChange,
   onFragDragStart, onFragDrop, onOpenVoicebox, onOpenAiSettings, onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync,
-  onResetAudio, onProcessAudio, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onShowNotification,
+  onResetAudio, onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onShowNotification,
   onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming,
 }: Props) => {
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('project')
@@ -131,12 +132,19 @@ export const PipelineInspector = ({
           <FieldGroup label="Голосовая модель">
             <div className="flex items-center gap-2">
               <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const url = isCustom ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white"><Icon name="play_arrow" className="text-[16px]" /></button>
-              <Select value={voiceModel} onChange={e => onChangeVoiceModel(e.target.value)} className="flex-1">
-                <option value="aria">Neural - Aria (Женский)</option>
-                <option value="marcus">Neural - Marcus (Мужской)</option>
-                <option value="nova">Expressive - Nova (Энергичный)</option>
-                {project.customVoices?.map(v => <option key={v.id} value={v.id}>🎙️ Cloned - {v.name}</option>)}
-              </Select>
+          {project.activeGlobalVoiceId ? (
+            <div className="flex-1 bg-primary/10 border border-primary/30 rounded-lg py-2 px-3 text-sm text-primary flex justify-between items-center shadow-inner">
+              <span className="truncate pr-2">🌐 {project.globalVoices?.find(v => v.id === project.activeGlobalVoiceId)?.name}</span>
+              <button className="text-primary hover:text-white" title="Игнорируется, так как активен глобальный голос"><Icon name="lock" className="text-sm" /></button>
+            </div>
+          ) : (
+            <Select value={voiceModel} onChange={e => onChangeVoiceModel(e.target.value)} className="flex-1">
+              <option value="aria">Neural - Aria (Женский)</option>
+              <option value="marcus">Neural - Marcus (Мужской)</option>
+              <option value="nova">Expressive - Nova (Энергичный)</option>
+              {project.customVoices?.map(v => <option key={v.id} value={v.id}>🎙️ Cloned - {v.name}</option>)}
+            </Select>
+          )}
             </div>
           </FieldGroup>
 
@@ -156,7 +164,7 @@ export const PipelineInspector = ({
               </div>
             </div>
             <Button variant="dashed" onClick={() => onProcessAudio('mastering', processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-secondary/50 hover:bg-secondary/10 hover:text-secondary">🎙️ Мастеринг (EQ + Normalize)</Button>
-            <Button variant="dashed" onClick={() => onProcessAudio('silero_vad', processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-accent/50 hover:bg-accent/10 hover:text-accent">✂️ Обрезка пауз (Silero VAD)</Button>
+            <Button variant="dashed" onClick={() => onProcessAdvancedSilence?.(processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-accent/50 hover:bg-accent/10 hover:text-accent">✂️ Умная обрезка пауз (Pydub)</Button>
           </div>
         </section>
 

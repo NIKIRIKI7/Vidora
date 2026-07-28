@@ -4,6 +4,26 @@ export type { AppColors }
 export type Resolution = '1080p' | '1440p' | '2160p'
 export type VideoFormat = '16:9' | '9:16'
 export type FPS = '24' | '30' | '60'
+export type AudioGenerationMode = 'fragment' | 'scene' | 'project'
+
+export interface GlobalVoice {
+  id: string
+  name: string
+  ttsEngine: string
+  voiceModel: string
+  settings: {
+    speed: number
+    guidanceScale: number
+    numSteps: number
+  }
+}
+
+export interface AudioProcessingSettings {
+  silenceThresholdDb: number
+  minSilenceMs: number
+  maxSilenceMs: number
+  removeEdges: boolean
+}
 
 export interface Metadata {
   title: string
@@ -30,6 +50,7 @@ export interface SceneFragment {
   audioFileName?: string
   bRollFileName?: string
   lastAudioHash?: string
+  lastAudioTextNormalized?: string
 }
 
 export interface Scene {
@@ -75,4 +96,8 @@ export interface ProjectSettings {
   customVoices?: CustomVoice[]
   rawMarkdown: string
   promptOverrides?: Partial<PromptTemplates>
+  audioMode: AudioGenerationMode
+  globalVoices: GlobalVoice[]
+  activeGlobalVoiceId?: string
+  audioProcessing: AudioProcessingSettings
 }

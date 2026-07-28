@@ -28,14 +28,21 @@ const replaceVars = (tpl: string, vars: Record<string, string | number>) => {
   return res
 }
 
+// ponytail: uses max endTime from Whisper sync for duration; falls back to heuristic
+const getSceneDuration = (fragments: SceneFragment[]): number => {
+  const syncedEnds = fragments.map(f => f.endTime).filter((e): e is number => typeof e === 'number' && e > 0)
+  if (syncedEnds.length > 0) return Math.max(...syncedEnds)
+  return fragments.reduce((acc, f) => acc + Math.max(f.text.split(' ').length / 2.5, 1.0), 0)
+}
+
 export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): string => {
   const globalPrompts = useSettingsStore.getState().globalPrompts
-  const durationSec = scene.fragments.reduce((acc, f) => acc + ((f.endTime || 5) - (f.startTime || 0)), 0) || 5
+  const durationSec = getSceneDuration(scene.fragments)
 
   return replaceVars(project.promptOverrides?.scene || globalPrompts.scene, {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
-    DURATION_FRAMES: Math.ceil(durationSec * Number(project.montage.fps)),
+    DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
     SCENE_TITLE: scene.title,
     SCENE_TIMECODE: scene.timecode,
     FRAGMENTS: scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}:\nТайминг: ${(frag.startTime ?? 0).toFixed(2)} - ${(frag.endTime ?? 5).toFixed(2)}с\nВизуал: ${frag.visualNote}\nСуфлер: "${frag.text}"`).join('\n')
@@ -44,12 +51,12 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
 
 export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, fragment: SceneFragment): string => {
   const globalPrompts = useSettingsStore.getState().globalPrompts
-  const durationSec = (fragment.endTime || 5) - (fragment.startTime || 0) || 5
+  const durationSec = Math.max((fragment.endTime || 5) - (fragment.startTime || 0), 1)
 
   return replaceVars(project.promptOverrides?.fragment || globalPrompts.fragment, {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
-    DURATION_FRAMES: Math.ceil(durationSec * Number(project.montage.fps)),
+    DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
     SCENE_TITLE: scene.title,
     VISUAL_NOTE: fragment.visualNote,
     TEXT: fragment.text,
@@ -60,7 +67,7 @@ export const generateProjectPrompt = (project: ProjectSettings): string => {
   const globalPrompts = useSettingsStore.getState().globalPrompts
 
   const scenesList = project.scenes.map((scene, si) => {
-    const duration = scene.fragments.reduce((acc, f) => acc + ((f.endTime || 5) - (f.startTime || 0)), 0) || 5
+    const duration = getSceneDuration(scene.fragments)
     return `### Сцена ${si + 1}: ${scene.title}\nТаймкод: ${scene.timecode} | Длительность: ~${Math.ceil(duration)}с\n${scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}: "${frag.text}"\n  Визуал: ${frag.visualNote}`).join('\n')}`
   }).join('\n\n')
 

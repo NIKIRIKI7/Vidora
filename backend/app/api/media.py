@@ -1,5 +1,6 @@
 import os
 import shutil
+import wave
 import httpx
 from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
@@ -30,6 +31,20 @@ async def upload_media(project_path: str = Form(...), folder: str = Form("b-roll
         "filename": file.filename, 
         "url": f"assets/{folder}/{file.filename}"
     }
+
+@router.post("/upload-audio")
+async def upload_audio(project_path: str = Form(...), target_id: str = Form(...), file: UploadFile = File(...)):
+    dest_dir = os.path.realpath(os.path.join(project_path, "assets", "voice"))
+    if not dest_dir.startswith(os.path.realpath(project_path)):
+        return {"status": "error", "detail": "invalid path"}
+    os.makedirs(dest_dir, exist_ok=True)
+    file_path = os.path.normpath(os.path.join(dest_dir, f"Custom_{target_id}_{file.filename}"))
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    duration = 0.0
+    with wave.open(file_path, 'r') as wav:
+        duration = wav.getnframes() / float(wav.getframerate())
+    return {"status": "ok", "path": file_path, "duration": duration}
 
 @router.post("/download-stock")
 async def download_stock(req: DownloadRequest):

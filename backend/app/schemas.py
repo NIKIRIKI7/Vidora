@@ -92,6 +92,15 @@ class AudioConcatRequest(BaseModel):
     audio_paths: List[str]
     output_path: str
 
+class AdvancedSilenceRequest(BaseModel):
+    scene_id: str
+    audio_path: str
+    project_path: str = ""
+    threshold_db: float = -40.0
+    min_silence_ms: int = 500
+    max_silence_ms: int = 250
+    remove_edges: bool = True
+
 class RenderRequest(BaseModel):
     project_id: str
     target: str

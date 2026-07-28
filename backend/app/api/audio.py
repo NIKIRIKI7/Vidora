@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore", message=".*Audio is shorter than 30s.*")
 warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest
+from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, AdvancedSilenceRequest
 from app.services.audio_service import AudioService
 from app.services.audio_provider import OmniVoiceProvider
 
@@ -212,6 +212,44 @@ async def undo_audio(request: AudioProcessRequest):
         shutil.copy2(backup_path, audio_path)
         return {"status": "ok", "processed_audio_path": audio_path, "detail": "\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u044b"}
     return {"status": "error", "detail": "\u041d\u0435\u0442 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u0434\u043b\u044f \u043e\u0442\u043a\u0430\u0442\u0430"}
+
+@router.post("/process/advanced-silence")
+async def process_advanced_silence(req: AdvancedSilenceRequest):
+    audio_path = _resolve_path(req.audio_path, req.project_path)
+    if not os.path.exists(audio_path):
+        return {"status": "error", "detail": "Файл не найден"}
+
+    from pydub import AudioSegment
+    from pydub.silence import detect_silence
+
+    audio = AudioSegment.from_file(audio_path)
+    silences = detect_silence(audio, min_silence_len=req.min_silence_ms, silence_thresh=req.threshold_db)
+
+    if not silences:
+        return {"status": "ok", "processed_audio_path": audio_path, "new_duration_sec": len(audio) / 1000.0}
+
+    chunks, last_end = [], 0
+    for i, (start, end) in enumerate(silences):
+        if start > last_end:
+            chunks.append(audio[last_end:start])
+        silence_dur = end - start
+        is_edge = (i == 0 and start == 0) or (i == len(silences) - 1 and end == len(audio))
+        if is_edge and req.remove_edges:
+            pass
+        elif req.max_silence_ms > 0:
+            kept_silence = min(silence_dur, req.max_silence_ms)
+            chunks.append(audio[start:start + kept_silence])
+        last_end = end
+
+    if last_end < len(audio):
+        chunks.append(audio[last_end:])
+
+    result = chunks[0]
+    for chunk in chunks[1:]:
+        result += chunk
+
+    result.export(audio_path, format="wav")
+    return {"status": "ok", "processed_audio_path": audio_path, "new_duration_sec": len(result) / 1000.0}
 
 @router.post("/concat")
 async def concat_audio(request: AudioConcatRequest):

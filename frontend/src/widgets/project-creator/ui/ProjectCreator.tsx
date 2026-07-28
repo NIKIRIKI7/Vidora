@@ -1,7 +1,6 @@
 import { useState, useRef, type ChangeEvent } from 'react'
 import { Button, Input, Select, FieldGroup, Icon, Spinner } from '@shared/ui'
-import { parseMarkdownFull } from '@entities/project/lib/parseMarkdown'
-import type { ProjectSettings, VideoFormat, Resolution } from '@entities/project/model/types'
+import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 
 interface Props {
@@ -25,6 +24,14 @@ const createProject = (name: string, text: string, format: VideoFormat, resoluti
     montage: parsed.montage ?? { fps: '30', animationStyle: 'screencast', transitions: [], colors, typography: { heading: 'Inter', body: 'Geist' } },
     scenes: parsed.scenes ?? [],
     rawMarkdown: text,
+    audioMode: 'scene',
+    globalVoices: [],
+    audioProcessing: {
+      silenceThresholdDb: -40.0,
+      minSilenceMs: 500,
+      maxSilenceMs: 250,
+      removeEdges: true,
+    },
   }
 }
 

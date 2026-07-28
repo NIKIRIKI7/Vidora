@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { ProjectSettings } from '@entities/project/model/types'
-import { useSettingsStore } from '@entities/project/model/store'
+import type { ProjectSettings } from '@entities/project'
+import { useSettingsStore } from '@entities/project'
 import { Icon, SceneCard, Input, Button, Spinner } from '@shared/ui'
 import { API, getProjectPath, isCodeDirty, isAudioDirty } from '@widgets/editor-workspace/lib/helpers'
 

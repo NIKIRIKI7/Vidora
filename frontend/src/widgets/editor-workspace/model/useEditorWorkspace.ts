@@ -1,9 +1,10 @@
-import { useState, useRef, type ChangeEvent } from 'react'
+import { useState, useRef, useCallback, type ChangeEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice, VideoFormat } from '@entities/project'
-import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeSceneToMarkdown, parseSceneMarkdown } from '@entities/project'
+import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeSceneToMarkdown, parseSceneMarkdown, serializeProjectToMarkdown } from '@entities/project'
 import { generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import { API, getProjectPath, parseTcString, hashCode, sanitizeFilename } from '@widgets/editor-workspace/lib/helpers'
+import { normalizeText, recalculateTimingsProportionally } from '@widgets/editor-workspace/lib/timingAlgorithms'
 import type { CenterViewMode } from './types'
 import { useAudio, type AudioOptions } from './useAudio'
 import { useRender, pushCodeHistory } from './useRender'
@@ -59,11 +60,19 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const globalPrompts = useSettingsStore(s => s.globalPrompts)
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
-  
+
+  // ponytail: auto-sync rawMarkdown on scene/metadata/montage changes
+  const handleUpdateProjectSync = useCallback((newProject: ProjectSettings, skipMdSync = false) => {
+    if (!skipMdSync && (newProject.scenes !== project.scenes || newProject.metadata !== project.metadata || newProject.montage !== project.montage)) {
+      newProject.rawMarkdown = serializeProjectToMarkdown(newProject)
+    }
+    onUpdateProject(newProject)
+  }, [project, onUpdateProject])
+
   const voiceOpts: AudioOptions = { voiceModel, speed, numSteps, guidanceScale, duration, denoise, preprocessPrompt, postprocessOutput, autoOffloadVram, ttsEngine, apiKeys, customVoices: project.customVoices }
 
-  const audio = useAudio({ project, onUpdateProject, activeScene, activeSceneId, voiceOpts, useWhisper, autoOffloadVram, showNotification, abortControllerRef })
-  const render = useRender({ project, onUpdateProject, activeScene, llmEngine, apiKeys, audioLoaded: audio.audioLoaded, showNotification, abortControllerRef, currentTaskIdRef })
+  const audio = useAudio({ project, onUpdateProject: handleUpdateProjectSync, activeScene, activeSceneId, voiceOpts, useWhisper, autoOffloadVram, showNotification, abortControllerRef })
+  const render = useRender({ project, onUpdateProject: handleUpdateProjectSync, activeScene, llmEngine, apiKeys, audioLoaded: audio.audioLoaded, showNotification, abortControllerRef, currentTaskIdRef })
 
   const handleSelectScene = (id: string) => { setActiveSceneId(id); render.setPlayingTargetId(id) }
 
@@ -95,25 +104,25 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       }
     })
 
-    onUpdateProject({
+    handleUpdateProjectSync({
       ...project,
       rawMarkdown: newMd,
       metadata: parsed.metadata ?? project.metadata,
       montage: parsed.montage ?? project.montage,
       scenes: mergedScenes ?? project.scenes,
-    })
+    }, true)
   }
 
   const handleUpdateFragmentBRoll = (fragId: string, filename: string) => {
     if (!activeScene) return
     const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: filename } : f)
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
   }
 
   const handleUnlinkFragmentBRoll = (fragId: string) => {
     if (!activeScene) return
     const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: undefined } : f)
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
   }
 
   const handleNudgeTiming = (fragId: string, type: 'start' | 'end', delta: number) => {
@@ -135,7 +144,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         updatedFragments[idx + 1] = { ...updatedFragments[idx + 1], startTime: val }
       }
     }
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
   }
 
   const handleCancelAll = async () => {
@@ -165,7 +174,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const scenes = [...project.scenes]
     const [moved] = scenes.splice(draggedSceneIdx, 1)
     scenes.splice(dropIdx, 0, moved)
-    onUpdateProject({ ...project, scenes })
+    handleUpdateProjectSync({ ...project, scenes })
     setDraggedSceneIdx(null)
   }
 
@@ -175,13 +184,13 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const fragments = [...activeScene.fragments]
     const [moved] = fragments.splice(draggedFragIdx, 1)
     fragments.splice(dropIdx, 0, moved)
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments } : s)) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments } : s)) })
     setDraggedFragIdx(null)
   }
 
   const toggleIgnoreTsx = (sceneId: string) => {
     const updatedScenes = project.scenes.map(s => (s.id === sceneId ? { ...s, ignoreTsx: !s.ignoreTsx } : s))
-    onUpdateProject({ ...project, scenes: updatedScenes })
+    handleUpdateProjectSync({ ...project, scenes: updatedScenes })
   }
 
   const handleAddScene = () => {
@@ -189,7 +198,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       id: crypto.randomUUID(), title: `Сцена ${project.scenes.length + 1}`, timecode: '00:00:00',
       fragments: [{ id: crypto.randomUUID(), visualNote: 'A-roll: Описание кадра', text: 'Текст новой сцены...' }],
     }
-    onUpdateProject({ ...project, scenes: [...project.scenes, newScene] })
+    handleUpdateProjectSync({ ...project, scenes: [...project.scenes, newScene] })
     setActiveSceneId(newScene.id)
     showNotification('Новая сцена добавлена', 'success')
   }
@@ -197,31 +206,32 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const handleDeleteScene = (sceneId: string) => {
     if (project.scenes.length <= 1) { showNotification('Сценарий должен содержать хотя бы одну сцену', 'error'); return }
     const updatedScenes = project.scenes.filter(s => s.id !== sceneId)
-    onUpdateProject({ ...project, scenes: updatedScenes })
+    handleUpdateProjectSync({ ...project, scenes: updatedScenes })
     if (activeSceneId === sceneId) setActiveSceneId(updatedScenes[0].id)
     showNotification('Сцена удалена', 'info')
   }
 
   const handleUpdateSceneTitle = (sceneId: string, title: string, timecode: string) => {
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => (s.id === sceneId ? { ...s, title, timecode } : s)) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => (s.id === sceneId ? { ...s, title, timecode } : s)) })
   }
 
   const handleAddFragment = () => {
     if (!activeScene) return
     const newFrag: SceneFragment = { id: crypto.randomUUID(), visualNote: 'Визуальная ремарка', text: 'Текст суфлера...' }
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: [...s.fragments, newFrag] } : s)) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: [...s.fragments, newFrag] } : s)) })
     showNotification('Фрагмент добавлен', 'success')
   }
 
   const handleDeleteFragment = (fragId: string) => {
     if (!activeScene) return
     if (activeScene.fragments.length <= 1) { showNotification('Сцена должна содержать хотя бы один фрагмент', 'error'); return }
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: s.fragments.filter(f => f.id !== fragId) } : s) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: s.fragments.filter(f => f.id !== fragId) } : s) })
     showNotification('Фрагмент удален', 'info')
   }
 
   const handleFragmentTextChange = (fragId: string, newText: string, newVisualNote?: string) => {
     if (!activeScene) return
+    const oldTotalText = activeScene.fragments.map(f => normalizeText(f.text)).join('')
     const updatedFragments = activeScene.fragments.map(f => {
       if (f.id !== fragId) return f
       const vNote = newVisualNote !== undefined ? newVisualNote : f.visualNote
@@ -236,12 +246,22 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       }
       return { ...f, text: newText, visualNote: vNote, startTime: newStart, endTime: newEnd }
     })
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)) })
+    const newTotalText = updatedFragments.map(f => normalizeText(f.text)).join('')
+    if (oldTotalText === newTotalText && project.audioMode === 'scene') {
+      const lastFrag = activeScene.fragments[activeScene.fragments.length - 1]
+      const totalDuration = (lastFrag.endTime || 0) - (activeScene.fragments[0].startTime || 0)
+      if (totalDuration > 0) {
+        const remapped = recalculateTimingsProportionally(updatedFragments, totalDuration)
+        handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: remapped } : s) })
+        return
+      }
+    }
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)) })
   }
 
   const handleUpdateCode = (code: string) => {
     if (!activeScene) return
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, ...pushCodeHistory(activeScene, code, project) } : s)) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, ...pushCodeHistory(activeScene, code, project) } : s)) })
   }
 
   const handleCodeHistory = (step: number) => {
@@ -250,7 +270,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     if (hist.length === 0) return
     let idx = activeScene.historyIndex ?? (hist.length - 1)
     idx = Math.max(0, Math.min(hist.length - 1, idx + step))
-    onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: hist[idx], historyIndex: idx } : s) })
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, remotionCode: hist[idx], historyIndex: idx } : s) })
   }
 
   const handleFixAudioPacing = async (sceneId: string) => {
@@ -287,7 +307,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       id: crypto.randomUUID(), name: newVoiceName, refAudioPath: newVoiceAudioPath,
       refText: newVoiceText, tags: newVoiceTags.split(',').map(t => t.trim()).filter(Boolean),
     }
-    onUpdateProject({ ...project, customVoices: [...(project.customVoices || []), newVoice] })
+    handleUpdateProjectSync({ ...project, customVoices: [...(project.customVoices || []), newVoice] })
     setVoiceModel(newVoice.id)
     setIsVoiceboxOpen(false)
     setNewVoiceName('')
@@ -298,7 +318,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   }
 
   const handleDeleteCustomVoice = (voiceId: string) => {
-    onUpdateProject({ ...project, customVoices: (project.customVoices || []).filter(v => v.id !== voiceId) })
+    handleUpdateProjectSync({ ...project, customVoices: (project.customVoices || []).filter(v => v.id !== voiceId) })
     if (voiceModel === voiceId) setVoiceModel('aria')
     showNotification('Голос удален', 'info')
   }
@@ -357,7 +377,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         return
       }
       const newScene: Scene = { ...newSceneData, id: crypto.randomUUID() }
-      onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === sceneId ? newScene : s) })
+      handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === sceneId ? newScene : s) })
       showNotification('Сцена успешно заменена', 'success')
     } catch { showNotification('Ошибка чтения буфера обмена', 'error') }
   }
@@ -402,7 +422,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
           const data = await res.json()
           if (res.ok && data.status === 'ok') {
-            onUpdateProject({ ...project, metadata: { ...project.metadata, thumbnail: data.path } })
+            handleUpdateProjectSync({ ...project, metadata: { ...project.metadata, thumbnail: data.path } })
           }
         } catch { 
           console.error('Ошибка сохранения превью на бэкенд')
@@ -451,6 +471,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setUseWhisper, setAutoOffloadVram, handleSceneDragStart, handleSceneDrop, handleFragDragStart, handleFragDrop,
     toggleIgnoreTsx, handleAddScene, handleDeleteScene, handleUpdateSceneTitle, handleAddFragment, handleDeleteFragment,
     handleFragmentTextChange, handleUpdateCode, handleCodeHistory, handleFixAudioPacing, handleUploadRefVoiceAudio, 
+    handleProcessAdvancedSilence: audio.handleProcessAdvancedSilence,
     handleSaveCustomVoice, handleDeleteCustomVoice, handleFullAutoPipeline, handleCancelAll, showNotification, 
     handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll, handleNudgeTiming, handleCaptureFrame, 
     handleExportScene, handleReplaceScene, handleCopyFixPacingPrompt,

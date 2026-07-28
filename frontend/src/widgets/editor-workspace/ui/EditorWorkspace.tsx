@@ -42,7 +42,7 @@ export const EditorWorkspace = ({
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
   
-  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines'>('project')
+  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines' | 'global-voices' | 'audio-processing'>('project')
   const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin } = useSettingsStore()
   const isLocalPrompts = project.promptOverrides !== undefined
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
@@ -145,6 +145,7 @@ export const EditorWorkspace = ({
           onResetAllSync={model.handleResetAllSync}
           onResetAudio={model.handleResetAudio}
           onProcessAudio={model.handleProcessAudio}
+          onProcessAdvancedSilence={model.handleProcessAdvancedSilence}
           onUnloadVram={model.handleUnloadVram}
           onRunSync={() => model.runSyncAllScenes()}
           onToggleIgnoreTsx={model.toggleIgnoreTsx}
@@ -193,6 +194,18 @@ export const EditorWorkspace = ({
             className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'ai-engines' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
           >
             AI Движки
+          </button>
+          <button 
+            onClick={() => setSettingsTab('global-voices')} 
+            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'global-voices' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
+          >
+            Голоса
+          </button>
+          <button 
+            onClick={() => setSettingsTab('audio-processing')} 
+            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'audio-processing' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
+          >
+            Аудио
           </button>
         </div>
 
@@ -381,6 +394,62 @@ export const EditorWorkspace = ({
                   <Icon name="restore" className="text-[16px] mr-1" /> Сбросить глобальные промпты
                 </Button>
               )}
+            </>
+          ) : settingsTab === 'global-voices' ? (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium">Список глобальных голосов</span>
+                <Button variant="secondary" onClick={() => {
+                  const newVoice = {
+                    id: crypto.randomUUID(),
+                    name: `Глобальный Голос ${(project.globalVoices?.length || 0) + 1}`,
+                    ttsEngine: ttsEngine,
+                    voiceModel: model.voiceModel,
+                    settings: { speed: model.speed, guidanceScale: model.guidanceScale, numSteps: model.numSteps },
+                  }
+                  onUpdateProject({ ...project, globalVoices: [...(project.globalVoices || []), newVoice], activeGlobalVoiceId: newVoice.id })
+                }}>Сохранить текущие настройки</Button>
+              </div>
+              {(project.globalVoices || []).map(gv => (
+                <div key={gv.id} className={`p-3 rounded-xl border ${project.activeGlobalVoiceId === gv.id ? 'border-primary bg-primary/10' : 'border-white/10 bg-surface-container-lowest'} flex justify-between items-center transition-colors`}>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold">{gv.name}</span>
+                    <span className="text-xs text-on-surface-variant">{gv.ttsEngine} • Модель: {gv.voiceModel}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {project.activeGlobalVoiceId !== gv.id ? (
+                      <Button variant="dashed" onClick={() => onUpdateProject({ ...project, activeGlobalVoiceId: gv.id })}>Активировать</Button>
+                    ) : (
+                      <Button variant="ghost" className="text-primary cursor-default font-semibold"><Icon name="check" className="text-lg mr-1" /> Активен</Button>
+                    )}
+                    <Button variant="ghost" className="text-error" onClick={() => {
+                      const newVoices = project.globalVoices.filter(v => v.id !== gv.id)
+                      onUpdateProject({ ...project, globalVoices: newVoices, activeGlobalVoiceId: project.activeGlobalVoiceId === gv.id ? undefined : project.activeGlobalVoiceId })
+                    }}><Icon name="delete" className="text-base" /></Button>
+                  </div>
+                </div>
+              ))}
+              {(!project.globalVoices || project.globalVoices.length === 0) && (
+                <div className="text-center text-on-surface-variant py-8 border border-dashed border-white/10 rounded-xl">Нет сохраненных глобальных голосов.<br/>Настройки применяются для каждой сцены индивидуально.</div>
+              )}
+              {project.activeGlobalVoiceId && (
+                <Button variant="dashed" className="mt-2 text-warning hover:bg-warning/10" onClick={() => onUpdateProject({ ...project, activeGlobalVoiceId: undefined })}>Отключить глобальный голос</Button>
+              )}
+            </>
+          ) : settingsTab === 'audio-processing' ? (
+            <>
+              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-4">
+                <FieldGroup label={`Порог тишины (дБ): ${(project.audioProcessing?.silenceThresholdDb ?? -40).toFixed(1)}`}>
+                  <Slider min={-60} max={-10} step={1} value={project.audioProcessing?.silenceThresholdDb ?? -40} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), silenceThresholdDb: Number(e.target.value) } })} />
+                </FieldGroup>
+                <FieldGroup label={`Мин. тишина для детекции (мс): ${project.audioProcessing?.minSilenceMs ?? 500}`}>
+                  <Slider min={100} max={2000} step={50} value={project.audioProcessing?.minSilenceMs ?? 500} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), minSilenceMs: Number(e.target.value) } })} />
+                </FieldGroup>
+                <FieldGroup label={`Урезать до (мс) [0 = удалить]: ${project.audioProcessing?.maxSilenceMs ?? 250}`}>
+                  <Slider min={0} max={1000} step={50} value={project.audioProcessing?.maxSilenceMs ?? 250} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), maxSilenceMs: Number(e.target.value) } })} />
+                </FieldGroup>
+                <Switch label="Удалять краевую тишину" checked={project.audioProcessing?.removeEdges ?? true} onChange={val => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), removeEdges: val } })} />
+              </div>
             </>
           ) : (
             <>

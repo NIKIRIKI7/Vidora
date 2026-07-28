@@ -136,11 +136,45 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     const result = await retryRenderWithFix(activeScene, codeToUse, audioToUse, getProjectPath(project), abortControllerRef.current.signal, 2)
 
     if (result) {
-      setRenderedVideos(prev => ({ ...prev, [activeScene.id]: result }))
       const currentHash = hashCode(codeToUse + audioToUse + JSON.stringify(activeScene.fragments))
-      setRenderedHashes(prev => ({ ...prev, [activeScene.id]: currentHash }))
+      
+      setRenderedHashes(prevHashes => ({ ...prevHashes, [activeScene.id]: currentHash }))
+      setRenderedVideos(prev => {
+        const nextRenderedVideos = { ...prev, [activeScene.id]: result }
+        
+        let allScenesRendered = true
+        const renderedSceneVideoPaths: string[] = []
+        for (const s of project.scenes) {
+          if (nextRenderedVideos[s.id]) {
+            renderedSceneVideoPaths.push(nextRenderedVideos[s.id])
+          } else {
+            allScenesRendered = false
+            break
+          }
+        }
+        
+        // ponytail: auto concat if all scenes cached + project video exists
+        if (allScenesRendered && nextRenderedVideos[`Project_${project.name}`]) {
+          showNotification('Обновление общего видео...', 'info')
+          const finalProjectVideoPath = `${getProjectPath(project)}/preview/Project_${sanitizeFilename(project.name)}.mp4`
+          fetch(`${API}/api/v1/render/concat-video`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_path: getProjectPath(project), video_paths: renderedSceneVideoPaths, output_path: finalProjectVideoPath }),
+          }).then(res => res.json()).then(concatData => {
+            if (concatData.status === 'ok') {
+              setRenderedVideos(v => ({ ...v, [`Project_${project.name}`]: finalProjectVideoPath }))
+              showNotification('Рендер сцены и склейка проекта завершены!', 'success')
+            }
+          }).catch(err => {
+            console.error('Auto concat failed', err)
+          })
+        } else {
+          showNotification('Рендер завершен!', 'success')
+        }
+        
+        return nextRenderedVideos
+      })
       setPlayingTargetId(activeScene.id)
-      showNotification('Рендер завершен!', 'success')
     }
 
     setIsRendering(false)

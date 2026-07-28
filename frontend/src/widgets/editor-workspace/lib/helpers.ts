@@ -1,5 +1,6 @@
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { generateRemotionPrompt } from './generateRemotionPrompt'
+import { normalizeText } from './timingAlgorithms'
 
 export const pad = (num: number) => num.toString().padStart(2, '0')
 export const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
@@ -80,7 +81,11 @@ export const hashCode = (str: string) => {
 
 export const isAudioDirty = (frag: SceneFragment) => {
   if (!frag.audioFileName) return true
-  if (frag.lastAudioHash && frag.lastAudioHash !== hashCode(frag.text)) return true
+  if (frag.lastAudioTextNormalized !== undefined) {
+    if (frag.lastAudioTextNormalized !== normalizeText(frag.text)) return true
+  } else {
+    if (frag.lastAudioHash && frag.lastAudioHash !== hashCode(frag.text)) return true
+  }
   return false
 }
 
