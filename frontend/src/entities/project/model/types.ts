@@ -11,6 +11,8 @@ export interface GlobalVoice {
   name: string
   ttsEngine: string
   voiceModel: string
+  refAudioPath?: string
+  refText?: string
   settings: {
     speed: number
     guidanceScale: number
@@ -63,6 +65,7 @@ export interface Scene {
   remotionCodeHistory?: string[]
   historyIndex?: number
   lastCodeHash?: string
+  audioOffset?: number
 }
 
 export interface CustomVoice {
@@ -97,7 +100,6 @@ export interface ProjectSettings {
   rawMarkdown: string
   promptOverrides?: Partial<PromptTemplates>
   audioMode: AudioGenerationMode
-  globalVoices: GlobalVoice[]
   activeGlobalVoiceId?: string
   audioProcessing: AudioProcessingSettings
 }

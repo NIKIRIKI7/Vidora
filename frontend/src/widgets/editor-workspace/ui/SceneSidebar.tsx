@@ -20,12 +20,13 @@ interface Props {
   onReplaceScene: (id: string) => void
   onFixAudioPacing?: (id: string) => void
   onCopyFixPacingPrompt?: (id: string, currentPacing: number, threshold: number) => void
+  onReplaceSceneAudio?: (sceneId: string, file: File) => void
 }
 
 export const SceneSidebar = ({
   project, activeSceneId, audioLoaded, onSelectScene, onAddScene, onDeleteScene,
   onUpdateTitle, onToggleIgnoreTsx, onDragStart, onDrop, onShowNotification,
-  onExportScene, onReplaceScene, onFixAudioPacing, onCopyFixPacingPrompt,
+  onExportScene, onReplaceScene, onFixAudioPacing, onCopyFixPacingPrompt, onReplaceSceneAudio
 }: Props) => {
   const [tab, setTab] = useState<'script' | 'stock'>('script')
   const [stockQuery, setStockQuery] = useState('')
@@ -109,6 +110,33 @@ export const SceneSidebar = ({
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
                         <button className="text-on-surface-variant hover:text-primary transition-colors p-1" onClick={e => { e.stopPropagation(); onExportScene(scene.id) }} title="Экспорт сцены (Markdown)"><Icon name="content_copy" className="text-[14px]" /></button>
                         <button className="text-on-surface-variant hover:text-primary transition-colors p-1" onClick={e => { e.stopPropagation(); onReplaceScene(scene.id) }} title="Заменить сцену из буфера (Markdown)"><Icon name="content_paste" className="text-[14px]" /></button>
+
+                        {hasAudio && (
+                          <button className="text-on-surface-variant hover:text-primary transition-colors p-1" onClick={e => {
+                            e.stopPropagation();
+                            const audioPath = scene.fragments.find(f => f.audioFileName)?.audioFileName;
+                            if (audioPath) {
+                              const a = document.createElement('a');
+                              a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(audioPath)}`;
+                              a.download = `Audio_${scene.title}.wav`;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                            } else {
+                              onShowNotification('Аудио не найдено', 'error');
+                            }
+                          }} title="Скачать аудио сцены"><Icon name="download" className="text-[14px]" /></button>
+                        )}
+                        <label className="text-on-surface-variant hover:text-primary transition-colors p-1 cursor-pointer" title="Загрузить/Заменить аудио сцены" onClick={e => e.stopPropagation()}>
+                          <Icon name="upload" className="text-[14px]" />
+                          <input type="file" className="hidden" accept="audio/*" onChange={e => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              onReplaceSceneAudio?.(scene.id, e.target.files[0]);
+                              e.target.value = '';
+                            }
+                          }} />
+                        </label>
+
                         <button className="text-on-surface-variant hover:text-error transition-colors p-1" onClick={e => { e.stopPropagation(); onDeleteScene(scene.id) }} title="Удалить сцену"><Icon name="delete" className="text-[14px]" /></button>
                       </div>
                     </div>

@@ -41,7 +41,7 @@ export const AudioPreviewPlayer = ({ audioPath, fragments, activeFragmentId, onA
         <Button variant="icon" icon={isPlaying ? 'pause' : 'play_arrow'} onClick={() => {
           const audio = audioRef.current
           if (!audio) return
-          isPlaying ? audio.pause() : audio.play()
+          if (isPlaying) { audio.pause() } else { audio.play() }
           setIsPlaying(!isPlaying)
         }} />
         <ProgressBar progress={progress} className="flex-1" />

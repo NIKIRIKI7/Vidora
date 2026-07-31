@@ -373,18 +373,33 @@ async def sync_audio(request: AudioSyncRequest):
                 reco_cursor = best_start + len(frag_words)
             else:
                 prev_end = results[-1]["endTime"] if results else 0.0
-                dur = max(len(frag_words) * 0.4, 1.0)
-                start_time = prev_end
-                end_time = prev_end + dur
 
-                if idx == len(request.fragments) - 1 and audio_dur > 0:
-                    end_time = max(end_time, audio_dur)
+                if best_start is not None and best_ratio > 0.3:
+                    chunk_words = recognized_words[best_start:best_start + len(frag_words)]
+                    start_time = chunk_words[0]["start"]
+                    end_time = chunk_words[-1]["end"] + 0.3
 
-            results.append({
-                "id": frag.id,
-                "startTime": round(start_time, 3),
-                "endTime": round(end_time, 3),
-            })
+                    if start_time < prev_end:
+                        start_time = prev_end
+                    if end_time <= start_time:
+                        end_time = start_time + 0.5
+
+                    if idx == len(request.fragments) - 1 and audio_dur > 0:
+                        end_time = max(end_time, audio_dur)
+                    reco_cursor = best_start + len(frag_words)
+                else:
+                    dur = max(len(frag_words) * 0.4, 1.0)
+                    start_time = prev_end
+                    end_time = prev_end + dur
+
+                    if idx == len(request.fragments) - 1 and audio_dur > 0:
+                        end_time = max(end_time, audio_dur)
+
+                results.append({
+                    "id": frag.id,
+                    "startTime": round(start_time, 3),
+                    "endTime": round(end_time, 3),
+                })
 
         print(f"[AUDIO SYNC] [OK] WHISPERX УСПЕШНО сработал!")
         return {"status": "ok", "fragments_timings": results, "fallback": False}

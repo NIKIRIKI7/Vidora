@@ -21,7 +21,7 @@ export const recalculateTimingsProportionally = (fragments: SceneFragment[], tot
   return fragments.map((f, i) => {
     const textLength = normalizeText(f.text).length
     const fraction = totalLength > 0 ? textLength / totalLength : 1 / fragments.length
-    let duration = totalDuration * fraction
+    const duration = totalDuration * fraction
     let end = currentStart + duration
     if (i === fragments.length - 1) end = totalDuration
     const newFrag = { ...f, startTime: Number(currentStart.toFixed(3)), endTime: Number(end.toFixed(3)) }

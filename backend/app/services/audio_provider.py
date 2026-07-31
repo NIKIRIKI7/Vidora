@@ -74,15 +74,15 @@ class OmniVoiceProvider(BaseTTSProvider):
             try:
                 cls._model = cls._load_model()
             except Exception as e:
-                cls._model = "MOCK"
+                import traceback
+                traceback.print_exc()
+                # Больше никакого тихого MOCK. Выбрасываем понятную ошибку.
+                raise RuntimeError(f"Сбой инициализации модели OmniVoice: {e}")
         return cls._model
 
     # ponytail: **kwargs absorbs all signature changes silently, no unexpected arguments ever again.
     async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
         model = self._get_model()
-        if model == "MOCK":
-            await LocalMockTTSProvider().generate_tts(text=text, voice_model=voice_model, **kwargs)
-            return
 
         from omnivoice import OmniVoiceGenerationConfig
         

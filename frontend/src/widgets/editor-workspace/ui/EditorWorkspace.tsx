@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { ProjectSettings, ApiKeys, Resolution, VideoFormat } from '@entities/project'
+import type { ProjectSettings, ApiKeys, Resolution, VideoFormat, GlobalVoice } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
@@ -43,7 +43,7 @@ export const EditorWorkspace = ({
   const model = useEditorWorkspace({ project, onUpdateProject })
   
   const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines' | 'global-voices' | 'audio-processing'>('project')
-  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin } = useSettingsStore()
+  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin, globalVoices, setGlobalVoices } = useSettingsStore()
   const isLocalPrompts = project.promptOverrides !== undefined
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
@@ -93,9 +93,10 @@ export const EditorWorkspace = ({
           onShowNotification={model.showNotification}
           onExportScene={model.handleExportScene}
           onReplaceScene={model.handleReplaceScene}
-          onFixAudioPacing={model.handleFixAudioPacing}
-          onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
-        />
+            onFixAudioPacing={model.handleFixAudioPacing}
+            onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
+            onReplaceSceneAudio={model.handleReplaceSceneAudio}
+          />
         <CenterCanvas
           centerView={model.centerView}
           previewFormat={model.previewFormat}
@@ -155,8 +156,9 @@ export const EditorWorkspace = ({
           onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
           onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
           onNudgeTiming={model.handleNudgeTiming}
-        />
-      </main>
+            onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
+          />
+        </main>
 
       <VoiceboxModal
         isOpen={model.isVoiceboxOpen}
@@ -212,7 +214,7 @@ export const EditorWorkspace = ({
         <div className="flex flex-col gap-4 pb-2">
           {settingsTab === 'project' ? (
             <>
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <FieldGroup label="Формат видео">
                   <Select value={project.format} onChange={e => onUpdateProject({ ...project, format: e.target.value as VideoFormat })}>
                     <option value="16:9">YouTube (16:9)</option>
@@ -233,9 +235,16 @@ export const EditorWorkspace = ({
                     <option value="60">60 FPS</option>
                   </Select>
                 </FieldGroup>
+                <FieldGroup label="Режим генерации аудио">
+            <Select value={project.audioMode || 'scene'} onChange={e => onUpdateProject({ ...project, audioMode: e.target.value as "fragment" | "scene" | "project" })}>
+              <option value="project">По проекту (Единый файл)</option>
+              <option value="scene">По сценам (Идеальная речь)</option>
+              <option value="fragment">По фрагментам (С паузами)</option>
+            </Select>
+                </FieldGroup>
               </div>
               <div className="text-[10px] font-mono text-on-surface-variant mt-2 uppercase tracking-wider">Индикаторы удержания (Pacing)</div>
-              <div className="grid grid-cols-3 gap-4 mb-4 bg-surface-container-lowest/50 p-3 rounded-xl border border-white/5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-surface-container-lowest/50 p-3 rounded-xl border border-white/5">
                 <FieldGroup label={`Визуал (<= ${visualPacingThreshold.toFixed(1)}с/кадр)`}>
                   <Slider min={1} max={10} step={0.5} value={visualPacingThreshold} onChange={e => setVisualPacingThreshold(Number(e.target.value))} />
                 </FieldGroup>
@@ -399,56 +408,63 @@ export const EditorWorkspace = ({
             <>
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium">Список глобальных голосов</span>
-                <Button variant="secondary" onClick={() => {
-                  const newVoice = {
-                    id: crypto.randomUUID(),
-                    name: `Глобальный Голос ${(project.globalVoices?.length || 0) + 1}`,
-                    ttsEngine: ttsEngine,
-                    voiceModel: model.voiceModel,
-                    settings: { speed: model.speed, guidanceScale: model.guidanceScale, numSteps: model.numSteps },
-                  }
-                  onUpdateProject({ ...project, globalVoices: [...(project.globalVoices || []), newVoice], activeGlobalVoiceId: newVoice.id })
-                }}>Сохранить текущие настройки</Button>
-              </div>
-              {(project.globalVoices || []).map(gv => (
-                <div key={gv.id} className={`p-3 rounded-xl border ${project.activeGlobalVoiceId === gv.id ? 'border-primary bg-primary/10' : 'border-white/10 bg-surface-container-lowest'} flex justify-between items-center transition-colors`}>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold">{gv.name}</span>
-                    <span className="text-xs text-on-surface-variant">{gv.ttsEngine} • Модель: {gv.voiceModel}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    {project.activeGlobalVoiceId !== gv.id ? (
-                      <Button variant="dashed" onClick={() => onUpdateProject({ ...project, activeGlobalVoiceId: gv.id })}>Активировать</Button>
-                    ) : (
-                      <Button variant="ghost" className="text-primary cursor-default font-semibold"><Icon name="check" className="text-lg mr-1" /> Активен</Button>
-                    )}
-                    <Button variant="ghost" className="text-error" onClick={() => {
-                      const newVoices = project.globalVoices.filter(v => v.id !== gv.id)
-                      onUpdateProject({ ...project, globalVoices: newVoices, activeGlobalVoiceId: project.activeGlobalVoiceId === gv.id ? undefined : project.activeGlobalVoiceId })
-                    }}><Icon name="delete" className="text-base" /></Button>
-                  </div>
+              <Button variant="secondary" onClick={() => {
+                const isCustom = project.customVoices?.find(v => v.id === model.voiceModel)
+                const newVoice: GlobalVoice = {
+                  id: crypto.randomUUID(),
+                  name: `Глобальный Голос ${(globalVoices.length || 0) + 1}`,
+                  ttsEngine: ttsEngine,
+                  voiceModel: isCustom ? 'clone' : model.voiceModel,
+                  refAudioPath: isCustom ? isCustom.refAudioPath : undefined,
+                  refText: isCustom ? isCustom.refText : undefined,
+                  settings: { speed: model.speed, guidanceScale: model.guidanceScale, numSteps: model.numSteps },
+                }
+                setGlobalVoices([...globalVoices, newVoice])
+                onUpdateProject({ ...project, activeGlobalVoiceId: newVoice.id })
+              }}>Сохранить текущие настройки</Button>
+            </div>
+            {globalVoices.map(gv => (
+              <div key={gv.id} className={`p-3 rounded-xl border ${project.activeGlobalVoiceId === gv.id ? 'border-primary bg-primary/10' : 'border-white/10 bg-surface-container-lowest'} flex justify-between items-center transition-colors`}>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">{gv.name}</span>
+                  <span className="text-xs text-on-surface-variant">{gv.ttsEngine} • Модель: {gv.voiceModel === 'clone' ? 'Клон (Voicebox)' : gv.voiceModel}</span>
                 </div>
-              ))}
-              {(!project.globalVoices || project.globalVoices.length === 0) && (
-                <div className="text-center text-on-surface-variant py-8 border border-dashed border-white/10 rounded-xl">Нет сохраненных глобальных голосов.<br/>Настройки применяются для каждой сцены индивидуально.</div>
-              )}
-              {project.activeGlobalVoiceId && (
+                <div className="flex gap-2">
+                  {project.activeGlobalVoiceId !== gv.id ? (
+                    <Button variant="dashed" onClick={() => onUpdateProject({ ...project, activeGlobalVoiceId: gv.id })}>Активировать</Button>
+                  ) : (
+                    <Button variant="ghost" className="text-primary cursor-default font-semibold"><Icon name="check" className="text-lg mr-1" /> Активен</Button>
+                  )}
+                  <Button variant="ghost" className="text-error" onClick={() => {
+                    const newVoices = globalVoices.filter(v => v.id !== gv.id)
+                    setGlobalVoices(newVoices)
+                    if (project.activeGlobalVoiceId === gv.id) {
+                      onUpdateProject({ ...project, activeGlobalVoiceId: undefined })
+                    }
+                  }}><Icon name="delete" className="text-base" /></Button>
+                </div>
+              </div>
+            ))}
+            {globalVoices.length === 0 && (
+              <div className="text-center text-on-surface-variant py-8 border border-dashed border-white/10 rounded-xl">Нет сохраненных глобальных голосов.<br/>Настройки применяются для каждой сцены индивидуально.</div>
+            )}
+            {project.activeGlobalVoiceId && (
                 <Button variant="dashed" className="mt-2 text-warning hover:bg-warning/10" onClick={() => onUpdateProject({ ...project, activeGlobalVoiceId: undefined })}>Отключить глобальный голос</Button>
               )}
             </>
           ) : settingsTab === 'audio-processing' ? (
             <>
               <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-4">
-                <FieldGroup label={`Порог тишины (дБ): ${(project.audioProcessing?.silenceThresholdDb ?? -40).toFixed(1)}`}>
-                  <Slider min={-60} max={-10} step={1} value={project.audioProcessing?.silenceThresholdDb ?? -40} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), silenceThresholdDb: Number(e.target.value) } })} />
+                <FieldGroup label={`Порог тишины (дБ): ${(project.audioProcessing?.silenceThresholdDb ?? -45.0).toFixed(1)}`}>
+                  <Slider min={-60} max={-10} step={1} value={project.audioProcessing?.silenceThresholdDb ?? -45.0} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false }), silenceThresholdDb: Number(e.target.value) } })} />
                 </FieldGroup>
-                <FieldGroup label={`Мин. тишина для детекции (мс): ${project.audioProcessing?.minSilenceMs ?? 500}`}>
-                  <Slider min={100} max={2000} step={50} value={project.audioProcessing?.minSilenceMs ?? 500} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), minSilenceMs: Number(e.target.value) } })} />
+                <FieldGroup label={`Мин. тишина для детекции (мс): ${project.audioProcessing?.minSilenceMs ?? 200}`}>
+                  <Slider min={100} max={2000} step={50} value={project.audioProcessing?.minSilenceMs ?? 200} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false }), minSilenceMs: Number(e.target.value) } })} />
                 </FieldGroup>
-                <FieldGroup label={`Урезать до (мс) [0 = удалить]: ${project.audioProcessing?.maxSilenceMs ?? 250}`}>
-                  <Slider min={0} max={1000} step={50} value={project.audioProcessing?.maxSilenceMs ?? 250} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), maxSilenceMs: Number(e.target.value) } })} />
+                <FieldGroup label={`Урезать до (мс) [0 = удалить]: ${project.audioProcessing?.maxSilenceMs ?? 100}`}>
+                  <Slider min={0} max={1000} step={50} value={project.audioProcessing?.maxSilenceMs ?? 100} onChange={e => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false }), maxSilenceMs: Number(e.target.value) } })} />
                 </FieldGroup>
-                <Switch label="Удалять краевую тишину" checked={project.audioProcessing?.removeEdges ?? true} onChange={val => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -40, minSilenceMs: 500, maxSilenceMs: 250, removeEdges: true }), removeEdges: val } })} />
+                <Switch label="Удалять краевую тишину" checked={project.audioProcessing?.removeEdges ?? false} onChange={val => onUpdateProject({ ...project, audioProcessing: { ...(project.audioProcessing || { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false }), removeEdges: val } })} />
               </div>
             </>
           ) : (
@@ -552,16 +568,39 @@ export const EditorWorkspace = ({
         </div>
       </Modal>
 
-      <Modal isOpen={model.isAiSettingsOpen} onClose={() => model.setIsAiSettingsOpen(false)} title="⚙️ Настройки OmniVoice">
+        <Modal isOpen={model.isAiSettingsOpen} onClose={() => model.setIsAiSettingsOpen(false)} title="⚙️ Настройки OmniVoice">
         <div className="flex flex-col gap-5 pb-2">
+          {project.activeGlobalVoiceId && (
+            <div className="p-2 -mb-2 bg-primary/10 border border-primary/30 text-primary text-xs rounded-lg text-center">
+              Вы редактируете параметры активного глобального голоса
+            </div>
+          )}
           <FieldGroup label={`Шаги инференса (num_steps): ${model.numSteps}`}>
-            <Slider min={8} max={64} step={1} value={model.numSteps} onChange={e => model.setNumSteps(Number(e.target.value))} />
+            <Slider min={8} max={64} step={1} value={model.numSteps} onChange={e => {
+              const val = Number(e.target.value)
+              model.setNumSteps(val)
+              if (project.activeGlobalVoiceId) {
+                setGlobalVoices(globalVoices.map(v => v.id === project.activeGlobalVoiceId ? { ...v, settings: { ...v.settings, numSteps: val } } : v))
+              }
+            }} />
           </FieldGroup>
           <FieldGroup label={`Guidance Scale: ${model.guidanceScale.toFixed(1)}`}>
-            <Slider min={0} max={10} step={0.1} value={model.guidanceScale} onChange={e => model.setGuidanceScale(Number(e.target.value))} />
+            <Slider min={0} max={10} step={0.1} value={model.guidanceScale} onChange={e => {
+              const val = Number(e.target.value)
+              model.setGuidanceScale(val)
+              if (project.activeGlobalVoiceId) {
+                setGlobalVoices(globalVoices.map(v => v.id === project.activeGlobalVoiceId ? { ...v, settings: { ...v.settings, guidanceScale: val } } : v))
+              }
+            }} />
           </FieldGroup>
           <FieldGroup label={`Скорость (speed): ${model.speed.toFixed(2)}x`}>
-            <Slider min={0.5} max={2.0} step={0.05} value={model.speed} onChange={e => model.setSpeed(Number(e.target.value))} />
+            <Slider min={0.5} max={2.0} step={0.05} value={model.speed} onChange={e => {
+              const val = Number(e.target.value)
+              model.setSpeed(val)
+              if (project.activeGlobalVoiceId) {
+                setGlobalVoices(globalVoices.map(v => v.id === project.activeGlobalVoiceId ? { ...v, settings: { ...v.settings, speed: val } } : v))
+              }
+            }} />
           </FieldGroup>
           <FieldGroup label={`Длительность (duration): ${model.duration === 0 ? 'Авто' : model.duration.toFixed(1) + 'с'}`}>
             <Slider min={0} max={30} step={0.5} value={model.duration} onChange={e => model.setDuration(Number(e.target.value))} />

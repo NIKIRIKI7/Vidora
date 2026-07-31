@@ -39,7 +39,7 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
   const globalPrompts = useSettingsStore.getState().globalPrompts
   const durationSec = getSceneDuration(scene.fragments)
 
-  return replaceVars(project.promptOverrides?.scene || globalPrompts.scene, {
+  const promptBody = replaceVars(project.promptOverrides?.scene || globalPrompts.scene, {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
     DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
@@ -47,6 +47,12 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
     SCENE_TIMECODE: scene.timecode,
     FRAGMENTS: scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}:\nТайминг: ${(frag.startTime ?? 0).toFixed(2)} - ${(frag.endTime ?? 5).toFixed(2)}с\nВизуал: ${frag.visualNote}\nСуфлер: "${frag.text}"`).join('\n')
   })
+
+  const audioOffsetInstruction = scene.audioOffset && scene.audioOffset > 0 
+    ? `\n\n> ВАЖНО ДЛЯ МОНТАЖА: В этой сцене вы должны использовать <Audio src={...} startFrom={Math.round(${scene.audioOffset} * fps)} /> потому что аудиофайл является общим для всего проекта, и эта сцена начинается на ${scene.audioOffset} секунде общего файла.`
+    : '';
+
+  return promptBody + audioOffsetInstruction;
 }
 
 export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, fragment: SceneFragment): string => {

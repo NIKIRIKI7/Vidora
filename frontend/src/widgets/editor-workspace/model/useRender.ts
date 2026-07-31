@@ -269,7 +269,6 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       if (!proceed) return
     }
 
-    setIsRendering(true)
     showNotification('Подготовка архива...', 'info')
     try {
       const markdownContent = serializeProjectToMarkdown(project)
@@ -291,8 +290,6 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       showNotification('Проект успешно экспортирован!', 'success')
     } catch {
       showNotification('Ошибка экспорта проекта', 'error')
-    } finally {
-      setIsRendering(false)
     }
   }
 

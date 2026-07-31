@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
+import { useSettingsStore } from '@entities/project'
 import { Button, FieldGroup, Icon, Select, Spinner, Switch } from '@shared/ui'
 import { generateFragmentPrompt, generateProjectPrompt, generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty } from '@widgets/editor-workspace/lib/helpers'
@@ -39,6 +40,7 @@ interface Props {
   onUpdateFragmentBRoll: (fragId: string, filename: string) => void
   onUnlinkFragmentBRoll: (fragId: string) => void
   onNudgeTiming: (fragId: string, type: 'start' | 'end', delta: number) => void
+  onReplaceFragmentAudio: (fragId: string, path: string) => void
 }
 
 export const PipelineInspector = ({
@@ -46,7 +48,7 @@ export const PipelineInspector = ({
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onAddFragment, onDeleteFragment, onFragmentTextChange,
   onFragDragStart, onFragDrop, onOpenVoicebox, onOpenAiSettings, onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync,
   onResetAudio, onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onShowNotification,
-  onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming,
+  onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio
 }: Props) => {
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('project')
 
@@ -63,10 +65,10 @@ export const PipelineInspector = ({
 
         {/* 0. Сценарий */}
         <section className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <span className="font-label text-xs uppercase tracking-wider text-primary">Сценарий фрагментов</span>
-            <button className="text-xs text-secondary hover:bg-secondary/10 px-2 py-1 rounded-md transition-all flex items-center gap-1 font-medium active:scale-95" onClick={onAddFragment}>
-              <Icon name="add" className="text-[16px]" /> Фрагмент
+          <div className="flex justify-between items-center mb-2">
+            <span className="font-label text-sm font-semibold text-on-surface flex items-center gap-2"><Icon name="view_timeline" className="text-[18px] text-primary"/> Фрагменты сцены</span>
+            <button className="text-[11px] text-primary bg-primary/10 border border-primary/30 hover:bg-primary/20 px-2 py-1 rounded transition-all flex items-center gap-1 font-medium active:scale-95" onClick={onAddFragment}>
+              <Icon name="add" className="text-[14px]" /> Добавить
             </button>
           </div>
 
@@ -97,6 +99,38 @@ export const PipelineInspector = ({
                     <button className={`text-[11px] flex items-center gap-0.5 ${dirtyAudio ? 'text-warning hover:text-warning/80' : 'text-on-surface-variant hover:text-primary'}`} onClick={() => onRunVoiceGenFragment(activeScene.id, frag.id)} title={dirtyAudio ? 'Аудио устарело. Нажмите для переозвучки' : 'Переозвучить'}>
                       <Icon name="mic" className="text-[14px]" />
                     </button>
+
+                    {frag.audioFileName && (
+                      <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5" onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(frag.audioFileName!)}`;
+                        a.download = `Audio_Frag_${frag.id.slice(0,6)}.wav`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                      }} title="Скачать аудио">
+                        <Icon name="download" className="text-[14px]" />
+                      </button>
+                    )}
+                    <label className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5 cursor-pointer" title="Заменить аудио фрагмента">
+                      <Icon name="upload" className="text-[14px]" />
+                      <input type="file" className="hidden" accept="audio/*" onChange={async e => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          const file = e.target.files[0];
+                          const fd = new FormData(); fd.append('file', file); fd.append('project_path', getProjectPath(project)); fd.append('target_id', frag.id);
+                          try {
+                            const res = await fetch(`${API}/api/v1/media/upload-audio`, { method: 'POST', body: fd });
+                            const data = await res.json();
+                            if (data.status === 'ok') {
+                              onReplaceFragmentAudio(frag.id, data.path);
+                              onShowNotification('Аудио фрагмента заменено!', 'success');
+                            }
+                          } catch { onShowNotification('Ошибка загрузки', 'error'); }
+                          e.target.value = '';
+                        }
+                      }} />
+                    </label>
+
                     <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5" onClick={() => { if (activeScene) { void navigator.clipboard.writeText(generateFragmentPrompt(project, activeScene, frag)); onShowNotification(`Промпт скопирован!`, 'success') } }}>
                       <Icon name="content_copy" className="text-[12px]" /> Промпт
                     </button>
@@ -121,11 +155,11 @@ export const PipelineInspector = ({
 
         {/* 1. Озвучка */}
         <section className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <span className="font-label text-xs uppercase tracking-wider text-primary">1. Озвучка (OmniVoice)</span>
+          <div className="flex justify-between items-center bg-primary/10 p-2 rounded-lg border border-primary/20">
+            <span className="font-label text-xs uppercase tracking-wider text-primary flex items-center gap-2"><Icon name="mic" className="text-[16px]"/> Озвучка</span>
             <div className="flex items-center gap-1">
-              <button className="text-[11px] text-on-surface-variant hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-white/5 border border-white/10" onClick={onOpenAiSettings}><Icon name="tune" className="text-[14px]" /> Параметры</button>
-              <button className="text-xs text-secondary hover:bg-secondary/10 px-2 py-1 rounded-md transition-all flex items-center gap-1 font-medium active:scale-95" onClick={onOpenVoicebox}><Icon name="record_voice_over" className="text-[16px]" /> Voicebox</button>
+              <button className="text-[11px] text-primary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-primary/20 border border-primary/30" onClick={onOpenAiSettings} title="Настройки TTS"><Icon name="tune" className="text-[14px]" /></button>
+              <button className="text-[11px] text-secondary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-secondary/20 border border-secondary/30" onClick={onOpenVoicebox} title="Voicebox (Клонирование)"><Icon name="record_voice_over" className="text-[14px]" /></button>
             </div>
           </div>
 
@@ -134,7 +168,7 @@ export const PipelineInspector = ({
               <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const url = isCustom ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white"><Icon name="play_arrow" className="text-[16px]" /></button>
           {project.activeGlobalVoiceId ? (
             <div className="flex-1 bg-primary/10 border border-primary/30 rounded-lg py-2 px-3 text-sm text-primary flex justify-between items-center shadow-inner">
-              <span className="truncate pr-2">🌐 {project.globalVoices?.find(v => v.id === project.activeGlobalVoiceId)?.name}</span>
+              <span className="truncate pr-2">🌐 {useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)?.name}</span>
               <button className="text-primary hover:text-white" title="Игнорируется, так как активен глобальный голос"><Icon name="lock" className="text-sm" /></button>
             </div>
           ) : (
@@ -152,6 +186,25 @@ export const PipelineInspector = ({
             <Button variant="dashed" disabled={isGeneratingAudio} onClick={onRunVoiceGen} className={`flex-1 ${anyAudioDirty ? 'border-warning/50 text-warning hover:bg-warning/10 hover:border-warning' : ''}`}>
               {isGeneratingAudio ? <Spinner /> : anyAudioDirty ? 'Обновить голос (⚠️)' : 'Сгенерировать голос'}
             </Button>
+            <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors px-2 py-1 rounded hover:bg-white/5 border border-white/10" onClick={async () => {
+              const paths = project.scenes.flatMap(s => s.fragments.map(f => f.audioFileName)).filter(Boolean) as string[];
+              if (paths.length === 0) { onShowNotification('Нет аудио', 'error'); return; }
+              try {
+                const outPath = `${getProjectPath(project)}/assets/voice/Project_${project.name}_Full.wav`;
+                const res = await fetch(`${API}/api/v1/audio/concat`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ audio_paths: paths, output_path: outPath })
+                });
+                if (res.ok) {
+                  const a = document.createElement('a');
+                  a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(outPath)}`;
+                  a.download = `Full_Audio_${project.name}.wav`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                } else { onShowNotification('Ошибка склейки', 'error'); }
+              } catch { onShowNotification('Сбой скачивания', 'error'); }
+            }} title="Скачать все аудио проекта одним файлом"><Icon name="download" className="text-[16px]" /></button>
             <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors px-2 py-1 rounded hover:bg-white/5 border border-white/10" onClick={onResetAudio} title="Сбросить все аудио"><Icon name="delete" className="text-[16px]" /></button>
           </div>
 
@@ -172,11 +225,11 @@ export const PipelineInspector = ({
 
         {/* 2. Синхронизация */}
         <section className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <span className="font-label text-xs uppercase tracking-wider text-primary">2. Синхронизация (Whisper)</span>
+          <div className="flex justify-between items-center bg-secondary/10 p-2 rounded-lg border border-secondary/20">
+            <span className="font-label text-xs uppercase tracking-wider text-secondary flex items-center gap-2"><Icon name="align_horizontal_left" className="text-[16px]"/> Синхронизация</span>
             <div className="flex items-center gap-2">
               {project.scenes.some(s => s.fragments.some(f => f.startTime !== undefined)) && (
-                <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded hover:bg-white/5" onClick={onResetAllSync}><Icon name="restart_alt" className="text-[14px]" /> Сбросить</button>
+                <button className="text-[11px] text-error hover:text-white flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded bg-error/10 border border-error/30" onClick={onResetAllSync} title="Сбросить все тайминги"><Icon name="restart_alt" className="text-[14px]" /></button>
               )}
             </div>
           </div>
@@ -194,8 +247,8 @@ export const PipelineInspector = ({
 
         {/* 3. Код Remotion */}
         <section className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <span className="font-label text-xs uppercase tracking-wider text-primary">3. Код Remotion (TSX)</span>
+          <div className="flex justify-between items-center bg-accent/10 p-2 rounded-lg border border-accent/20">
+            <span className="font-label text-xs uppercase tracking-wider text-accent flex items-center gap-2"><Icon name="code" className="text-[16px]"/> Код (TSX)</span>
             <div className="flex gap-1">
               <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10" onClick={() => { if (activeScene) { void navigator.clipboard.writeText(generateRemotionPrompt(project, activeScene)); onShowNotification('Промпт сцены с таймкодами скопирован!', 'success') } }}><Icon name="content_copy" className="text-[12px]" /> Сцену</button>
               <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10" onClick={() => { void navigator.clipboard.writeText(generateProjectPrompt(project)); onShowNotification('Промпт проекта скопирован!', 'success') }}><Icon name="content_copy" className="text-[12px]" /> Проект</button>
@@ -217,7 +270,9 @@ export const PipelineInspector = ({
 
         {/* 4. Сборка и Экспорт */}
         <section className="flex flex-col gap-3">
-          <span className="font-label text-xs uppercase tracking-wider text-primary">4. Сборка и Экспорт</span>
+          <div className="flex justify-between items-center bg-success/10 p-2 rounded-lg border border-success/20">
+            <span className="font-label text-xs uppercase tracking-wider text-success flex items-center gap-2"><Icon name="movie" className="text-[16px]"/> Сборка (Рендер)</span>
+          </div>
           <Button variant="primary" disabled={isRendering} onClick={onRunProjectRender}>
             {isRendering ? <Spinner /> : '🎬 Собрать весь MP4 проект'}
           </Button>

@@ -20,13 +20,24 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
   
   const [voiceModel, setVoiceModel] = useState('aria')
-  const [speed, setSpeed] = useState(1.0)
-  const [numSteps, setNumSteps] = useState(32)
+  const [speed, setSpeed] = useState(1.15)
+  const [numSteps, setNumSteps] = useState(64)
   const [guidanceScale, setGuidanceScale] = useState(3.0)
   const [duration, setDuration] = useState(0.0)
   const [denoise, setDenoise] = useState(true)
   const [preprocessPrompt, setPreprocessPrompt] = useState(true)
   const [postprocessOutput, setPostprocessOutput] = useState(true)
+
+  useEffect(() => {
+    if (project.activeGlobalVoiceId) {
+      const gv = useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)
+      if (gv) {
+        setSpeed(gv.settings.speed)
+        setNumSteps(gv.settings.numSteps)
+        setGuidanceScale(gv.settings.guidanceScale)
+      }
+    }
+  }, [project.activeGlobalVoiceId])
   
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false)
   const [playWithAudio, setPlayWithAudio] = useState(true)
@@ -80,7 +91,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const parsed = parseMarkdownFull(newMd)
     const mergedScenes = parsed.scenes?.map((newScene, sIdx) => {
       const oldScene: Partial<Scene> = project.scenes[sIdx] || {}
-      const mergedFragments = newScene.fragments.map((newFrag, fIdx) => {
+
+      const oldTotalText = oldScene.fragments?.map(f => normalizeText(f.text || '')).join('') || ''
+      const newTotalText = newScene.fragments.map(f => normalizeText(f.text)).join('')
+
+      let mergedFragments: SceneFragment[] = newScene.fragments.map((newFrag, fIdx) => {
         const oldFrag: Partial<SceneFragment> = oldScene.fragments?.[fIdx] || {}
         return {
           ...newFrag,
@@ -92,6 +107,15 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           lastAudioHash: oldFrag.lastAudioHash,
         }
       })
+
+      if (oldTotalText === newTotalText && project.audioMode === 'scene' && oldScene.fragments && oldScene.fragments.length > 0) {
+        const firstStart = oldScene.fragments[0].startTime || 0;
+        const lastEnd = oldScene.fragments[oldScene.fragments.length - 1].endTime || 0;
+        if (lastEnd > firstStart) {
+           mergedFragments = recalculateTimingsProportionally(mergedFragments, lastEnd - firstStart) as SceneFragment[];
+        }
+      }
+
       return {
         ...newScene,
         id: oldScene.id || newScene.id,
@@ -116,6 +140,12 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const handleUpdateFragmentBRoll = (fragId: string, filename: string) => {
     if (!activeScene) return
     const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, bRollFileName: filename } : f)
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+  }
+
+  const handleReplaceFragmentAudio = (fragId: string, path: string) => {
+    if (!activeScene) return
+    const updatedFragments = activeScene.fragments.map(f => f.id === fragId ? { ...f, audioFileName: path, lastAudioHash: hashCode(f.text) } : f)
     handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
   }
 
@@ -248,12 +278,17 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     })
     const newTotalText = updatedFragments.map(f => normalizeText(f.text)).join('')
     if (oldTotalText === newTotalText && project.audioMode === 'scene') {
-      const lastFrag = activeScene.fragments[activeScene.fragments.length - 1]
-      const totalDuration = (lastFrag.endTime || 0) - (activeScene.fragments[0].startTime || 0)
+      const firstStartTime = activeScene.fragments[0].startTime || 0;
+      const lastEndTime = activeScene.fragments[activeScene.fragments.length - 1].endTime || 0;
+      const totalDuration = lastEndTime - firstStartTime;
+
       if (totalDuration > 0) {
-        const remapped = recalculateTimingsProportionally(updatedFragments, totalDuration)
-        handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: remapped } : s) })
-        return
+        const remapped = recalculateTimingsProportionally(updatedFragments, totalDuration);
+        handleUpdateProjectSync({
+          ...project,
+          scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: remapped } : s)
+        });
+        return;
       }
     }
     handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s)) })
@@ -473,7 +508,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleFragmentTextChange, handleUpdateCode, handleCodeHistory, handleFixAudioPacing, handleUploadRefVoiceAudio, 
     handleProcessAdvancedSilence: audio.handleProcessAdvancedSilence,
     handleSaveCustomVoice, handleDeleteCustomVoice, handleFullAutoPipeline, handleCancelAll, showNotification, 
-    handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll, handleNudgeTiming, handleCaptureFrame, 
-    handleExportScene, handleReplaceScene, handleCopyFixPacingPrompt,
+      handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll, handleNudgeTiming, handleCaptureFrame, handleReplaceFragmentAudio,
+      handleExportScene, handleReplaceScene, handleCopyFixPacingPrompt,
   }
 }

@@ -25,12 +25,11 @@ const createProject = (name: string, text: string, format: VideoFormat, resoluti
     scenes: parsed.scenes ?? [],
     rawMarkdown: text,
     audioMode: 'scene',
-    globalVoices: [],
     audioProcessing: {
-      silenceThresholdDb: -40.0,
-      minSilenceMs: 500,
-      maxSilenceMs: 250,
-      removeEdges: true,
+      silenceThresholdDb: -45.0,
+      minSilenceMs: 200,
+      maxSilenceMs: 100,
+      removeEdges: false,
     },
   }
 }

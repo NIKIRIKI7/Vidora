@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
-import type { ProjectSettings, PromptTemplates, ApiKeys } from './types'
+import type { ProjectSettings, PromptTemplates, ApiKeys, GlobalVoice } from './types'
 
 interface ProjectStore {
   projects: ProjectSettings[]
@@ -118,6 +118,8 @@ interface SettingsStore {
   setVisualPacingThreshold: (v: number) => void
   setAudioSilenceThreshold: (v: number) => void
   setAudioWpmMin: (v: number) => void
+  globalVoices: GlobalVoice[]
+  setGlobalVoices: (voices: GlobalVoice[]) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -138,6 +140,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setVisualPacingThreshold: (v) => set({ visualPacingThreshold: v }),
       setAudioSilenceThreshold: (v) => set({ audioSilenceThreshold: v }),
       setAudioWpmMin: (v) => set({ audioWpmMin: v }),
+      globalVoices: [],
+      setGlobalVoices: (v) => set({ globalVoices: v }),
     }),
     {
       name: 'vidora-settings',
@@ -145,6 +149,7 @@ export const useSettingsStore = create<SettingsStore>()(
         ...current,
         ...(persisted as object),
         globalPrompts: { ...DEFAULT_PROMPTS, ...(persisted as Partial<SettingsStore>)?.globalPrompts },
+        globalVoices: (persisted as Partial<SettingsStore>)?.globalVoices || [],
       }),
     } satisfies PersistOptions<SettingsStore>
   )
