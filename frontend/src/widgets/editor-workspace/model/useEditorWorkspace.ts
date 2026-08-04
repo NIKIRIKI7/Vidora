@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type ChangeEvent } from 'react'
+import { useState, useRef, useCallback, useEffect, type ChangeEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice, VideoFormat } from '@entities/project'
 import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeSceneToMarkdown, parseSceneMarkdown, serializeProjectToMarkdown } from '@entities/project'
 import { generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
