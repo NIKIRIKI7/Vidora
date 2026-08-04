@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
 import { Button, Icon, Spinner, ProgressBar } from '@shared/ui'
 import { API } from '@widgets/editor-workspace/lib/helpers'
+import { Timeline } from './Timeline'
 
 interface Props {
   centerView: 'player' | 'code' | 'split' | 'markdown'
@@ -26,13 +27,15 @@ interface Props {
   onCancelAll: () => void
   onUpdateMarkdown: (md: string) => void
   onCaptureFrame: () => void
+  onUpdateFragmentBounds: (fragId: string, edge: 'start' | 'end', newTime: number) => void
+  showTimeline: boolean
 }
 
 export const CenterCanvas = ({
   centerView, previewFormat, onChangeView, onPreviewFormatChange, playWithAudio, onTogglePlayWithAudio,
   playingTargetId, renderedVideos, audioLoaded, activeScene, project, videoRef, audioRef, onUpdateCode,
   onCodeHistory, isRendering, isAutoPipelineRunning, pipelineStep, renderProgress, onCancelAll,
-  onUpdateMarkdown, onCaptureFrame,
+  onUpdateMarkdown, onCaptureFrame, onUpdateFragmentBounds, showTimeline,
 }: Props) => {
   const isBusy = isRendering || isAutoPipelineRunning
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
@@ -110,7 +113,7 @@ export const CenterCanvas = ({
         </div>
 
         {renderedVideos[playingTargetId || ''] ? (
-          <video ref={videoRef} crossOrigin="anonymous" src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`} controls autoPlay={!playWithAudio} muted={!playWithAudio} className="w-full h-full object-contain" />
+          <video ref={videoRef} crossOrigin="anonymous" src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`} autoPlay={!playWithAudio} muted={!playWithAudio} className="w-full h-full object-contain" />
         ) : (
           <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-500">
             <div className="w-32 h-32 rounded-full bg-primary/20 blur-3xl absolute animate-pulse" />
@@ -205,6 +208,16 @@ export const CenterCanvas = ({
           </div>
         )}
       </div>
+
+      {showTimeline && !isBusy && (centerView === 'player' || centerView === 'split') && (
+        <div className="w-full h-[220px] shrink-0 border-t border-white/10 bg-background z-20">
+          <Timeline
+            fragments={activeScene?.fragments || []}
+            videoRef={videoRef}
+            onUpdateBounds={onUpdateFragmentBounds}
+          />
+        </div>
+      )}
     </div>
   )
 }

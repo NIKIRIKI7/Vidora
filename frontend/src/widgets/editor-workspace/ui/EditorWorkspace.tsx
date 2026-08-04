@@ -42,8 +42,8 @@ export const EditorWorkspace = ({
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
   
-  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines' | 'global-voices' | 'audio-processing'>('project')
-  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin, globalVoices, setGlobalVoices } = useSettingsStore()
+  const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines' | 'global-voices' | 'audio-processing' | 'ui'>('project')
+  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin, globalVoices, setGlobalVoices, uiPreferences, setUiPreferences } = useSettingsStore()
   const isLocalPrompts = project.promptOverrides !== undefined
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
@@ -68,18 +68,17 @@ export const EditorWorkspace = ({
         isAutoPipelineRunning={model.isAutoPipelineRunning}
         isRendering={model.isRendering}
         pipelineStep={model.pipelineStep}
-        renderProgress={model.renderProgress}
+        uiPreferences={uiPreferences}
+        onToggleUi={(key) => setUiPreferences({ [key]: !uiPreferences[key] })}
         onSwitchProject={onSwitchProject}
         onNewProject={onNewProject}
         onOpenSettings={() => model.setIsSettingsOpen(true)}
         onFullAutoPipeline={model.handleFullAutoPipeline}
-        onProjectRender={model.runProjectRender}
-        onSingleSceneRender={() => model.runRender()}
-        onExportProject={model.handleExportProject}
       />
 
       <main className="flex-1 flex overflow-hidden">
-        <SceneSidebar
+        {uiPreferences.showSceneSidebar && (
+          <SceneSidebar
           project={project}
           activeSceneId={model.activeSceneId}
           audioLoaded={model.audioLoaded}
@@ -97,6 +96,8 @@ export const EditorWorkspace = ({
             onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
             onReplaceSceneAudio={model.handleReplaceSceneAudio}
           />
+        )}
+
         <CenterCanvas
           centerView={model.centerView}
           previewFormat={model.previewFormat}
@@ -120,8 +121,11 @@ export const EditorWorkspace = ({
           onCancelAll={model.handleCancelAll}
           onUpdateMarkdown={model.handleUpdateMarkdown}
           onCaptureFrame={model.handleCaptureFrame}
+          onUpdateFragmentBounds={model.handleUpdateFragmentBounds}
+          showTimeline={uiPreferences.showTimeline}
         />
-        <PipelineInspector
+        {uiPreferences.showInspector && (
+          <PipelineInspector
           project={project}
           activeScene={model.activeScene}
           voiceModel={model.voiceModel}
@@ -131,6 +135,7 @@ export const EditorWorkspace = ({
           isSyncing={model.isSyncing}
           isGeneratingCode={model.isGeneratingCode}
           isRendering={model.isRendering}
+          renderProgress={model.renderProgress}
           onChangeVoiceModel={model.setVoiceModel}
           onChangeUseWhisper={model.setUseWhisper}
           onChangeAutoOffloadVram={model.setAutoOffloadVram}
@@ -152,12 +157,15 @@ export const EditorWorkspace = ({
           onToggleIgnoreTsx={model.toggleIgnoreTsx}
           onRunCodeGen={() => model.runCodeGen()}
           onRunProjectRender={model.runProjectRender}
+          onRunRender={() => model.runRender()}
+          onExportProject={model.handleExportProject}
           onShowNotification={model.showNotification}
           onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
           onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
           onNudgeTiming={model.handleNudgeTiming}
             onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
           />
+        )}
         </main>
 
       <VoiceboxModal
@@ -178,41 +186,35 @@ export const EditorWorkspace = ({
       />
 
       <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки">
-        <div className="flex border-b border-white/10 mb-5">
-          <button 
-            onClick={() => setSettingsTab('project')} 
-            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'project' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
-          >
-            Проект
-          </button>
-          <button 
-            onClick={() => setSettingsTab('prompts')} 
-            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'prompts' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
-          >
-            Промпты LLM
-          </button>
-          <button 
-            onClick={() => setSettingsTab('ai-engines')} 
-            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'ai-engines' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
-          >
-            AI Движки
-          </button>
-          <button 
-            onClick={() => setSettingsTab('global-voices')} 
-            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'global-voices' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
-          >
-            Голоса
-          </button>
-          <button 
-            onClick={() => setSettingsTab('audio-processing')} 
-            className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${settingsTab === 'audio-processing' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
-          >
-            Аудио
-          </button>
+        <div className="flex flex-wrap gap-1 mb-5 p-1 bg-surface-container-lowest/50 rounded-lg border border-white/5">
+          <button onClick={() => setSettingsTab('project')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'project' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Проект</button>
+          <button onClick={() => setSettingsTab('ui')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'ui' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Интерфейс</button>
+          <button onClick={() => setSettingsTab('prompts')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'prompts' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Промпты LLM</button>
+          <button onClick={() => setSettingsTab('ai-engines')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'ai-engines' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>AI Движки</button>
+          <button onClick={() => setSettingsTab('global-voices')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'global-voices' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Голоса</button>
+          <button onClick={() => setSettingsTab('audio-processing')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'audio-processing' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Аудио</button>
         </div>
 
         <div className="flex flex-col gap-4 pb-2">
-          {settingsTab === 'project' ? (
+          {settingsTab === 'ui' ? (
+            <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-4">
+              <Switch
+                label="Показывать левую панель (Сайдбар сцен)"
+                checked={uiPreferences.showSceneSidebar}
+                onChange={(v) => setUiPreferences({ showSceneSidebar: v })}
+              />
+              <Switch
+                label="Показывать нижнюю панель (Таймлайн)"
+                checked={uiPreferences.showTimeline}
+                onChange={(v) => setUiPreferences({ showTimeline: v })}
+              />
+              <Switch
+                label="Показывать правую панель (Инспектор)"
+                checked={uiPreferences.showInspector}
+                onChange={(v) => setUiPreferences({ showInspector: v })}
+              />
+            </div>
+          ) : settingsTab === 'project' ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <FieldGroup label="Формат видео">

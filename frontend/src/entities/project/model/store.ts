@@ -120,7 +120,16 @@ interface SettingsStore {
   setAudioWpmMin: (v: number) => void
   globalVoices: GlobalVoice[]
   setGlobalVoices: (voices: GlobalVoice[]) => void
+
+  uiPreferences: {
+    showSceneSidebar: boolean
+    showInspector: boolean
+    showTimeline: boolean
+  }
+  setUiPreferences: (prefs: Partial<SettingsStore['uiPreferences']>) => void
 }
+
+const DEFAULT_UI_PREFS = { showSceneSidebar: true, showInspector: true, showTimeline: true }
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
@@ -142,6 +151,9 @@ export const useSettingsStore = create<SettingsStore>()(
       setAudioWpmMin: (v) => set({ audioWpmMin: v }),
       globalVoices: [],
       setGlobalVoices: (v) => set({ globalVoices: v }),
+
+      uiPreferences: DEFAULT_UI_PREFS,
+      setUiPreferences: (p) => set((s) => ({ uiPreferences: { ...s.uiPreferences, ...p } })),
     }),
     {
       name: 'vidora-settings',
@@ -150,6 +162,7 @@ export const useSettingsStore = create<SettingsStore>()(
         ...(persisted as object),
         globalPrompts: { ...DEFAULT_PROMPTS, ...(persisted as Partial<SettingsStore>)?.globalPrompts },
         globalVoices: (persisted as Partial<SettingsStore>)?.globalVoices || [],
+        uiPreferences: { ...DEFAULT_UI_PREFS, ...(persisted as Partial<SettingsStore>)?.uiPreferences },
       }),
     } satisfies PersistOptions<SettingsStore>
   )

@@ -15,6 +15,7 @@ interface Props {
   isSyncing: boolean
   isGeneratingCode: boolean
   isRendering: boolean
+  renderProgress: number
   onChangeVoiceModel: (v: string) => void
   onChangeUseWhisper: (v: boolean) => void
   onChangeAutoOffloadVram: (v: boolean) => void
@@ -36,6 +37,8 @@ interface Props {
   onToggleIgnoreTsx: (id: string) => void
   onRunCodeGen: () => void
   onRunProjectRender: () => void
+  onRunRender: () => void
+  onExportProject: () => void
   onShowNotification: (msg: string, type?: 'success' | 'error' | 'info') => void
   onUpdateFragmentBRoll: (fragId: string, filename: string) => void
   onUnlinkFragmentBRoll: (fragId: string) => void
@@ -46,10 +49,10 @@ interface Props {
 type TabKey = 'content' | 'audio' | 'visual' | 'export';
 
 export const PipelineInspector = ({
-  project, activeScene, voiceModel, useWhisper, autoOffloadVram, isGeneratingAudio, isSyncing, isGeneratingCode, isRendering,
+  project, activeScene, voiceModel, useWhisper, autoOffloadVram, isGeneratingAudio, isSyncing, isGeneratingCode, isRendering, renderProgress,
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onAddFragment, onDeleteFragment, onFragmentTextChange,
   onFragDragStart, onFragDrop, onOpenVoicebox, onOpenAiSettings, onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync,
-  onResetAudio, onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onShowNotification,
+  onResetAudio, onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onRunRender, onExportProject, onShowNotification,
   onUpdateFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio
 }: Props) => {
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('project')
@@ -334,9 +337,19 @@ export const PipelineInspector = ({
               Полный рендер всех неигнорируемых сцен с использованием локального инстанса Remotion и последующей склейкой аудиодорожек через FFmpeg.
             </p>
 
-            <Button variant="primary" disabled={isRendering} onClick={onRunProjectRender} className="py-3 shadow-[0_0_15px_rgba(74,222,128,0.2)]">
-              {isRendering ? <Spinner /> : '🎬 Собрать весь MP4 проект'}
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" disabled={isRendering} onClick={onRunProjectRender} className="py-3 shadow-[0_0_15px_rgba(74,222,128,0.2)]">
+                {isRendering ? `🎬 Рендер... ${renderProgress}%` : '🎬 Рендер всего проекта'}
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="dashed" disabled={isRendering} onClick={onRunRender} className="flex-1 text-xs py-2 px-2">
+                  Текущая сцена
+                </Button>
+                <Button variant="dashed" disabled={isRendering} onClick={onExportProject} className="flex-1 text-xs py-2 px-2">
+                  Экспорт ZIP <Icon name="file_export" className="text-[14px] ml-1" />
+                </Button>
+              </div>
+            </div>
           </section>
         )}
 

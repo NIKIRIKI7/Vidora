@@ -7,14 +7,12 @@ interface Props {
   isAutoPipelineRunning: boolean
   isRendering: boolean
   pipelineStep: string
-  renderProgress: number
+  uiPreferences: { showSceneSidebar: boolean; showInspector: boolean; showTimeline: boolean }
+  onToggleUi: (key: 'showSceneSidebar' | 'showInspector' | 'showTimeline') => void
   onSwitchProject: (id: string) => void
   onNewProject: () => void
   onOpenSettings: () => void
   onFullAutoPipeline: () => void
-  onProjectRender: () => void
-  onSingleSceneRender: () => void
-  onExportProject: () => void
 }
 
 export const EditorHeader = ({
@@ -23,14 +21,12 @@ export const EditorHeader = ({
   isAutoPipelineRunning,
   isRendering,
   pipelineStep,
-  renderProgress,
+  uiPreferences,
+  onToggleUi,
   onSwitchProject,
   onNewProject,
   onOpenSettings,
   onFullAutoPipeline,
-  onProjectRender,
-  onSingleSceneRender,
-  onExportProject,
 }: Props) => (
   <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
     <div className="flex items-center gap-4">
@@ -58,6 +54,35 @@ export const EditorHeader = ({
           <Icon name="settings" className="inline text-base mr-1" /> Настройки
         </DropdownItem>
       </Dropdown>
+
+      {/* Меню Вид */}
+      <Dropdown
+        trigger={
+          <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 font-medium text-sm text-on-surface-variant hover:text-white transition-colors">
+            <Icon name="grid_view" className="text-lg" />
+            Вид
+          </button>
+        }
+      >
+        <DropdownItem onClick={() => onToggleUi('showSceneSidebar')}>
+          <span className="flex items-center gap-2 text-on-surface">
+            <Icon name={uiPreferences.showSceneSidebar ? 'check_box' : 'check_box_outline_blank'} className="text-base text-primary" />
+            Сайдбар сцен
+          </span>
+        </DropdownItem>
+        <DropdownItem onClick={() => onToggleUi('showTimeline')}>
+          <span className="flex items-center gap-2 text-on-surface">
+            <Icon name={uiPreferences.showTimeline ? 'check_box' : 'check_box_outline_blank'} className="text-base text-primary" />
+            Таймлайн
+          </span>
+        </DropdownItem>
+        <DropdownItem onClick={() => onToggleUi('showInspector')}>
+          <span className="flex items-center gap-2 text-on-surface">
+            <Icon name={uiPreferences.showInspector ? 'check_box' : 'check_box_outline_blank'} className="text-base text-primary" />
+            Инспектор пайплайна
+          </span>
+        </DropdownItem>
+      </Dropdown>
     </div>
 
     <div className="flex items-center gap-3">
@@ -70,23 +95,6 @@ export const EditorHeader = ({
         className="bg-gradient-to-r from-secondary to-primary text-black font-semibold shadow-[0_0_20px_rgba(79,219,200,0.3)]"
       >
         {isAutoPipelineRunning ? pipelineStep : 'Сгенерировать всё'}
-      </Button>
-
-      <Button
-        variant="dashed"
-        disabled={isRendering}
-        onClick={onProjectRender}
-        className="border-primary/40 text-primary hover:bg-primary/10"
-      >
-        {isRendering ? `Рендер... ${renderProgress}%` : '🎬 Рендер всего проекта'}
-      </Button>
-
-      <Button variant="dashed" disabled={isRendering} onClick={onSingleSceneRender}>
-        Только текущая сцена
-      </Button>
-
-      <Button variant="dashed" disabled={isRendering} onClick={onExportProject}>
-        Экспорт <Icon name="file_export" className="text-base ml-1" />
       </Button>
     </div>
   </header>

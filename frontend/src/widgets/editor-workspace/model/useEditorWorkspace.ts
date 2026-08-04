@@ -177,6 +177,33 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
   }
 
+  const handleUpdateFragmentBounds = (fragId: string, edge: 'start' | 'end', newTime: number) => {
+    if (!activeScene) return
+    const updatedFragments = [...activeScene.fragments]
+    const idx = updatedFragments.findIndex(f => f.id === fragId)
+    if (idx === -1) return
+
+    const safeTime = Math.max(0, Number(newTime.toFixed(3)))
+
+    if (edge === 'start') {
+      const maxStart = (updatedFragments[idx].endTime || 1) - 0.1
+      const finalStart = Math.min(safeTime, maxStart)
+      updatedFragments[idx] = { ...updatedFragments[idx], startTime: finalStart }
+      if (idx > 0) {
+        updatedFragments[idx - 1] = { ...updatedFragments[idx - 1], endTime: finalStart }
+      }
+    } else {
+      const minEnd = (updatedFragments[idx].startTime || 0) + 0.1
+      const finalEnd = Math.max(safeTime, minEnd)
+      updatedFragments[idx] = { ...updatedFragments[idx], endTime: finalEnd }
+      if (idx < updatedFragments.length - 1) {
+        updatedFragments[idx + 1] = { ...updatedFragments[idx + 1], startTime: finalEnd }
+      }
+    }
+
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+  }
+
   const handleCancelAll = async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
@@ -510,5 +537,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleSaveCustomVoice, handleDeleteCustomVoice, handleFullAutoPipeline, handleCancelAll, showNotification, 
       handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll, handleNudgeTiming, handleCaptureFrame, handleReplaceFragmentAudio,
       handleExportScene, handleReplaceScene, handleCopyFixPacingPrompt,
+      handleUpdateFragmentBounds,
   }
 }
