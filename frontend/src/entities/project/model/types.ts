@@ -89,6 +89,11 @@ export interface PromptTemplates {
   fixPacing: string
 }
 
+export interface SyncedSkills {
+  synced_at: string
+  skills: { id: string; title: string; description: string; content: string }[]
+}
+
 export interface ProjectSettings {
   name: string
   format: VideoFormat
@@ -102,4 +107,5 @@ export interface ProjectSettings {
   audioMode: AudioGenerationMode
   activeGlobalVoiceId?: string
   audioProcessing: AudioProcessingSettings
+  syncedSkills?: SyncedSkills
 }

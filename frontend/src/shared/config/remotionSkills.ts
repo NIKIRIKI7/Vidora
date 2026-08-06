@@ -1,0 +1,37 @@
+export interface RemotionSkill {
+  id: string
+  title: string
+  description: string
+  content: string
+}
+
+// ponytail: distilled offline fallback, full set comes from POST /api/v1/system/remotion-skills-sync
+export const REMOTION_SKILLS: RemotionSkill[] = [
+  {
+    id: 'best-practices',
+    title: 'Remotion Best Practices',
+    description: 'Ключевые правила генерации: стейты без useState, анимации через интерполяцию, отзывчивые размеры через проценты.',
+    content: `## Remotion Best Practices
+
+1. ALWAYS use useCurrentFrame(), useVideoConfig(), interpolate(), Easing, AbsoluteFill, Sequence.
+2. NO useState/useEffect/hooks inside components — Remotion re-renders per frame, keep components pure.
+3. Layout MUST be responsive: use percentages (width: '100%') or useVideoConfig() so 16:9 and 9:16 both work.
+4. Animate everything with Easing.bezier() + interpolate(); plain linear movement looks cheap.
+5. Use <Sequence from={...} durationInFrames={...}> to stage fragments in time.
+6. Import <img> from staticFile() (public/ assets); do not import binaries in TSX.
+7. Text stays legible: high contrast on surface colors, readable font sizes, proper line-height.
+8. Never use pages, grids, or absolutely positioned pixels tied to 1920x1080 — real size comes from useVideoConfig().`,
+  },
+  {
+    id: 'markup-timing',
+    title: 'Тайминг и монтаж',
+    description: 'Как раскладывать фрагменты по времени и делать динамичную смену кадров.',
+    content: `## Тайминг и монтаж
+
+- Каждый фрагмент = отдельный <Sequence>, старт = startTime*fps, длительность = (endTime-startTime)*fps.
+- Кадр должен меняться не реже раза в 3-5 секунд: зум, B-roll, анимация, смена ракурса.
+- Паузы в речи делай через пустые доли <Sequence> (без контента), а не через задержки анимаций.
+- Синхронизируй визуал с текстом суфлера: что сказано — то на экране.
+- Не растягивай один статичный кадр на весь фрагмент.`,
+  },
+]

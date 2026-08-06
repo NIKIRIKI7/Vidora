@@ -2,8 +2,10 @@ import os
 import psutil
 import torch
 import subprocess
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from app.services.remotion_skills import sync_remotion_skills
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -22,6 +24,13 @@ def get_hardware():
         return {"vram_gb": round(vram_gb, 1), "ram_gb": round(ram_gb, 1), "device": device, "gpu_type": gpu_type}
     except Exception:
         return {"vram_gb": 0.0, "ram_gb": 8.0, "device": "Unknown", "gpu_type": "cpu"}
+
+@router.post("/remotion-skills-sync")
+def sync_remotion_skills_endpoint():
+    try:
+        return sync_remotion_skills()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить скиллы: {e}")
 
 class PullRequest(BaseModel):
     engine: str

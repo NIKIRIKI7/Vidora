@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { ProjectSettings, ApiKeys, Resolution, VideoFormat, GlobalVoice } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
-import { THEME_PRESETS, type ThemePreset } from '@shared/config'
+import { THEME_PRESETS, REMOTION_SKILLS, type ThemePreset } from '@shared/config'
 import { useEditorWorkspace } from '@widgets/editor-workspace/model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -47,6 +47,44 @@ export const EditorWorkspace = ({
   const isLocalPrompts = project.promptOverrides !== undefined
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
+  const [syncingSkills, setSyncingSkills] = useState(false)
+
+  const syncedSkills = project.syncedSkills
+  const skills = syncedSkills?.skills?.length ? syncedSkills.skills : REMOTION_SKILLS
+
+  const handleSyncSkills = useCallback(async () => {
+    setSyncingSkills(true)
+    try {
+      const res = await fetch(`${API}/api/v1/system/remotion-skills-sync`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.status === 'ok') {
+        onUpdateProject({ ...project, syncedSkills: data })
+        model.showNotification(`Синхронизировано скиллов: ${data.skills.length}`, 'success')
+      } else {
+        model.showNotification('Не удалось синхронизировать скиллы', 'error')
+      }
+    } catch {
+      model.showNotification('Не удалось синхронизировать скиллы', 'error')
+    }
+    setSyncingSkills(false)
+  }, [project, onUpdateProject, model])
+
+  // ponytail: inlined target prompts are plain text; local overrides win, else global
+  const appendToPrompt = useCallback((which: 'scene' | 'fragment' | 'project', skillTitle: string, content: string) => {
+    const base = isLocalPrompts ? project.promptOverrides?.[which] : globalPrompts[which]
+    const text = `\n\n## Remotion Skill: ${skillTitle}\n\n${content}`
+    if (isLocalPrompts) {
+      onUpdateProject({ ...project, promptOverrides: { ...project.promptOverrides, [which]: `${base ?? ''}${text}` } })
+    } else {
+      setGlobalPrompts({ [which]: `${base ?? ''}${text}` })
+    }
+    model.showNotification(`Скилл «${skillTitle}» добавлен в промпт: ${which}`, 'success')
+  }, [isLocalPrompts, project, onUpdateProject, globalPrompts, setGlobalPrompts, model])
+
+  const handleCopySkill = useCallback(async (skillTitle: string, content: string) => {
+    await navigator.clipboard.writeText(content)
+    model.showNotification(`Скилл «${skillTitle}» скопирован`, 'success')
+  }, [model])
 
   useEffect(() => {
     fetch(`${API}/api/v1/system/hardware`).then(r => r.ok && r.json()).then(setHardware).catch(() => {})
@@ -405,6 +443,38 @@ export const EditorWorkspace = ({
                   <Icon name="restore" className="text-[16px] mr-1" /> Сбросить глобальные промпты
                 </Button>
               )}
+
+              <div className="mt-6 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-sm font-medium">Скиллы Remotion</span>
+                  <Button variant="secondary" icon="sync" onClick={handleSyncSkills} disabled={syncingSkills}>
+                    {syncingSkills ? 'Синхронизация...' : syncedSkills ? 'Обновить с GitHub' : 'Синхронизировать с GitHub'}
+                  </Button>
+                </div>
+                {syncedSkills ? (
+                  <div className="text-[10px] text-success mb-2">Официальные скиллы remotion-dev/skills · {new Date(syncedSkills.synced_at).toLocaleString()}</div>
+                ) : (
+                  <div className="text-[10px] text-on-surface-variant mb-2">Показаны встроенные лучшие практики. Синхронизация загружает все официальные скиллы с GitHub — добавление их в промпты повышает качество генерации.</div>
+                )}
+                <div className="flex flex-col gap-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                  {skills.map(s => (
+                    <div key={s.id} className="p-2.5 rounded-xl border border-white/10 bg-surface-container-lowest">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-on-surface truncate">{s.title}</div>
+                          <div className="text-[10px] text-on-surface-variant mt-0.5 line-clamp-2">{s.description}</div>
+                        </div>
+                        <Button variant="ghost" className="p-1.5 shrink-0" onClick={() => handleCopySkill(s.title, s.content)} title="Копировать"><Icon name="content_copy" className="text-[16px]" /></Button>
+                      </div>
+                      <div className="flex gap-1.5 mt-2">
+                        <Button variant="dashed" className="py-1 px-2.5 text-[10px]" onClick={() => appendToPrompt('scene', s.title, s.content)}>В Сцену</Button>
+                        <Button variant="dashed" className="py-1 px-2.5 text-[10px]" onClick={() => appendToPrompt('fragment', s.title, s.content)}>Во Фрагмент</Button>
+                        <Button variant="dashed" className="py-1 px-2.5 text-[10px]" onClick={() => appendToPrompt('project', s.title, s.content)}>В Проект</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>
           ) : settingsTab === 'global-voices' ? (
             <>
