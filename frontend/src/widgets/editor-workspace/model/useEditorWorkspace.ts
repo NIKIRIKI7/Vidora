@@ -20,7 +20,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
   
   const [voiceModel, setVoiceModel] = useState('aria')
-  const [speed, setSpeed] = useState(1.15)
+  const [speed, setSpeed] = useState(1)
   const [numSteps, setNumSteps] = useState(64)
   const [guidanceScale, setGuidanceScale] = useState(3.0)
   const [duration, setDuration] = useState(0.0)
@@ -65,10 +65,14 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const showNotification = useNotificationStore(s => s.showNotification)
   const undo = useProjectStore(s => s.undo)
   const redo = useProjectStore(s => s.redo)
-  const ttsEngine = useSettingsStore(s => s.ttsEngine)
-  const llmEngine = useSettingsStore(s => s.llmEngine)
+  const aiMode = useSettingsStore(s => s.aiMode)
+  const cloudEngines = useSettingsStore(s => s.cloudEngines)
+  const localEngines = useSettingsStore(s => s.localEngines)
   const apiKeys = useSettingsStore(s => s.apiKeys)
   const globalPrompts = useSettingsStore(s => s.globalPrompts)
+
+  const ttsEngine = aiMode === 'cloud' ? cloudEngines.audio : localEngines.audio
+  const llmEngine = aiMode === 'cloud' ? cloudEngines.visual : localEngines.visual
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 

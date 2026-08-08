@@ -80,6 +80,8 @@ export interface ApiKeys {
   elevenlabs?: string
   anthropic?: string
   openai?: string
+  routerai?: string
+  aitunnel?: string
 }
 
 export interface PromptTemplates {

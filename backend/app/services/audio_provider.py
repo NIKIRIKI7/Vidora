@@ -190,15 +190,59 @@ class OpenAIProvider(BaseTTSProvider):
                 with open(output_path, 'wb') as f:
                     f.write(res.content)
 
+class GatewayTTSProvider(BaseTTSProvider):
+    """TTS через OpenAI-совместимый маршрут: RouterAI — основной, AITUNNEL — резерв.
+    Модель задаётся в UI как 'provider/model' (например minimax/speech-01-hd)."""
+
+    def __init__(self, model: str):
+        self.model = model
+
+    async def generate_tts(self, text: str, voice_model: str, **kwargs):
+        api_keys = kwargs.get("api_keys") or {}
+        voice = voice_model or 'nova'
+        # ponytail: спикеры OmniVoice локальные; у шлюза свои голоса — маппим на OpenAI-дефолт
+        if voice in ("aria", "marcus", "kolya", "kseniya", "alloy"):
+            voice = 'nova'
+        if voice == 'clone':
+            raise RuntimeError("Клонирование голоса доступно только в локальном режиме (OmniVoice) — переключите режим на «Локально»")
+        from openai import AsyncOpenAI
+        routes = [
+            (api_keys.get('routerai') or os.environ.get('ROUTERAI_API_KEY', ''), 'https://routerai.ru/api/v1', 'RouterAI'),
+            (api_keys.get('aitunnel') or os.environ.get('AITUNNEL_API_KEY', ''), 'https://api.aitunnel.ru/v1/', 'AITUNNEL'),
+        ]
+        for api_key, base, name in routes:
+            if not api_key:
+                continue
+            try:
+                client = AsyncOpenAI(api_key=api_key, base_url=base)
+                response = await client.audio.speech.create(
+                    model=self.model,
+                    voice=voice,
+                    input=text,
+                    response_format="wav",
+                )
+                output_path = kwargs.get("output_path", "")
+                if output_path:
+                    with open(output_path, 'wb') as f:
+                        f.write(response.content)
+                return
+            except Exception as exc:
+                print(f"[WARN] {name} TTS error: {exc}. Переключение на следующий шлюз...")
+        raise RuntimeError("Gateway TTS недоступен: ключ не задан или сервисы не ответили")
+
 class TTSProviderFactory:
     @staticmethod
     def get_provider(engine: Optional[str]) -> BaseTTSProvider:
-        if engine == "silero":
+        if engine in ("silero", "snakers4/silero-models"):
             return SileroProvider()
         elif engine == "elevenlabs":
             return ElevenLabsProvider()
         elif engine == "openai":
             return OpenAIProvider()
+        elif engine == "k2-fsa/OmniVoice":
+            return OmniVoiceProvider()
+        elif engine and "/" in engine:
+            return GatewayTTSProvider(engine)
         return OmniVoiceProvider()
 
 try:
@@ -207,3 +251,30 @@ try:
         OmniVoiceProvider._get_model()
 except Exception:
     pass
+
+if __name__ == "__main__":
+    import asyncio
+
+    # pure-logic checks (без сети): маршрутизация движков и замена локальных спикеров
+    async def _check():
+        factory = TTSProviderFactory
+        assert isinstance(factory.get_provider("k2-fsa/OmniVoice"), OmniVoiceProvider)
+        assert isinstance(factory.get_provider("snakers4/silero-models"), SileroProvider)
+        assert isinstance(factory.get_provider("openai/tts-1-hd"), GatewayTTSProvider)
+        assert isinstance(factory.get_provider("minimax/speech-01-hd"), GatewayTTSProvider)
+        assert isinstance(factory.get_provider("openai"), OpenAIProvider)
+        # clone в облаке запрещён, локальные спикеры замалплены на дефолт
+        gw = GatewayTTSProvider("minimax/speech-01-hd")
+        try:
+            await gw.generate_tts("тест", "aria", api_keys={})
+            raise AssertionError("aria должен был смапиться и упасть на отсутствии ключа")
+        except RuntimeError as e:
+            assert "не задан" in str(e) or "Переключите" in str(e), str(e)
+        try:
+            await gw.generate_tts("тест", "clone", api_keys={"routerai": "x"})
+            raise AssertionError("clone должен был быть запрещён")
+        except RuntimeError as e:
+            assert "только в локальном режиме" in str(e)
+        print("audio_provider gateway mapping OK")
+
+    asyncio.run(_check())

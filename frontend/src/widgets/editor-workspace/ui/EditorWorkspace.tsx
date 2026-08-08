@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { ProjectSettings, ApiKeys, Resolution, VideoFormat, GlobalVoice } from '@entities/project'
+import type { ProjectSettings, Resolution, VideoFormat, GlobalVoice } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
-import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon } from '@shared/ui'
+import { Button, Modal, FieldGroup, Slider, Switch, Input, Select, Icon, Spinner } from '@shared/ui'
 import { THEME_PRESETS, REMOTION_SKILLS, type ThemePreset } from '@shared/config'
 import { useEditorWorkspace } from '@widgets/editor-workspace/model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
@@ -10,18 +10,6 @@ import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
 import { VoiceboxModal } from './VoiceboxModal'
 import { API } from '@widgets/editor-workspace/lib/helpers'
-
-// ponytail: flat model DB, no class hierarchy
-const AI_MODELS_DB = {
-  omnivoice: { name: 'OmniVoice (Локально)', type: 'local', vram: 4, voice_id: 'aria' },
-  silero: { name: 'Silero (Локально)', type: 'local', vram: 1, voice_id: 'kseniya' },
-  elevenlabs: { name: 'ElevenLabs (Облако)', type: 'cloud', key_provider: 'elevenlabs' as keyof ApiKeys, default_voice: '21m00Tcm4TlvDq8ikWAM' },
-  openai: { name: 'OpenAI TTS (Облако)', type: 'cloud', key_provider: 'openai' as keyof ApiKeys, default_voice: 'nova' },
-  ollama: { name: 'Ollama qwen2.5-coder (Локально)', type: 'local', vram: 4 },
-  claude: { name: 'Claude Sonnet (Облако)', type: 'cloud', key_provider: 'anthropic' as keyof ApiKeys },
-} as const
-
-type AiEngineId = keyof typeof AI_MODELS_DB
 
 interface Props {
   project: ProjectSettings
@@ -43,11 +31,53 @@ export const EditorWorkspace = ({
   const model = useEditorWorkspace({ project, onUpdateProject })
   
   const [settingsTab, setSettingsTab] = useState<'project' | 'prompts' | 'ai-engines' | 'global-voices' | 'audio-processing' | 'ui'>('project')
-  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, ttsEngine, llmEngine, apiKeys, setTtsEngine, setLlmEngine, setApiKey, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin, globalVoices, setGlobalVoices, uiPreferences, setUiPreferences } = useSettingsStore()
+  const { globalPrompts, setGlobalPrompts, resetGlobalPrompts, apiKeys, setApiKey, aiMode, setAiMode, cloudEngines, setCloudEngine, localEngines, setLocalEngine, visualPacingThreshold, audioSilenceThreshold, audioWpmMin, setVisualPacingThreshold, setAudioSilenceThreshold, setAudioWpmMin, globalVoices, setGlobalVoices, uiPreferences, setUiPreferences } = useSettingsStore()
   const isLocalPrompts = project.promptOverrides !== undefined
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string; gpu_type: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
+  const [hfPullUrl, setHfPullUrl] = useState('')
   const [syncingSkills, setSyncingSkills] = useState(false)
+
+  // === НОВАЯ ЛОГИКА ДЛЯ ИЗМЕНЕНИЯ ШИРИНЫ ПАНЕЛЕЙ ===
+  const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem('vidora:left-panel-width')) || 320)
+  const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem('vidora:right-panel-width')) || 380)
+
+  const handleLeftDrag = useCallback((e: MouseEvent) => {
+    let newWidth = e.clientX
+    if (newWidth < 220) newWidth = 220 // Минимальная ширина
+    if (newWidth > 600) newWidth = 600 // Максимальная ширина
+    setLeftWidth(newWidth)
+    localStorage.setItem('vidora:left-panel-width', newWidth.toString())
+  }, [])
+
+  const startLeftDrag = (e: React.MouseEvent) => {
+    e.preventDefault()
+    document.body.style.cursor = 'col-resize'
+    document.addEventListener('mousemove', handleLeftDrag)
+    document.addEventListener('mouseup', () => {
+      document.removeEventListener('mousemove', handleLeftDrag)
+      document.body.style.cursor = ''
+    }, { once: true })
+  }
+
+  const handleRightDrag = useCallback((e: MouseEvent) => {
+    let newWidth = window.innerWidth - e.clientX
+    if (newWidth < 280) newWidth = 280
+    if (newWidth > 600) newWidth = 600
+    setRightWidth(newWidth)
+    localStorage.setItem('vidora:right-panel-width', newWidth.toString())
+  }, [])
+
+  const startRightDrag = (e: React.MouseEvent) => {
+    e.preventDefault()
+    document.body.style.cursor = 'col-resize'
+    document.addEventListener('mousemove', handleRightDrag)
+    document.addEventListener('mouseup', () => {
+      document.removeEventListener('mousemove', handleRightDrag)
+      document.body.style.cursor = ''
+    }, { once: true })
+  }
+  // ===================================================
 
   const syncedSkills = project.syncedSkills
   const skills = syncedSkills?.skills?.length ? syncedSkills.skills : REMOTION_SKILLS
@@ -116,24 +146,31 @@ export const EditorWorkspace = ({
 
       <main className="flex-1 flex overflow-hidden">
         {uiPreferences.showSceneSidebar && (
-          <SceneSidebar
-          project={project}
-          activeSceneId={model.activeSceneId}
-          audioLoaded={model.audioLoaded}
-          onSelectScene={model.setActiveSceneId}
-          onAddScene={model.handleAddScene}
-          onDeleteScene={model.handleDeleteScene}
-          onUpdateTitle={model.handleUpdateSceneTitle}
-          onToggleIgnoreTsx={model.toggleIgnoreTsx}
-          onDragStart={model.handleSceneDragStart}
-          onDrop={model.handleSceneDrop}
-          onShowNotification={model.showNotification}
-          onExportScene={model.handleExportScene}
-          onReplaceScene={model.handleReplaceScene}
-            onFixAudioPacing={model.handleFixAudioPacing}
-            onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
-            onReplaceSceneAudio={model.handleReplaceSceneAudio}
-          />
+          <div className="relative shrink-0 h-full" style={{ width: leftWidth }}>
+            <SceneSidebar
+            project={project}
+            activeSceneId={model.activeSceneId}
+            audioLoaded={model.audioLoaded}
+            onSelectScene={model.setActiveSceneId}
+            onAddScene={model.handleAddScene}
+            onDeleteScene={model.handleDeleteScene}
+            onUpdateTitle={model.handleUpdateSceneTitle}
+            onToggleIgnoreTsx={model.toggleIgnoreTsx}
+            onDragStart={model.handleSceneDragStart}
+            onDrop={model.handleSceneDrop}
+            onShowNotification={model.showNotification}
+            onExportScene={model.handleExportScene}
+            onReplaceScene={model.handleReplaceScene}
+              onFixAudioPacing={model.handleFixAudioPacing}
+              onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
+              onReplaceSceneAudio={model.handleReplaceSceneAudio}
+            />
+            {/* Ползунок Слева */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors translate-x-1/2"
+              onMouseDown={startLeftDrag}
+            />
+          </div>
         )}
 
         <CenterCanvas
@@ -163,46 +200,53 @@ export const EditorWorkspace = ({
           showTimeline={uiPreferences.showTimeline}
         />
         {uiPreferences.showInspector && (
-          <PipelineInspector
-          project={project}
-          activeScene={model.activeScene}
-          voiceModel={model.voiceModel}
-          useWhisper={model.useWhisper}
-          autoOffloadVram={model.autoOffloadVram}
-          isGeneratingAudio={model.isGeneratingAudio}
-          isSyncing={model.isSyncing}
-          isGeneratingCode={model.isGeneratingCode}
-          isRendering={model.isRendering}
-          renderProgress={model.renderProgress}
-          onChangeVoiceModel={model.setVoiceModel}
-          onChangeUseWhisper={model.setUseWhisper}
-          onChangeAutoOffloadVram={model.setAutoOffloadVram}
-          onAddFragment={model.handleAddFragment}
-          onDeleteFragment={model.handleDeleteFragment}
-          onFragmentTextChange={model.handleFragmentTextChange}
-          onFragDragStart={model.handleFragDragStart}
-          onFragDrop={model.handleFragDrop}
-          onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
-          onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
-          onRunVoiceGen={() => model.runVoiceGenAllScenes()}
-          onRunVoiceGenFragment={model.runVoiceGenFragment}
-          onResetAllSync={model.handleResetAllSync}
-          onResetAudio={model.handleResetAudio}
-          onProcessAudio={model.handleProcessAudio}
-          onProcessAdvancedSilence={model.handleProcessAdvancedSilence}
-          onUnloadVram={model.handleUnloadVram}
-          onRunSync={() => model.runSyncAllScenes()}
-          onToggleIgnoreTsx={model.toggleIgnoreTsx}
-          onRunCodeGen={() => model.runCodeGen()}
-          onRunProjectRender={model.runProjectRender}
-          onRunRender={() => model.runRender()}
-          onExportProject={model.handleExportProject}
-          onShowNotification={model.showNotification}
-          onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
-          onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
-          onNudgeTiming={model.handleNudgeTiming}
-            onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
-          />
+          <div className="relative shrink-0 h-full" style={{ width: rightWidth }}>
+            {/* Ползунок Справа */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors -translate-x-1/2"
+              onMouseDown={startRightDrag}
+            />
+            <PipelineInspector
+            project={project}
+            activeScene={model.activeScene}
+            voiceModel={model.voiceModel}
+            useWhisper={model.useWhisper}
+            autoOffloadVram={model.autoOffloadVram}
+            isGeneratingAudio={model.isGeneratingAudio}
+            isSyncing={model.isSyncing}
+            isGeneratingCode={model.isGeneratingCode}
+            isRendering={model.isRendering}
+            renderProgress={model.renderProgress}
+            onChangeVoiceModel={model.setVoiceModel}
+            onChangeUseWhisper={model.setUseWhisper}
+            onChangeAutoOffloadVram={model.setAutoOffloadVram}
+            onAddFragment={model.handleAddFragment}
+            onDeleteFragment={model.handleDeleteFragment}
+            onFragmentTextChange={model.handleFragmentTextChange}
+            onFragDragStart={model.handleFragDragStart}
+            onFragDrop={model.handleFragDrop}
+            onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
+            onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
+            onRunVoiceGen={() => model.runVoiceGenAllScenes()}
+            onRunVoiceGenFragment={model.runVoiceGenFragment}
+            onResetAllSync={model.handleResetAllSync}
+            onResetAudio={model.handleResetAudio}
+            onProcessAudio={model.handleProcessAudio}
+            onProcessAdvancedSilence={model.handleProcessAdvancedSilence}
+            onUnloadVram={model.handleUnloadVram}
+            onRunSync={() => model.runSyncAllScenes()}
+            onToggleIgnoreTsx={model.toggleIgnoreTsx}
+            onRunCodeGen={() => model.runCodeGen()}
+            onRunProjectRender={model.runProjectRender}
+            onRunRender={() => model.runRender()}
+            onExportProject={model.handleExportProject}
+            onShowNotification={model.showNotification}
+            onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
+            onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
+            onNudgeTiming={model.handleNudgeTiming}
+              onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
+            />
+          </div>
         )}
         </main>
 
@@ -485,7 +529,7 @@ export const EditorWorkspace = ({
                 const newVoice: GlobalVoice = {
                   id: crypto.randomUUID(),
                   name: `Глобальный Голос ${(globalVoices.length || 0) + 1}`,
-                  ttsEngine: ttsEngine,
+                  ttsEngine: model.ttsEngine,
                   voiceModel: isCustom ? 'clone' : model.voiceModel,
                   refAudioPath: isCustom ? isCustom.refAudioPath : undefined,
                   refText: isCustom ? isCustom.refText : undefined,
@@ -540,102 +584,144 @@ export const EditorWorkspace = ({
               </div>
             </>
           ) : (
-            <>
-              <div className="flex items-center gap-3 mb-4 bg-surface-container-lowest rounded-xl p-3">
-                <div className={`w-2 h-2 rounded-full ${hardware ? 'bg-success' : 'bg-warning'}`} />
-                <div className="text-xs text-on-surface-variant">
-                  {hardware
-                    ? `${hardware.device} · ${hardware.vram_gb.toFixed(1)} GB VRAM · ${hardware.ram_gb.toFixed(1)} GB RAM · ${hardware.gpu_type}`
-                    : 'Проверка оборудования...'}
-                </div>
+            <div className="flex flex-col gap-4">
+              {/* Переключатель Облако / Локально */}
+              <div className="flex p-1 bg-surface-container-lowest/50 rounded-lg border border-white/5 shrink-0">
+                <button
+                  onClick={() => setAiMode('cloud')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-colors ${aiMode === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30 shadow-[0_0_15px_rgba(221,183,255,0.1)]' : 'text-on-surface-variant hover:text-white'}`}
+                >
+                  <Icon name="cloud" className="text-[14px] align-middle mr-1" /> Облако (RouterAI / API)
+                </button>
+                <button
+                  onClick={() => setAiMode('local')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-colors ${aiMode === 'local' ? 'bg-success/20 text-success border border-success/30 shadow-[0_0_15px_rgba(74,222,128,0.1)]' : 'text-on-surface-variant hover:text-white'}`}
+                >
+                  <Icon name="dns" className="text-[14px] align-middle mr-1" /> Локально (GPU)
+                </button>
               </div>
 
-              <div className="text-[10px] text-on-surface-variant mb-3 font-mono">TTS — Модели озвучки</div>
-              {(['omnivoice', 'silero', 'elevenlabs', 'openai'] as AiEngineId[]).map(id => {
-                const info = AI_MODELS_DB[id]
-                const isActive = ttsEngine === id
-                return (
-                  <div key={id} className={`flex items-center gap-3 p-2.5 rounded-xl mb-2 cursor-pointer transition-colors ${isActive ? 'bg-primary/10 border border-primary/30' : 'bg-surface-container-lowest hover:bg-surface-container-low'}`}
-                    onClick={() => setTtsEngine(id)}>
-                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${info.type === 'local'
-                      ? (hardware && hardware.vram_gb >= info.vram ? 'bg-success' : 'bg-error')
-                      : 'bg-warning'}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-on-surface truncate">{info.name}</div>
-                      {info.type === 'local' ? (
-                        <div className="text-[10px] text-on-surface-variant mt-0.5">
-                          {hardware && hardware.vram_gb >= info.vram ? 'Установлено' : `Требуется ${info.vram} GB VRAM`}
-                        </div>
-                      ) : info.key_provider && apiKeys[info.key_provider as keyof ApiKeys] ? (
-                        <div className="text-[10px] text-success mt-0.5">API ключ задан</div>
-                      ) : (
-                        <div className="text-[10px] text-warning mt-0.5">Требуется API ключ</div>
-                      )}
+              {aiMode === 'cloud' && (
+                <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* API Ключ RouterAI / AITUNNEL */}
+                  <div className="bg-surface-container-lowest/40 p-4 rounded-xl border border-white/5 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <Icon name="key" className="text-warning" />
+                      <span className="text-sm font-medium text-white">Единый API Ключ</span>
                     </div>
-                    <div className="text-[10px] text-on-surface-variant bg-white/5 px-2 py-0.5 rounded shrink-0">{info.type === 'local' ? 'local' : 'cloud'}</div>
-                    {info.type === 'local' && !(hardware && hardware.vram_gb >= info.vram) && (
-                      <Button variant="dashed" className="text-[10px] py-1 px-2 shrink-0" onClick={(e) => { e.stopPropagation(); void handlePull(id) }} disabled={pulling === id}>
-                        {pulling === id ? '...' : 'Pull'}
-                      </Button>
-                    )}
-                    {info.type === 'cloud' && info.key_provider && (
-                      <input
-                        type="password"
-                        value={apiKeys[info.key_provider as keyof ApiKeys] || ''}
-                        onChange={e => setApiKey(info.key_provider as keyof ApiKeys, e.target.value)}
-                        onClick={e => e.stopPropagation()}
-                        placeholder={`${info.key_provider as string} API key`}
-                        className="w-24 bg-surface border border-white/10 rounded text-[10px] px-1.5 py-1 text-on-surface outline-none shrink-0"
-                      />
-                    )}
+                    <Input
+                      type="password"
+                      placeholder="sk-aitunnel-xxx или RouterAI ключ..."
+                      value={apiKeys.routerai || ''}
+                      onChange={(e) => setApiKey('routerai', e.target.value)}
+                      className="font-mono text-xs"
+                    />
+                    <span className="text-[10px] text-on-surface-variant">Все запросы будут маршрутизироваться через этот ключ к выбранным провайдерам.</span>
                   </div>
-                )
-              })}
 
-              <div className="h-px bg-white/10 my-3" />
+                  {/* Сценарий */}
+                  <FieldGroup label="🧠 Модель для сценариев (LLM)">
+                    <Input list="cloud-scenario-models" placeholder="Например: openai/gpt-4o" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} />
+                    <datalist id="cloud-scenario-models">
+                      <option value="anthropic/claude-3.5-sonnet" />
+                      <option value="openai/gpt-4o" />
+                      <option value="deepseek/deepseek-r1" />
+                      <option value="google/gemini-2.5-pro" />
+                    </datalist>
+                  </FieldGroup>
 
-              <div className="text-[10px] text-on-surface-variant mb-3 font-mono">LLM — Генерация кода</div>
-              {(['ollama', 'claude', 'openai'] as AiEngineId[]).map(id => {
-                const info = AI_MODELS_DB[id]
-                const isActive = llmEngine === id
-                return (
-                  <div key={id} className={`flex items-center gap-3 p-2.5 rounded-xl mb-2 cursor-pointer transition-colors ${isActive ? 'bg-primary/10 border border-primary/30' : 'bg-surface-container-lowest hover:bg-surface-container-low'}`}
-                    onClick={() => setLlmEngine(id)}>
-                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${info.type === 'local'
-                      ? (hardware && hardware.vram_gb >= info.vram ? 'bg-success' : 'bg-error')
-                      : 'bg-warning'}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-on-surface truncate">{info.name}</div>
-                      {info.type === 'local' ? (
-                        <div className="text-[10px] text-on-surface-variant mt-0.5">
-                          {hardware && hardware.vram_gb >= info.vram ? 'Установлено' : `Требуется ${info.vram} GB VRAM`}
-                        </div>
-                      ) : info.key_provider && apiKeys[info.key_provider as keyof ApiKeys] ? (
-                        <div className="text-[10px] text-success mt-0.5">API ключ задан</div>
-                      ) : (
-                        <div className="text-[10px] text-warning mt-0.5">Требуется API ключ</div>
-                      )}
+                  {/* Визуал */}
+                  <FieldGroup label="🎬 Модель для визуала и кода (Remotion TSX)">
+                    <Input list="cloud-visual-models" placeholder="Например: google/gemini-2.5-flash" value={cloudEngines.visual} onChange={e => setCloudEngine('visual', e.target.value)} />
+                    <datalist id="cloud-visual-models">
+                      <option value="google/gemini-2.5-flash" />
+                      <option value="google/gemini-2.5-pro" />
+                      <option value="openai/gpt-4o" />
+                      <option value="anthropic/claude-3.5-sonnet" />
+                    </datalist>
+                  </FieldGroup>
+
+                  {/* Аудио */}
+                  <div className="flex flex-col gap-2">
+                    <FieldGroup label="🎙️ Модель для озвучки (TTS)">
+                      <Input list="cloud-audio-models" placeholder="Например: minimax/speech-01-hd" value={cloudEngines.audio} onChange={e => setCloudEngine('audio', e.target.value)} />
+                      <datalist id="cloud-audio-models">
+                        <option value="minimax/speech-01-hd" />
+                        <option value="openai/tts-1-hd" />
+                        <option value="x-ai/grok-voice-tts-1.0" />
+                      </datalist>
+                    </FieldGroup>
+                    <div className="flex gap-2 mt-1">
+                      <Button variant="dashed" onClick={() => model.setIsVoiceboxOpen(true)} className="flex-1 text-xs border-secondary/30 text-secondary hover:bg-secondary/10">
+                        <Icon name="record_voice_over" className="text-[14px] mr-1" /> Клонировать голос
+                      </Button>
+                      <Button variant="dashed" onClick={() => setSettingsTab('global-voices')} className="flex-1 text-xs border-primary/30 text-primary hover:bg-primary/10">
+                        <Icon name="tune" className="text-[14px] mr-1" /> Задизайнить (Настройки)
+                      </Button>
                     </div>
-                    <div className="text-[10px] text-on-surface-variant bg-white/5 px-2 py-0.5 rounded shrink-0">{info.type === 'local' ? 'local' : 'cloud'}</div>
-                    {info.type === 'local' && !(hardware && hardware.vram_gb >= info.vram) && (
-                      <Button variant="dashed" className="text-[10px] py-1 px-2 shrink-0" onClick={(e) => { e.stopPropagation(); void handlePull(id) }} disabled={pulling === id}>
-                        {pulling === id ? '...' : 'Pull'}
-                      </Button>
-                    )}
-                    {info.type === 'cloud' && info.key_provider && (
-                      <input
-                        type="password"
-                        value={apiKeys[info.key_provider as keyof ApiKeys] || ''}
-                        onChange={e => setApiKey(info.key_provider as keyof ApiKeys, e.target.value)}
-                        onClick={e => e.stopPropagation()}
-                        placeholder={`${info.key_provider as string} API key`}
-                        className="w-24 bg-surface border border-white/10 rounded text-[10px] px-1.5 py-1 text-on-surface outline-none shrink-0"
-                      />
-                    )}
                   </div>
-                )
-              })}
-            </>
+                </div>
+              )}
+
+              {aiMode === 'local' && (
+                <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* Инфо об оборудовании */}
+                  <div className="flex items-center gap-3 bg-surface-container-lowest/50 rounded-xl p-3 border border-white/5">
+                    <div className={`w-2 h-2 rounded-full ${hardware?.vram_gb && hardware.vram_gb >= 8 ? 'bg-success' : 'bg-warning'}`} />
+                    <div className="text-xs text-on-surface-variant font-mono">
+                      {hardware ? `${hardware.device} · VRAM: ${hardware.vram_gb.toFixed(1)}GB · RAM: ${hardware.ram_gb.toFixed(1)}GB` : 'Проверка оборудования...'}
+                    </div>
+                  </div>
+
+                  {/* Загрузчик Hugging Face / Ollama */}
+                  <div className="bg-surface-container-lowest/40 p-4 rounded-xl border border-white/5 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <Icon name="download" className="text-success" />
+                      <span className="text-sm font-medium text-white">Скачать модель (Hugging Face / Ollama)</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Например: Qwen/Qwen2.5-Coder-7B"
+                        value={hfPullUrl}
+                        onChange={(e) => setHfPullUrl(e.target.value)}
+                        className="font-mono text-xs flex-1"
+                      />
+                      <Button variant="primary" onClick={() => handlePull(hfPullUrl)} disabled={!hfPullUrl || pulling !== null} className="bg-success hover:bg-success/80 text-black shrink-0">
+                        {pulling ? <Spinner /> : 'Pull'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Сценарий */}
+                  <FieldGroup label="🧠 Модель для сценариев (Локально)">
+                    <Input list="local-scenario-models" value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} />
+                    <datalist id="local-scenario-models">
+                      <option value="qwen2.5-coder" />
+                      <option value="llama3.1-8b" />
+                    </datalist>
+                  </FieldGroup>
+
+                  {/* Визуал */}
+                  <FieldGroup label="🎬 Модель для визуала и кода (Локально)">
+                    <Input list="local-visual-models" value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} />
+                    <datalist id="local-visual-models">
+                      <option value="qwen2.5-coder" />
+                      <option value="deepseek-coder-v2" />
+                    </datalist>
+                  </FieldGroup>
+
+                  {/* Аудио */}
+                  <FieldGroup label="🎙️ Модель для озвучки (Локально)">
+                    <Input list="local-audio-models" value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} />
+                    <datalist id="local-audio-models">
+                      <option value="k2-fsa/OmniVoice" />
+                      <option value="snakers4/silero-models" />
+                      <option value="F5-TTS" />
+                    </datalist>
+                  </FieldGroup>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </Modal>

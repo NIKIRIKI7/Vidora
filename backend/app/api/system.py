@@ -1,4 +1,5 @@
 import os
+import sys
 import psutil
 import torch
 import subprocess
@@ -43,4 +44,13 @@ def pull_model(req: PullRequest):
     elif req.engine == "silero":
         # ponytail: triggers download to torch cache
         torch.hub.load(repo_or_dir='snakers4/silero-models', model='silero_tts', language='ru', speaker='v4_ru')
+    elif "/" in req.engine:
+        # Hugging Face модель (например Qwen/Qwen2.5-Coder-7B)
+        try:
+            subprocess.Popen(["huggingface-cli", "download", req.engine])
+        except FileNotFoundError:
+            subprocess.Popen([sys.executable, "-m", "huggingface_hub", "download", req.engine])
+    else:
+        # любой Ollama-тег
+        subprocess.Popen(["ollama", "pull", req.engine])
     return {"status": "ok", "detail": "Загрузка началась..."}

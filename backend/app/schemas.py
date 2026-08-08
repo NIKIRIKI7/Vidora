@@ -42,6 +42,8 @@ class ApiKeys(BaseModel):
     elevenlabs: Optional[str] = None
     anthropic: Optional[str] = None
     openai: Optional[str] = None
+    routerai: Optional[str] = None
+    aitunnel: Optional[str] = None
 
 class AudioGenerationRequest(BaseModel):
     fragment_id: str

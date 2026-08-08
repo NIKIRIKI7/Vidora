@@ -42,7 +42,7 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
         finalVoiceModel = 'clone'
         finalRefAudioPath = gv.refAudioPath
         finalRefText = gv.refText || null
-      } else if (!['aria', 'marcus', 'nova'].includes(gv.voiceModel) && gv.ttsEngine === 'omnivoice') {
+      } else if (!['aria', 'marcus', 'nova'].includes(gv.voiceModel) && (gv.ttsEngine === 'omnivoice' || gv.ttsEngine.toLowerCase().includes('omnivoice'))) {
         finalVoiceModel = 'aria' // Защита от старых багованных сохранений
       }
     }

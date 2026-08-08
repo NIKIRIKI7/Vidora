@@ -58,7 +58,7 @@ export const SceneSidebar = ({
   }
 
   return (
-    <aside className="w-[320px] border-r border-white/10 bg-surface-container/30 flex flex-col shrink-0">
+    <aside className="w-full h-full border-r border-white/10 bg-surface-container/30 flex flex-col shrink-0">
       <div className="p-2 border-b border-white/5 bg-surface-container-lowest/30 flex gap-2">
         <button onClick={() => setTab('script')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'script' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Сценарий</button>
         <button onClick={() => setTab('stock')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'stock' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Сток (B-Roll)</button>
@@ -103,9 +103,9 @@ export const SceneSidebar = ({
               return (
                 <div key={scene.id} draggable onDragStart={onDragStart(idx)} onDragOver={e => e.preventDefault()} onDrop={onDrop(idx)} onClick={() => onSelectScene(scene.id)} className="flex flex-col gap-1 group relative">
                   <Icon name="drag_indicator" className="text-[12px] text-on-surface-variant/30 absolute -left-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
-                  <div className="flex items-center justify-between">
-                    <input className="text-xs font-semibold bg-transparent text-primary outline-none focus:border-b border-primary/50 w-full" value={scene.title} onChange={e => onUpdateTitle(scene.id, e.target.value, scene.timecode)} />
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <input className="text-xs font-semibold bg-transparent text-primary outline-none focus:border-b border-primary/50 flex-1 min-w-0" value={scene.title} onChange={e => onUpdateTitle(scene.id, e.target.value, scene.timecode)} />
+                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                       <button className={`text-[11px] p-1 rounded transition-colors ${isIgnored ? 'text-error font-medium' : 'text-on-surface-variant/40 hover:text-white'}`} onClick={e => { e.stopPropagation(); onToggleIgnoreTsx(scene.id) }} title={isIgnored ? 'TSX игнорируется (черный экран)' : 'Нажмите, чтобы игнорировать TSX'}>{isIgnored ? '⬛ Игнор' : '⬛'}</button>
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
                         <button className="text-on-surface-variant hover:text-primary transition-colors p-1" onClick={e => { e.stopPropagation(); onExportScene(scene.id) }} title="Экспорт сцены (Markdown)"><Icon name="content_copy" className="text-[14px]" /></button>
@@ -142,7 +142,7 @@ export const SceneSidebar = ({
                     </div>
                   </div>
                   <SceneCard scene={`Сцена ${idx + 1}`} time={scene.timecode} description={scene.fragments[0]?.text.substring(0, 50) + '...'} isActive={isSceneActive} />
-                  <div className="flex flex-wrap gap-1 pl-1">
+                  <div className="flex flex-wrap gap-1.5 pl-1 mt-1">
                     {audioDirty ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded border border-warning/30 text-warning bg-warning/10 font-medium" title="Аудио устарело">⚠️ Аудио</span>
                     ) : (

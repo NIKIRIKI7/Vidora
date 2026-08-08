@@ -29,6 +29,6 @@ export const Switch = ({ checked, onChange, label, className = '', disabled, ...
         `}
       />
     </button>
-    {label && <span className="font-label text-xs font-medium text-on-surface-variant select-none">{label}</span>}
+    {label && <span className="font-label text-xs font-medium text-on-surface-variant select-none flex-1 leading-tight">{label}</span>}
   </label>
 )

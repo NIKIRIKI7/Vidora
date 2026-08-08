@@ -4,6 +4,7 @@ import httpx
 from pathlib import Path
 from fastapi import APIRouter
 from app.schemas import CodeGenerationRequest
+from app.services.llm_client import MultiProviderClient
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(prefix="/api/v1/code", tags=["code"])
@@ -21,6 +22,12 @@ def _save_code(request: CodeGenerationRequest, tsx_code: str):
         code_file.write_text(tsx_code, encoding="utf-8")
     except Exception as fs_err:
         print(f"[CODE API] Ошибка сохранения файла: {fs_err}")
+
+# OpenAI-совместимые шлюзы: движок → модель. RouterAI — основной, AITUNNEL — резерв.
+LLM_GATEWAY_MODELS = {
+    "routerai_gpt4o": "openai/gpt-4o",
+    "routerai_claude": "anthropic/claude-sonnet-4.5",
+}
 
 @router.post("/generate")
 async def generate_code(request: CodeGenerationRequest):
@@ -63,6 +70,24 @@ async def generate_code(request: CodeGenerationRequest):
             _save_code(request, tsx_code)
             return {"status": "ok", "tsx_code": tsx_code}
 
+    # OpenAI-совместимые шлюзы: движок → модель. RouterAI — основной, AITUNNEL — резерв.
+    if engine in LLM_GATEWAY_MODELS or "/" in engine:
+        model = LLM_GATEWAY_MODELS.get(engine, engine)
+        client = MultiProviderClient(
+            router_key=api_keys_dict.get("routerai", ""),
+            aitunnel_key=api_keys_dict.get("aitunnel", ""),
+        )
+        data = await client.chat(
+            model=model,
+            messages=[{"role": "user", "content": request.prompt}],
+            max_tokens=4096,
+        )
+        if data:
+            tsx_code = _extract_tsx(data)
+            _save_code(request, tsx_code)
+            return {"status": "ok", "tsx_code": tsx_code}
+        return {"status": "error", "tsx_code": "// RouterAI и AITUNNEL недоступны или ключи не заданы"}
+
     try:
         async with httpx.AsyncClient() as client:
             res = await client.post(
@@ -78,3 +103,9 @@ async def generate_code(request: CodeGenerationRequest):
             return {"status": "error", "tsx_code": "// Generation error"}
     except Exception:
         return {"status": "fallback", "tsx_code": f"// Ollama unavailable. Prompt: {request.prompt[:50]}..."}
+
+if __name__ == "__main__":
+    assert LLM_GATEWAY_MODELS["routerai_gpt4o"] == "openai/gpt-4o"
+    assert LLM_GATEWAY_MODELS["routerai_claude"] == "anthropic/claude-sonnet-4.5"
+    assert "/" in "google/gemini-2.5-flash"
+    print("code.py gateway mapping OK")
