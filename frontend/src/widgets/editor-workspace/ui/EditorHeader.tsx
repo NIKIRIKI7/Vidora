@@ -13,6 +13,8 @@ interface Props {
   onNewProject: () => void
   onOpenSettings: () => void
   onFullAutoPipeline: () => void
+  workspaceView: 'editor' | 'ideas'
+  onToggleIdeas: () => void
 }
 
 export const EditorHeader = ({
@@ -27,6 +29,8 @@ export const EditorHeader = ({
   onNewProject,
   onOpenSettings,
   onFullAutoPipeline,
+  workspaceView,
+  onToggleIdeas,
 }: Props) => (
   <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
     <div className="flex items-center gap-4">
@@ -87,8 +91,19 @@ export const EditorHeader = ({
 
     <div className="flex items-center gap-3">
       <Button
+        variant={workspaceView === 'ideas' ? 'secondary' : 'ghost'}
+        onClick={onToggleIdeas}
+        className={`border border-transparent mr-2 ${workspaceView === 'ideas' ? 'bg-secondary/10 border-secondary/30' : 'text-on-surface-variant hover:text-primary hover:border-primary/30'}`}
+      >
+        {workspaceView === 'ideas' ? (
+          <><Icon name="arrow_back" className="text-lg mr-1" /> В редактор</>
+        ) : (
+          <><Icon name="lightbulb" className="text-lg mr-1 text-warning" /> Идеи YT</>
+        )}
+      </Button>
+      <Button
         variant="primary"
-        disabled={isAutoPipelineRunning || isRendering}
+        disabled={isAutoPipelineRunning || isRendering || workspaceView === 'ideas'}
         onClick={onFullAutoPipeline}
         icon="bolt"
         filledIcon

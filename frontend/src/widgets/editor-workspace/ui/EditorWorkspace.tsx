@@ -8,6 +8,7 @@ import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
 import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
+import { YoutubeIdeasView } from './YoutubeIdeasView'
 import { VoiceboxModal } from './VoiceboxModal'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 
@@ -142,113 +143,120 @@ export const EditorWorkspace = ({
         onNewProject={onNewProject}
         onOpenSettings={() => model.setIsSettingsOpen(true)}
         onFullAutoPipeline={model.handleFullAutoPipeline}
+        workspaceView={model.workspaceView}
+        onToggleIdeas={() => model.setWorkspaceView(model.workspaceView === 'ideas' ? 'editor' : 'ideas')}
       />
 
       <main className="flex-1 flex overflow-hidden">
-        {uiPreferences.showSceneSidebar && (
-          <div className="relative shrink-0 h-full" style={{ width: leftWidth }}>
-            <SceneSidebar
-            project={project}
-            activeSceneId={model.activeSceneId}
-            audioLoaded={model.audioLoaded}
-            onSelectScene={model.setActiveSceneId}
-            onAddScene={model.handleAddScene}
-            onDeleteScene={model.handleDeleteScene}
-            onUpdateTitle={model.handleUpdateSceneTitle}
-            onToggleIgnoreTsx={model.toggleIgnoreTsx}
-            onDragStart={model.handleSceneDragStart}
-            onDrop={model.handleSceneDrop}
-            onShowNotification={model.showNotification}
-            onExportScene={model.handleExportScene}
-            onReplaceScene={model.handleReplaceScene}
-              onFixAudioPacing={model.handleFixAudioPacing}
-              onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
-              onReplaceSceneAudio={model.handleReplaceSceneAudio}
-            />
-            {/* Ползунок Слева */}
-            <div
-              className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors translate-x-1/2"
-              onMouseDown={startLeftDrag}
-            />
-          </div>
-        )}
+        {model.workspaceView === 'ideas' ? (
+          <YoutubeIdeasView project={project} />
+        ) : (
+          <div className="flex flex-1 min-w-0">
+            {uiPreferences.showSceneSidebar && (
+              <div className="relative shrink-0 h-full" style={{ width: leftWidth }}>
+                <SceneSidebar
+                  project={project}
+                  activeSceneId={model.activeSceneId}
+                  audioLoaded={model.audioLoaded}
+                  onSelectScene={model.setActiveSceneId}
+                  onAddScene={model.handleAddScene}
+                  onDeleteScene={model.handleDeleteScene}
+                  onUpdateTitle={model.handleUpdateSceneTitle}
+                  onToggleIgnoreTsx={model.toggleIgnoreTsx}
+                  onDragStart={model.handleSceneDragStart}
+                  onDrop={model.handleSceneDrop}
+                  onShowNotification={model.showNotification}
+                  onExportScene={model.handleExportScene}
+                  onReplaceScene={model.handleReplaceScene}
+                  onFixAudioPacing={model.handleFixAudioPacing}
+                  onCopyFixPacingPrompt={model.handleCopyFixPacingPrompt}
+                  onReplaceSceneAudio={model.handleReplaceSceneAudio}
+                />
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors translate-x-1/2"
+                  onMouseDown={startLeftDrag}
+                />
+              </div>
+            )}
 
-        <CenterCanvas
-          centerView={model.centerView}
-          previewFormat={model.previewFormat}
-          onChangeView={model.setCenterView}
-          onPreviewFormatChange={model.setPreviewFormat}
-          playWithAudio={model.playWithAudio}
-          onTogglePlayWithAudio={() => model.setPlayWithAudio(!model.playWithAudio)}
-          playingTargetId={model.playingTargetId}
-          renderedVideos={model.renderedVideos}
-          audioLoaded={model.audioLoaded}
-          activeScene={model.activeScene}
-          project={project}
-          videoRef={model.videoRef}
-          audioRef={model.audioRef}
-          onUpdateCode={model.handleUpdateCode}
-          onCodeHistory={model.handleCodeHistory}
-          isRendering={model.isRendering}
-          isAutoPipelineRunning={model.isAutoPipelineRunning}
-          pipelineStep={model.pipelineStep}
-          renderProgress={model.renderProgress}
-          onCancelAll={model.handleCancelAll}
-          onUpdateMarkdown={model.handleUpdateMarkdown}
-          onCaptureFrame={model.handleCaptureFrame}
-          onUpdateFragmentBounds={model.handleUpdateFragmentBounds}
-          showTimeline={uiPreferences.showTimeline}
-        />
-        {uiPreferences.showInspector && (
-          <div className="relative shrink-0 h-full" style={{ width: rightWidth }}>
-            {/* Ползунок Справа */}
-            <div
-              className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors -translate-x-1/2"
-              onMouseDown={startRightDrag}
+            <CenterCanvas
+              centerView={model.centerView}
+              previewFormat={model.previewFormat}
+              onChangeView={model.setCenterView}
+              onPreviewFormatChange={model.setPreviewFormat}
+              playWithAudio={model.playWithAudio}
+              onTogglePlayWithAudio={() => model.setPlayWithAudio(!model.playWithAudio)}
+              playingTargetId={model.playingTargetId}
+              renderedVideos={model.renderedVideos}
+              audioLoaded={model.audioLoaded}
+              activeScene={model.activeScene}
+              project={project}
+              videoRef={model.videoRef}
+              audioRef={model.audioRef}
+              onUpdateCode={model.handleUpdateCode}
+              onCodeHistory={model.handleCodeHistory}
+              isRendering={model.isRendering}
+              isAutoPipelineRunning={model.isAutoPipelineRunning}
+              pipelineStep={model.pipelineStep}
+              renderProgress={model.renderProgress}
+              onCancelAll={model.handleCancelAll}
+              onUpdateMarkdown={model.handleUpdateMarkdown}
+              onCaptureFrame={model.handleCaptureFrame}
+              onUpdateFragmentBounds={model.handleUpdateFragmentBounds}
+              showTimeline={uiPreferences.showTimeline}
             />
-            <PipelineInspector
-            project={project}
-            activeScene={model.activeScene}
-            voiceModel={model.voiceModel}
-            useWhisper={model.useWhisper}
-            autoOffloadVram={model.autoOffloadVram}
-            isGeneratingAudio={model.isGeneratingAudio}
-            isSyncing={model.isSyncing}
-            isGeneratingCode={model.isGeneratingCode}
-            isRendering={model.isRendering}
-            renderProgress={model.renderProgress}
-            onChangeVoiceModel={model.setVoiceModel}
-            onChangeUseWhisper={model.setUseWhisper}
-            onChangeAutoOffloadVram={model.setAutoOffloadVram}
-            onAddFragment={model.handleAddFragment}
-            onDeleteFragment={model.handleDeleteFragment}
-            onFragmentTextChange={model.handleFragmentTextChange}
-            onFragDragStart={model.handleFragDragStart}
-            onFragDrop={model.handleFragDrop}
-            onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
-            onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
-            onRunVoiceGen={() => model.runVoiceGenAllScenes()}
-            onRunVoiceGenFragment={model.runVoiceGenFragment}
-            onResetAllSync={model.handleResetAllSync}
-            onResetAudio={model.handleResetAudio}
-            onProcessAudio={model.handleProcessAudio}
-            onProcessAdvancedSilence={model.handleProcessAdvancedSilence}
-            onUnloadVram={model.handleUnloadVram}
-            onRunSync={() => model.runSyncAllScenes()}
-            onToggleIgnoreTsx={model.toggleIgnoreTsx}
-            onRunCodeGen={() => model.runCodeGen()}
-            onRunProjectRender={model.runProjectRender}
-            onRunRender={() => model.runRender()}
-            onExportProject={model.handleExportProject}
-            onShowNotification={model.showNotification}
-            onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
-            onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
-            onNudgeTiming={model.handleNudgeTiming}
-              onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
-            />
+
+            {uiPreferences.showInspector && (
+              <div className="relative shrink-0 h-full" style={{ width: rightWidth }}>
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors -translate-x-1/2"
+                  onMouseDown={startRightDrag}
+                />
+                <PipelineInspector
+                  project={project}
+                  activeScene={model.activeScene}
+                  voiceModel={model.voiceModel}
+                  useWhisper={model.useWhisper}
+                  autoOffloadVram={model.autoOffloadVram}
+                  isGeneratingAudio={model.isGeneratingAudio}
+                  isSyncing={model.isSyncing}
+                  isGeneratingCode={model.isGeneratingCode}
+                  isRendering={model.isRendering}
+                  renderProgress={model.renderProgress}
+                  onChangeVoiceModel={model.setVoiceModel}
+                  onChangeUseWhisper={model.setUseWhisper}
+                  onChangeAutoOffloadVram={model.setAutoOffloadVram}
+                  onAddFragment={model.handleAddFragment}
+                  onDeleteFragment={model.handleDeleteFragment}
+                  onFragmentTextChange={model.handleFragmentTextChange}
+                  onFragDragStart={model.handleFragDragStart}
+                  onFragDrop={model.handleFragDrop}
+                  onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
+                  onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
+                  onRunVoiceGen={() => model.runVoiceGenAllScenes()}
+                  onRunVoiceGenFragment={model.runVoiceGenFragment}
+                  onResetAllSync={model.handleResetAllSync}
+                  onResetAudio={model.handleResetAudio}
+                  onProcessAudio={model.handleProcessAudio}
+                  onProcessAdvancedSilence={model.handleProcessAdvancedSilence}
+                  onUnloadVram={model.handleUnloadVram}
+                  onRunSync={() => model.runSyncAllScenes()}
+                  onToggleIgnoreTsx={model.toggleIgnoreTsx}
+                  onRunCodeGen={() => model.runCodeGen()}
+                  onRunProjectRender={model.runProjectRender}
+                  onRunRender={() => model.runRender()}
+                  onExportProject={model.handleExportProject}
+                  onShowNotification={model.showNotification}
+                  onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}
+                  onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
+                  onNudgeTiming={model.handleNudgeTiming}
+                  onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
+                />
+              </div>
+            )}
           </div>
         )}
-        </main>
+      </main>
 
       <VoiceboxModal
         isOpen={model.isVoiceboxOpen}

@@ -13,6 +13,7 @@
   <br>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License MIT"></a>
   <a href="./docs/SCENARIO_RULES.md"><img src="https://img.shields.io/badge/docs-scenario-8A2BE2?style=flat-square" alt="Scenario docs"></a>
+  <a href="./docs/YOUTUBE_SEARCH.md"><img src="https://img.shields.io/badge/docs-yt_search-FF0000?style=flat-square" alt="YouTube search script"></a>
 </p>
 
 ---
@@ -192,7 +193,7 @@ Vidora/
 │   │   └── shared/                 # UI-кит, темы, утилиты
 │   └── electron-builder.yml        # NSIS/DMG/AppImage конфиг
 ├── assets/readme/                  # README SVG-визуализации
-└── docs/                           # Сценарий, шаблоны
+└── docs/                           # Сценарий, шаблоны, YOUTUBE_SEARCH.md
 ```
 
 ## Стек

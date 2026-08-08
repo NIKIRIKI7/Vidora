@@ -17,6 +17,7 @@ interface Props {
 export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [centerView, setCenterView] = useState<CenterViewMode>('player')
+  const [workspaceView, setWorkspaceView] = useState<'editor' | 'ideas'>('editor')
   const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
   
   const [voiceModel, setVoiceModel] = useState('aria')
@@ -526,6 +527,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   return {
     ...audio, ...render,
+    workspaceView, setWorkspaceView,
     activeSceneId, activeScene, centerView, previewFormat, voiceModel, speed, numSteps, guidanceScale, duration,
     denoise, preprocessPrompt, postprocessOutput, isAiSettingsOpen, playWithAudio, isVoiceboxOpen,
     newVoiceName, newVoiceText, newVoiceTags, newVoiceAudioPath, isAutoPipelineRunning, pipelineStep,

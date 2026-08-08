@@ -3,6 +3,12 @@ uvicorn>=0.32.0
 python-multipart>=0.0.12
 python-dotenv>=1.0.0
 openai>=1.40.0
+llama-cpp-python
+yt-dlp
+youtube-transcript-api
+httpx
+pandas
+openpyxl
 omnivoice
 torch>=2.0.0
 soundfile
