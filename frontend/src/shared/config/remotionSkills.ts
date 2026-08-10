@@ -34,4 +34,14 @@ export const REMOTION_SKILLS: RemotionSkill[] = [
 - Синхронизируй визуал с текстом суфлера: что сказано — то на экране.
 - Не растягивай один статичный кадр на весь фрагмент.`,
   },
+  {
+    id: 'tailwind-css',
+    title: 'Стилизация через Tailwind CSS',
+    description: 'В проекте подключен Tailwind. Используй utility-классы в className вместо громоздких inline-стилей.',
+    content: `## Tailwind CSS
+1. В проекте подключен Tailwind CSS v4. Используй className="flex flex-col items-center justify-center w-full h-full" для layout, размеров и шрифтов.
+2. ВАЖНО: Tailwind сканирует исходник как текст (JIT) и НЕ выполняет JS — класс, собранный через \${COLORS.x} в шаблонной строке (bg-[\${COLORS.primary}]), молча пропускается и элемент остаётся без стиля. НИКОГДА не интерполируй COLORS в className.
+3. Все цвета из объекта COLORS передавай ТОЛЬКО через style: style={{ backgroundColor: COLORS.background, color: COLORS.text }}.
+4. style={{...}} также используется для анимируемых свойств (transform, opacity), меняющихся каждый кадр через interpolate(). Всё статичное (layout, шрифты, отступы) — в className.`,
+  },
 ]

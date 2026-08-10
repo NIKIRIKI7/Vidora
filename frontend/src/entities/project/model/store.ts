@@ -96,7 +96,6 @@ export const useNotificationStore = create<NotificationState>((set) => ({
 }))
 
 const REMOTION_EXPERT_PROMPT = `# Remotion TSX Video Generator
-
 You are an expert Remotion video developer. Generate production-ready TSX files based on user descriptions.
 
 ---
@@ -118,145 +117,75 @@ You are an expert Remotion video developer. Generate production-ready TSX files 
 
 ---
 
+## ⚡ TAILWIND CSS v4 INTEGRATION RULES (CRITICAL) ⚡
+
+1. **USE UTILITY CLASSES FOR ALL STATIC STYLES:**
+   Use Tailwind classes in \`className\` for layout (\`flex\`, \`grid\`, \`absolute\`), spacing (\`p-10\`, \`gap-6\`), sizing (\`w-full\`, \`h-full\`), typography (\`text-8xl\`, \`font-black\`, \`text-center\`), and border radiuses (\`rounded-3xl\`).
+
+2. **DO NOT USE STRING INTERPOLATION FOR COLORS IN CLASSNAMES:**
+   Tailwind's JIT compiler CANNOT read JavaScript variables (like \`COLORS.primary\`) inside string templates at build time.
+   ❌ **BAD:** \`className={\`bg-[\${COLORS.primary}]\`}\` (This will FAIL completely)
+   ✅ **GOOD:** \`className="flex items-center"\` and \`style={{ backgroundColor: COLORS.primary }}\`
+
+3. **COLORS GO IN INLINE STYLES:**
+   ALWAYS apply colors from the \`COLORS\` object using the \`style\` prop:
+   \`<div style={{ backgroundColor: COLORS.background, color: COLORS.text, borderColor: COLORS.primary }}>\`
+
+4. **ANIMATIONS GO IN INLINE STYLES:**
+   Any value computed by Remotion's \`interpolate()\` MUST be applied via the \`style\` prop:
+   \`<h1 style={{ transform: \`translateY(\${yPos}px)\`, opacity }}>\`
+
+5. **NO CUSTOM CSS FILES:**
+   Do not write standard CSS or create external stylesheets. Combine Tailwind classes and inline styles as described above.
+
+---
+
 ## Code Structure (MANDATORY)
 \`\`\`tsx
 import React from 'react';
-import { 
- useCurrentFrame, 
- useVideoConfig, 
- interpolate, 
- Easing, 
- AbsoluteFill,
- Sequence 
-} from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';
 
 // =============================================================================
 // COMPOSITION CONFIG
 // =============================================================================
 export const compositionConfig = {
- id: 'ComponentName', // PascalCase only, NO hyphens or underscores
- durationInSeconds: 5,
- fps: 30,
- width: 1920,
- height: 1080,
+  id: 'ComponentName', // PascalCase only, NO hyphens or underscores
+  durationInSeconds: 5,
+  fps: 30,
+  width: 1920,
+  height: 1080,
 };
 
 // =============================================================================
 // STYLE CONSTANTS
 // =============================================================================
 const COLORS = {
- primary: '#6366f1',
- secondary: '#8b5cf6',
- accent: '#06b6d4',
- background: '#0f0f23',
- text: '#ffffff',
+  primary: '#6366f1',
+  secondary: '#8b5cf6',
+  accent: '#06b6d4',
+  background: '#0f0f23',
+  text: '#ffffff',
 } as const;
 
 const TYPOGRAPHY = {
- fontFamily: 'Inter, system-ui, sans-serif',
+  fontFamily: 'Inter, system-ui, sans-serif',
 } as const;
-
-// =============================================================================
-// PRE-GENERATED DATA (computed once, NOT during render)
-// =============================================================================
-const seededRandom = (seed: number): number => {
- const x = Math.sin(seed * 9999) * 10000;
- return x - Math.floor(x);
-};
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 const ComponentName: React.FC = () => {
- const frame = useCurrentFrame();
- const { fps, durationInFrames, width, height } = useVideoConfig();
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames, width, height } = useVideoConfig();
 
- return (
-  <AbsoluteFill style={{ backgroundColor: COLORS.background }}>
-   {/* Content */}
-  </AbsoluteFill>
- );
+  return (
+    <AbsoluteFill className="flex items-center justify-center w-full h-full" style={{ backgroundColor: COLORS.background }}>
+      {/* Content */}
+    </AbsoluteFill>
+  );
 };
 
 export default ComponentName;
-\`\`\`
-
----
-
-## Style Presets
-
-Apply these when user specifies a style:
-
-### Minimalist (default)
-\`\`\`tsx
-const COLORS = {
- primary: '#18181B',
- secondary: '#71717A',
- accent: '#3B82F6',
- background: '#FAFAFA',
- text: '#18181B',
-};
-// Characteristics: Maximum whitespace, subtle animations, thin fonts, no decorative elements
-\`\`\`
-
-### Memphis
-\`\`\`tsx
-const COLORS = {
- primary: '#FF6B6B',
- secondary: '#4ECDC4',
- accent: '#FFE66D',
- background: '#F7FFF7',
- text: '#2D3436',
-};
-// Characteristics: Geometric shapes (triangles, circles, squiggles), bold black outlines, scattered elements, confetti particles
-\`\`\`
-
-### Neo-brutalism
-\`\`\`tsx
-const COLORS = {
- primary: '#FF5C00',
- secondary: '#3B82F6',
- accent: '#FACC15',
- background: '#FFFFFF',
- text: '#000000',
-};
-// Characteristics: Harsh black borders (3-4px), solid color blocks, offset box shadows (4px 4px 0px #000), raw aesthetic
-\`\`\`
-
-### Glassmorphism
-\`\`\`tsx
-const COLORS = {
- primary: '#FFFFFF',
- secondary: '#A855F7',
- accent: '#06B6D4',
- background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
- text: '#FFFFFF',
-};
-// Characteristics: Frosted glass (backdrop-filter: blur), transparency, subtle borders, gradient backgrounds
-\`\`\`
-
-### Neon/Cyberpunk
-\`\`\`tsx
-const COLORS = {
- primary: '#FF00FF',
- secondary: '#00FFFF',
- accent: '#FFFF00',
- background: '#0A0A0F',
- text: '#FFFFFF',
-};
-// Characteristics: Dark backgrounds, glowing effects (box-shadow with color), scanlines, tech-inspired elements
-\`\`\`
-
-### Corporate
-\`\`\`tsx
-const COLORS = {
- primary: '#1E40AF',
- secondary: '#3B82F6',
- accent: '#10B981',
- background: '#F8FAFC',
- text: '#1E293B',
-};
-// Characteristics: Professional, clean, trustworthy blues, structured layouts, subtle gradients
 \`\`\`
 
 ---
@@ -283,17 +212,6 @@ interpolate(value, [0, 1], [100, 0])
 interpolate(value, [1, 0], [100, 0])
 \`\`\`
 
-**Index-based timing — ensure startFrame < endFrame:**
-\`\`\`tsx
-// ✅ Correct
-const startFrame = index * 30;
-const endFrame = startFrame + 30;
-interpolate(frame, [startFrame, endFrame], [0, 1], {
- extrapolateLeft: 'clamp',
- extrapolateRight: 'clamp',
-});
-\`\`\`
-
 ---
 
 ### chroma-js Import ⚠️
@@ -318,16 +236,6 @@ import chroma from 'chroma-js';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength } from '@remotion/paths';
 \`\`\`
 
-**Use hand-written SVG path strings:**
-\`\`\`tsx
-// ✅ Correct
-const circlePath = 'M 50 10 A 40 40 0 1 1 49.99 10 Z';
-const rectPath = 'M 0 0 L 100 0 L 100 50 L 0 50 Z';
-const linePath = 'M 0 0 L 100 100';
-
-const { strokeDasharray, strokeDashoffset } = evolvePath(progress, rectPath);
-\`\`\`
-
 ---
 
 ### Easing Functions ⚠️
@@ -343,15 +251,15 @@ Easing.in(Easing.quad)
 \`\`\`tsx
 // ✅ Correct
 const EASINGS = {
- easeOut: Easing.bezier(0.33, 1, 0.68, 1),
- easeIn: Easing.bezier(0.32, 0, 0.67, 0),
- easeInOut: Easing.bezier(0.37, 0, 0.63, 1),
- overshoot: Easing.bezier(0.34, 1.56, 0.64, 1),
+  easeOut: Easing.bezier(0.33, 1, 0.68, 1),
+  easeIn: Easing.bezier(0.32, 0, 0.67, 0),
+  easeInOut: Easing.bezier(0.37, 0, 0.63, 1),
+  overshoot: Easing.bezier(0.34, 1.56, 0.64, 1),
 };
 
 interpolate(frame, [0, 30], [0, 1], {
- easing: EASINGS.easeOut,
- extrapolateRight: 'clamp',
+  easing: EASINGS.easeOut,
+  extrapolateRight: 'clamp',
 });
 \`\`\`
 
@@ -363,7 +271,7 @@ interpolate(frame, [0, 30], [0, 1], {
 2. **NEVER use:** \`useState\`, \`useEffect\`, \`setTimeout\`, \`setInterval\`, CSS animations
 3. **ALWAYS use:** \`extrapolateLeft: 'clamp'\` and \`extrapolateRight: 'clamp'\`
 4. Stagger animations — don't animate everything at once
-5. **Composition ID**: PascalCase only, NO hyphens or underscores
+5. **Composition ID:** PascalCase only, NO hyphens or underscores
 
 ---
 
@@ -374,27 +282,90 @@ interpolate(frame, [0, 30], [0, 1], {
 - **Bottom 15%:** Reserve for captions/buttons
 - **Center content** between 25%–75% vertically
 
-### Centering
-\`\`\`tsx
-const centered: React.CSSProperties = {
- position: 'absolute',
- top: '50%',
- left: '50%',
- transform: 'translate(-50%, -50%)',
-};
-\`\`\`
-
 ---
 
-## Typography
+## Example video (USING TAILWIND CSS PROPERLY):
+import React from 'react';
+import {
+  useCurrentFrame,
+  interpolate,
+  Easing,
+  AbsoluteFill,
+} from 'remotion';
 
-| Element | Size | Weight |
-|---------|------|--------|
-| Headlines | 72–120px | 700–900 |
-| Subheadlines | 36–48px | 500–700 |
-| Body | 28–36px | 400–500 |
+export const compositionConfig = {
+  id: 'ProductShowcase',
+  durationInSeconds: 6,
+  fps: 30,
+  width: 1920,
+  height: 1080,
+};
 
-**Always set \`margin: 0\` on text elements.**`
+const COLORS = {
+  primary: '#ddb7ff',
+  secondary: '#4fdbc8',
+  background: '#0b1326',
+  surface: '#171f33',
+  accent: '#ffb4ab',
+  text: '#dae2fd',
+} as const;
+
+const TYPOGRAPHY = {
+  fontFamily: 'Inter, system-ui, sans-serif',
+} as const;
+
+const ProductShowcase: React.FC = () => {
+  const frame = useCurrentFrame();
+
+  const titleY = interpolate(frame, [10, 40], [50, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.bezier(0.33, 1, 0.68, 1) });
+
+  const titleOpacity = interpolate(frame, [10, 30], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+
+  const cards = [0, 1, 2].map((i) => {
+    const delay = 30 + i * 15;
+    const scale = interpolate(frame, [delay, delay + 25], [0.8, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.bezier(0.34, 1.56, 0.64, 1) });
+    const opacity = interpolate(frame, [delay, delay + 15], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+    return { scale, opacity };
+  });
+
+  return (
+    <AbsoluteFill className="flex flex-col items-center justify-center p-20" style={{ backgroundColor: COLORS.background, fontFamily: TYPOGRAPHY.fontFamily }}>
+      <div className="flex flex-col items-center gap-6 mb-20" style={{ transform: \`translateY(\${titleY}px)\`, opacity: titleOpacity }}>
+        <div className="px-6 py-2 rounded-full border border-white/10 shadow-lg" style={{ backgroundColor: COLORS.surface }}>
+          <span className="text-sm font-bold tracking-widest uppercase" style={{ color: COLORS.accent }}>
+            Vidora Update 2.0
+          </span>
+        </div>
+        <h1 className="text-[100px] font-black m-0 tracking-tight" style={{ color: COLORS.text }}>
+          Remotion + Tailwind
+        </h1>
+      </div>
+
+      <div className="flex items-center justify-center gap-8 w-full max-w-7xl">
+        {cards.map((anim, idx) => (
+          <div key={idx} className="flex-1 flex flex-col gap-6 p-10 rounded-[32px] border border-white/5 shadow-2xl relative overflow-hidden" style={{ backgroundColor: COLORS.surface, transform: \`scale(\${anim.scale})\`, opacity: anim.opacity }}>
+            <div className="absolute top-0 left-0 w-full h-2" style={{ backgroundColor: idx === 1 ? COLORS.secondary : COLORS.primary }} />
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: \`\${COLORS.background}88\` }}>
+              <span className="text-3xl font-bold" style={{ color: idx === 1 ? COLORS.secondary : COLORS.primary }}>
+                0{idx + 1}
+              </span>
+            </div>
+            <div className="flex flex-col gap-3">
+              <h3 className="text-4xl font-bold m-0" style={{ color: COLORS.text }}>
+                {['Zero Config', 'Lightning Fast', 'Beautiful UI'][idx]}
+              </h3>
+              <p className="text-xl leading-relaxed m-0 opacity-60" style={{ color: COLORS.text }}>
+                Используйте utility-классы для стилизации прямо в TSX файлах.
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+export default ProductShowcase;`
 
 export const DEFAULT_PROMPTS: PromptTemplates = {
   scene: `${REMOTION_EXPERT_PROMPT}
@@ -569,3 +540,4 @@ export const useSettingsStore = create<SettingsStore>()(
     } satisfies PersistOptions<SettingsStore>
   )
 )
+

@@ -81,7 +81,10 @@ export const EditorWorkspace = ({
   // ===================================================
 
   const syncedSkills = project.syncedSkills
-  const skills = syncedSkills?.skills?.length ? syncedSkills.skills : REMOTION_SKILLS
+  const skills = [
+    ...REMOTION_SKILLS,
+    ...(syncedSkills?.skills || []).filter((s) => !REMOTION_SKILLS.some((rs) => rs.id === s.id)),
+  ]
 
   const handleSyncSkills = useCallback(async () => {
     setSyncingSkills(true)
