@@ -110,5 +110,6 @@ export interface ProjectSettings {
   audioMode: AudioGenerationMode
   activeGlobalVoiceId?: string
   audioProcessing: AudioProcessingSettings
+  use3D?: boolean
   syncedSkills?: SyncedSkills
 }

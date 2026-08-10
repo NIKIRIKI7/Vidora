@@ -11,12 +11,30 @@ const getDims = (res: Resolution, fmt: VideoFormat) => {
 const getBaseVars = (project: ProjectSettings) => {
   const { width, height } = getDims(project.resolution, project.format)
   const { colors, fps } = project.montage
+
+  const use3DInstruction = project.use3D ? `
+## ⚡ 3D GRAPHICS (R3F) ENABLED & STRICT RULES ⚡
+You are allowed to use \`@remotion/three\`, \`@react-three/fiber\`, and \`@react-three/drei\`.
+CRITICAL RULES FOR 3D IN REMOTION (PREVENT JITTER):
+1. Use \`<ThreeCanvas width={${width}} height={${height}}>\` from \`@remotion/three\`, NOT the standard R3F \`<Canvas>\`.
+2. DO NOT use time-dependent Drei components like \`<Float>\` or auto-rotating \`<OrbitControls>\`. They cause severe jitter in Remotion.
+3. Animate hovering and rotation MANUALLY using \`useCurrentFrame()\`. Example: \`const floatY = Math.sin(frame / 15) * 0.15;\`
+4. NEVER use \`Math.max(0, frame - offset)\` inside \`spring()\`. Pass \`frame - offset\` directly (Remotion returns 0 for negative frames).
+5. ALWAYS add \`<ambientLight>\` and directional light, otherwise meshes render black.
+6. If using \`<ContactShadows>\`, ALWAYS add \`frames={1}\` to bake the shadow.
+7. Place 2D HTML/Tailwind overlays on top of \`ThreeCanvas\` in a separate \`<AbsoluteFill>\` with \`pointer-events-none\`.
+` : `
+## 3D GRAPHICS FORBIDDEN
+Do NOT use three.js, @react-three/fiber, \`@remotion/three\`, or any 3D library. Produce purely 2D CSS/Tailwind animations with Remotion primitives.
+`
+
   return {
     FORMAT: project.format,
     WIDTH: width,
     HEIGHT: height,
     FPS: fps,
     COLORS: JSON.stringify(colors),
+    USE_3D_INSTRUCTION: use3DInstruction,
   }
 }
 

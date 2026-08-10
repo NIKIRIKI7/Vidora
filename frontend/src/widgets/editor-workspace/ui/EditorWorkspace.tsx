@@ -336,6 +336,16 @@ export const EditorWorkspace = ({
             </Select>
                 </FieldGroup>
               </div>
+              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 mb-4">
+                <Switch
+                  label="Использовать 3D графику (Beta, React Three Fiber)"
+                  checked={project.use3D ?? false}
+                  onChange={val => onUpdateProject({ ...project, use3D: val })}
+                />
+                <p className="text-[10px] text-on-surface-variant mt-2 leading-relaxed">
+                  Если включено, ИИ сможет генерировать 3D-сцены с помощью @remotion/three. Рендер сложных 3D-объектов может занимать больше времени.
+                </p>
+              </div>
               <div className="text-[10px] font-mono text-on-surface-variant mt-2 uppercase tracking-wider">Индикаторы удержания (Pacing)</div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-surface-container-lowest/50 p-3 rounded-xl border border-white/5">
                 <FieldGroup label={`Визуал (<= ${visualPacingThreshold.toFixed(1)}с/кадр)`}>

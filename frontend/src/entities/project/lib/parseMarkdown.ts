@@ -41,6 +41,9 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
     const fpsMatch = yamlStr.match(/fps:\s*(\d+)/)
     if (fpsMatch) result.montage!.fps = fpsMatch[1] as FPS
 
+    const use3dMatch = yamlStr.match(/use_3d:\s*(true|false)/)
+    if (use3dMatch) result.use3D = use3dMatch[1] === 'true'
+
     const extractColor = (key: keyof AppColors) => {
       const k = String(key)
       const match = yamlStr.match(new RegExp(`${k}:\\s*"([^"]+)"`))
@@ -97,6 +100,7 @@ export const serializeProjectToMarkdown = (project: ProjectSettings): string => 
     `title: "${metadata.title || project.name}"`,
     `description: "${metadata.description || ''}"`,
     `tags: [${(metadata.tags || []).join(', ')}]`,
+    `use_3d: ${project.use3D ? 'true' : 'false'}`,
     `animation_style: ${montage.animationStyle || 'screencast'}`,
     `fps: ${montage.fps || 30}`,
     `primary: "${montage.colors?.primary || '#ddb7ff'}"`,

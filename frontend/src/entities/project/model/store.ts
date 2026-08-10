@@ -370,6 +370,8 @@ export default ProductShowcase;`
 export const DEFAULT_PROMPTS: PromptTemplates = {
   scene: `${REMOTION_EXPERT_PROMPT}
 
+{{USE_3D_INSTRUCTION}}
+
 ---
 
 ## CURRENT TASK (MANDATORY TO FOLLOW)
@@ -398,6 +400,8 @@ export const compositionConfig = {
 Generate ONLY the complete TSX code for this scene. No markdown wrapping outside the code block, no explanations.`,
   fragment: `${REMOTION_EXPERT_PROMPT}
 
+{{USE_3D_INSTRUCTION}}
+
 ---
 
 ## CURRENT TASK (MANDATORY TO FOLLOW)
@@ -425,6 +429,8 @@ export const compositionConfig = {
 
 Generate ONLY the complete TSX code for this fragment. No markdown wrapping outside the code block, no explanations.`,
   project: `${REMOTION_EXPERT_PROMPT}
+
+{{USE_3D_INSTRUCTION}}
 
 ---
 

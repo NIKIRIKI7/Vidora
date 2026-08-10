@@ -44,4 +44,20 @@ export const REMOTION_SKILLS: RemotionSkill[] = [
 3. Все цвета из объекта COLORS передавай ТОЛЬКО через style: style={{ backgroundColor: COLORS.background, color: COLORS.text }}.
 4. style={{...}} также используется для анимируемых свойств (transform, opacity), меняющихся каждый кадр через interpolate(). Всё статичное (layout, шрифты, отступы) — в className.`,
   },
+  {
+    id: 'r3f-integration',
+    title: 'React Three Fiber & Remotion 3D',
+    description: 'Строгие правила 3D: отказ от <Float>, привязка к кадрам, тени.',
+    content: `## React Three Fiber + Remotion (CRITICAL RULES)
+1. Для 3D используй \`ThreeCanvas\` из \`@remotion/three\`, а НЕ \`<Canvas>\` из R3F. Это синхронизирует рендер с Remotion.
+2. ЗАПРЕЩЕНО использовать компоненты Drei, зависящие от внутреннего таймера: \`<Float>\`, \`<OrbitControls autoRotate>\`, \`<Wobble>\`. Они рассинхронизируются при экспорте видео и вызывают сильное дергание (jitter).
+3. ВСЕ анимации (парение, вращение) делай математически через \`useCurrentFrame()\`. Пример парения:
+   \`const floatY = Math.sin(frame / 15) * 0.15;\`
+   \`const rotZ = Math.cos(frame / 20) * 0.05;\`
+4. ВАЖНО: При использовании \`spring()\`, НИКОГДА не оборачивай \`frame\` в \`Math.max\`. Передавай отрицательные значения напрямую (Remotion сам вернет 0):
+   ❌ Плохо: \`spring({ frame: Math.max(0, frame - 30), fps })\`
+   ✅ Хорошо: \`spring({ frame: frame - 30, fps })\`
+5. Для теней используй \`<ContactShadows frames={1} />\` — обязательно \`frames={1}\`, чтобы запечь тень и сэкономить ресурсы при покадровом рендере.
+6. 2D интерфейс (Tailwind) располагай поверх \`ThreeCanvas\` в отдельном \`<AbsoluteFill>\` с \`pointer-events-none\`.`,
+  },
 ]
