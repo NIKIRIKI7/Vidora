@@ -184,8 +184,6 @@ export const EditorWorkspace = ({
               previewFormat={model.previewFormat}
               onChangeView={model.setCenterView}
               onPreviewFormatChange={model.setPreviewFormat}
-              playWithAudio={model.playWithAudio}
-              onTogglePlayWithAudio={() => model.setPlayWithAudio(!model.playWithAudio)}
               playingTargetId={model.playingTargetId}
               renderedVideos={model.renderedVideos}
               audioLoaded={model.audioLoaded}
@@ -706,6 +704,8 @@ export const EditorWorkspace = ({
                     <datalist id="local-scenario-models">
                       <option value="qwen2.5-coder" />
                       <option value="llama3.1-8b" />
+                      <option value="gemma3:4b" />
+                      <option value="gemma3:8b" />
                     </datalist>
                   </FieldGroup>
 
@@ -715,6 +715,8 @@ export const EditorWorkspace = ({
                     <datalist id="local-visual-models">
                       <option value="qwen2.5-coder" />
                       <option value="deepseek-coder-v2" />
+                      <option value="gemma3:4b" />
+                      <option value="gemma3:8b" />
                     </datalist>
                   </FieldGroup>
 

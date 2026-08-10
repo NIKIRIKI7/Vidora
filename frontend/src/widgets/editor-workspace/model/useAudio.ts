@@ -73,18 +73,19 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
   const [isSyncing, setIsSyncing] = useState(false)
   const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
 
+  const expectedPath = activeScene ? getAudioPathForScene(project, activeScene) : null;
+
   useEffect(() => {
     let isCancelled = false
-    if (!activeScene) {
+    if (!expectedPath) {
       Promise.resolve().then(() => { if (!isCancelled) setAudioLoaded(null) })
       return
     }
-    const expectedPath = getAudioPathForScene(project, activeScene)
     fetch(`${API}/api/v1/render/media?path=${encodeURIComponent(expectedPath)}`, { method: 'HEAD' })
       .then(res => { if (!isCancelled) setAudioLoaded(res.ok ? expectedPath : null) })
       .catch(() => { if (!isCancelled) setAudioLoaded(null) })
     return () => { isCancelled = true }
-  }, [activeScene, project])
+  }, [expectedPath])
 
   const handleProcessAdvancedSilence = async (scope: 'scene' | 'project', targetSceneId?: string) => {
     setIsGeneratingAudio(true)

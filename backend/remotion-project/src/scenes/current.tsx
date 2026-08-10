@@ -8,33 +8,25 @@ import {
   Sequence,
 } from 'remotion';
 
-// =============================================================================
-// COMPOSITION CONFIG
-// =============================================================================
 export const compositionConfig = {
   id: 'Scene',
-  durationInFrames: 238, // 7.93s @ 30 FPS
+  durationInFrames: 511,
   fps: 30,
   width: 3840,
   height: 2160,
 };
 
-// =============================================================================
-// STYLE CONSTANTS
-// =============================================================================
 const COLORS = {
-  primary: '#ddb7ff',    // Soft Lavender
-  secondary: '#4fdbc8',  // Neon Cyan / Turquoise
-  background: '#0b1326', // Deep Dark Blue
-  surface: '#171f33',    // Dark Surface Card
-  accent: '#ffb4ab',     // Soft Coral / Red-Pink Accent
-  text: '#dae2fd',       // Light Ice Blue Text
-  textMuted: '#8b9bb4',  // Muted Slate Text
+  primary: '#ddb7ff',
+  secondary: '#4fdbc8',
+  background: '#0b1326',
+  surface: '#171f33',
+  accent: '#ffb4ab',
+  text: '#dae2fd',
 } as const;
 
 const TYPOGRAPHY = {
-  fontFamily: 'Inter, Montserrat, system-ui, -apple-system, sans-serif',
-  monospace: 'JetBrains Mono, Fira Code, Courier New, monospace',
+  fontFamily: 'Inter, system-ui, sans-serif',
 } as const;
 
 const EASINGS = {
@@ -42,288 +34,549 @@ const EASINGS = {
   easeIn: Easing.bezier(0.32, 0, 0.67, 0),
   easeInOut: Easing.bezier(0.37, 0, 0.63, 1),
   overshoot: Easing.bezier(0.34, 1.56, 0.64, 1),
-} as const;
-
-// =============================================================================
-// PRE-GENERATED SEEDED DATA
-// =============================================================================
-const seededRandom = (seed: number): number => {
-  const x = Math.sin((seed + 1) * 9999) * 10000;
-  return x - Math.floor(x);
-};
-
-const PARTICLES = Array.from({ length: 40 }, (_, i) => ({
-  x: seededRandom(i * 3.1) * 3840,
-  y: seededRandom(i * 7.7) * 2160,
-  size: 6 + seededRandom(i * 5.3) * 12,
-  speed: 0.5 + seededRandom(i * 2.9) * 1.5,
-  delay: Math.floor(seededRandom(i * 11.1) * 60),
-}));
-
-// =============================================================================
-// GLOBAL BACKGROUND COMPONENT
-// =============================================================================
-const BackgroundGrid: React.FC = () => {
-  const frame = useCurrentFrame();
-  const driftY = interpolate(frame, [0, compositionConfig.durationInFrames], [0, -180], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  return (
-    <AbsoluteFill style={{ backgroundColor: COLORS.background, overflow: 'hidden' }}>
-      {/* Ambient Glows */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '-15%',
-          left: '-10%',
-          width: '55%',
-          height: '55%',
-          borderRadius: '50%',
-          background: `radial-gradient(circle, ${COLORS.primary}22 0%, transparent 70%)`,
-          filter: 'blur(140px)',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '-15%',
-          right: '-10%',
-          width: '60%',
-          height: '60%',
-          borderRadius: '50%',
-          background: `radial-gradient(circle, ${COLORS.secondary}18 0%, transparent 70%)`,
-          filter: 'blur(160px)',
-        }}
-      />
-
-      {/* SVG Tech Grid Pattern */}
-      <svg width="100%" height="100%" style={{ position: 'absolute', opacity: 0.12 }}>
-        <defs>
-          <pattern
-            id="grid-4k-outro"
-            width={120}
-            height={120}
-            patternUnits="userSpaceOnUse"
-            patternTransform={`translate(0, ${driftY})`}
-          >
-            <path d="M 120 0 L 0 0 0 120" fill="none" stroke={COLORS.primary} strokeWidth={2} />
-            <circle cx={0} cy={0} r={3} fill={COLORS.secondary} opacity={0.6} />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid-4k-outro)" />
-      </svg>
-
-      {/* Floating Particles */}
-      {PARTICLES.map((p, i) => {
-        const opacity = interpolate(
-          frame,
-          [p.delay, p.delay + 30, compositionConfig.durationInFrames - 30],
-          [0, 0.4, 0.4],
-          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-        );
-        const yPos = (p.y - frame * p.speed * 2) % 2160;
-
-        return (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              left: p.x,
-              top: yPos < 0 ? yPos + 2160 : yPos,
-              width: p.size,
-              height: p.size,
-              borderRadius: '50%',
-              backgroundColor: i % 2 === 0 ? COLORS.secondary : COLORS.primary,
-              opacity,
-              boxShadow: `0 0 16px ${i % 2 === 0 ? COLORS.secondary : COLORS.primary}`,
-            }}
-          />
-        );
-      })}
-    </AbsoluteFill>
-  );
 };
 
 // =============================================================================
-// FRAGMENT 1: Rescued Server from Landfill (0.00s - 1.68s | 0 - 50 frames)
+// FRAGMENT 1: Stands (00:12:22 - 00:12:35)
 // =============================================================================
-const Fragment1: React.FC<{ duration: number }> = ({ duration }) => {
+const StandBlock: React.FC<{
+  title: string;
+  badge: string;
+  delay: number;
+  badgeColor: string;
+}> = ({ title, badge, delay, badgeColor }) => {
   const frame = useCurrentFrame();
-
-  const scale = interpolate(frame, [0, duration], [0.9, 1.0], {
+  
+  const yOffset = interpolate(frame, [delay, delay + 25], [1000, 0], {
     easing: EASINGS.easeOut,
-    extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  
+  const opacity = interpolate(frame, [delay, delay + 15], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
   });
 
-  const fadeOut = interpolate(frame, [duration - 8, duration], [1, 0], {
-    extrapolateLeft: 'clamp',
+  const badgeScale = interpolate(frame, [delay + 15, delay + 35], [0, 1], {
+    easing: EASINGS.overshoot,
     extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
   });
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', opacity: fadeOut }}>
+    <div
+      style={{
+        width: '35vw',
+        height: '22vw',
+        backgroundColor: COLORS.surface,
+        borderRadius: '2vw',
+        border: `0.4vw solid ${COLORS.primary}`,
+        boxShadow: `0 3vw 0 ${COLORS.primary}, 0 5vw 10vw rgba(0,0,0,0.5)`,
+        transform: `translateY(${yOffset}px)`,
+        opacity,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+      }}
+    >
       <div
         style={{
-          width: 2400,
-          height: 1100,
-          backgroundColor: COLORS.surface,
-          borderRadius: 40,
-          border: `4px solid ${COLORS.secondary}`,
-          boxShadow: `0 30px 100px ${COLORS.secondary}44`,
-          transform: `scale(${scale})`,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: 40,
-          padding: 80,
+          fontSize: '4.5vw',
+          color: COLORS.text,
+          fontWeight: 800,
+          fontFamily: TYPOGRAPHY.fontFamily,
+          textAlign: 'center',
+          marginBottom: '2vw',
         }}
       >
-        <div style={{ backgroundColor: `${COLORS.secondary}22`, padding: '16px 40px', borderRadius: 20, border: `2px solid ${COLORS.secondary}` }}>
-          <span style={{ fontFamily: TYPOGRAPHY.monospace, fontSize: 36, color: COLORS.secondary }}>RESCUED FROM LANDFILL</span>
-        </div>
-
-        <h1 style={{ fontFamily: TYPOGRAPHY.fontFamily, fontSize: 120, fontWeight: 900, color: COLORS.text, margin: 0, textAlign: 'center' }}>
-          СПАСЛИ МАШИНУ ОТ СВАЛКИ
-        </h1>
-
-        <span style={{ fontFamily: TYPOGRAPHY.monospace, fontSize: 40, color: COLORS.textMuted }}>
-          [ DELL OPTIPLEX 3050 // LOCAL AI SERVER ]
-        </span>
+        {title}
       </div>
-    </AbsoluteFill>
+      <div
+        style={{
+          transform: `scale(${badgeScale})`,
+          backgroundColor: badgeColor,
+          color: COLORS.background,
+          padding: '1vw 3vw',
+          borderRadius: '1vw',
+          fontSize: '3.5vw',
+          fontWeight: 900,
+          fontFamily: TYPOGRAPHY.fontFamily,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+        }}
+      >
+        {badge}
+      </div>
+    </div>
   );
 };
 
-// =============================================================================
-// FRAGMENT 2: Install Linux & Ollama on Old Laptop (1.68s - 4.80s | 50 - 144 frames)
-// =============================================================================
-const Fragment2: React.FC<{ duration: number }> = ({ duration }) => {
+const StandsScene: React.FC<{ duration: number }> = ({ duration }) => {
   const frame = useCurrentFrame();
 
-  const step1 = interpolate(frame, [5, 22], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const step2 = interpolate(frame, [25, 42], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-
-  const fadeOut = interpolate(frame, [duration - 10, duration], [1, 0], {
-    extrapolateLeft: 'clamp',
+  const exitOpacity = interpolate(frame, [duration - 15, duration], [1, 0], {
     extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
   });
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', opacity: fadeOut, gap: 50 }}>
-      <span style={{ fontFamily: TYPOGRAPHY.monospace, fontSize: 40, color: COLORS.textMuted, letterSpacing: 6 }}>
-        OLD LAPTOP RECYCLED
-      </span>
-
-      <div style={{ display: 'flex', gap: 60 }}>
-        <div
-          style={{
-            opacity: step1,
-            backgroundColor: COLORS.surface,
-            padding: '50px 80px',
-            borderRadius: 36,
-            border: `3px solid ${COLORS.primary}`,
-            boxShadow: `0 20px 80px ${COLORS.primary}33`,
-            textAlign: 'center',
-          }}
-        >
-          <span style={{ fontFamily: TYPOGRAPHY.monospace, fontSize: 32, color: COLORS.primary }}>STEP 1</span>
-          <h2 style={{ fontFamily: TYPOGRAPHY.fontFamily, fontSize: 72, fontWeight: 900, color: COLORS.text, margin: '16px 0 0 0' }}>
-            ПОСТАВЬТЕ LINUX
-          </h2>
-        </div>
-
-        <div
-          style={{
-            opacity: step2,
-            backgroundColor: COLORS.surface,
-            padding: '50px 80px',
-            borderRadius: 36,
-            border: `3px solid ${COLORS.secondary}`,
-            boxShadow: `0 20px 80px ${COLORS.secondary}33`,
-            textAlign: 'center',
-          }}
-        >
-          <span style={{ fontFamily: TYPOGRAPHY.monospace, fontSize: 32, color: COLORS.secondary }}>STEP 2</span>
-          <h2 style={{ fontFamily: TYPOGRAPHY.fontFamily, fontSize: 72, fontWeight: 900, color: COLORS.text, margin: '16px 0 0 0' }}>
-            УСТАНОВИТЕ OLLAMA
-          </h2>
-        </div>
-      </div>
+    <AbsoluteFill
+      style={{
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: '6vw',
+        opacity: exitOpacity,
+      }}
+    >
+      <StandBlock
+        title="Проверено 10"
+        badge="True"
+        delay={0}
+        badgeColor={COLORS.secondary}
+      />
+      <StandBlock
+        title="Пропущено"
+        badge="Also True"
+        delay={10}
+        badgeColor={COLORS.accent}
+      />
     </AbsoluteFill>
   );
 };
 
 // =============================================================================
-// FRAGMENT 3: Subscribe & Like Call to Action (4.80s - 7.93s | 144 - 238 frames)
+// FRAGMENT 2: NOT AGI (00:12:35 - 00:12:51)
 // =============================================================================
-const Fragment3: React.FC<{ duration: number }> = ({ duration }) => {
+const NotAgiScene: React.FC<{ duration: number }> = ({ duration }) => {
   const frame = useCurrentFrame();
 
-  const scale = interpolate(frame, [0, 20], [0.8, 1.0], {
+  const scale1 = interpolate(frame, [0, 20], [3, 1], {
+    easing: EASINGS.easeOut,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const opacity1 = interpolate(frame, [0, 15], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  const scale2 = interpolate(frame, [25, 45], [0.5, 1], {
     easing: EASINGS.overshoot,
-    extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const opacity2 = interpolate(frame, [25, 35], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  const exitOpacity = interpolate(frame, [duration - 15, duration], [1, 0], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
   });
 
   return (
-    <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: 50 }}>
-      <div style={{ transform: `scale(${scale})`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 30 }}>
-        <h1
+    <AbsoluteFill
+      style={{
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: exitOpacity,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2vw',
+        }}
+      >
+        <div
           style={{
-            fontFamily: TYPOGRAPHY.fontFamily,
-            fontSize: 140,
+            fontSize: '12vw',
             fontWeight: 900,
-            color: COLORS.primary,
-            margin: 0,
-            textShadow: `0 20px 80px ${COLORS.primary}66`,
+            color: COLORS.accent,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            lineHeight: 1.1,
+            transform: `scale(${scale1})`,
+            opacity: opacity1,
+            textShadow: `0 1vw 3vw ${COLORS.accent}66`,
           }}
         >
-          ПОДПИШИСЬ И ПОСТАВЬ ЛАЙК
-        </h1>
-
-        <div style={{ display: 'flex', gap: 40, marginTop: 20 }}>
-          <div style={{ backgroundColor: COLORS.secondary, color: COLORS.background, padding: '24px 60px', borderRadius: 24, fontFamily: TYPOGRAPHY.fontFamily, fontSize: 48, fontWeight: 900 }}>
-            👍 LIKE
-          </div>
-          <div style={{ backgroundColor: COLORS.accent, color: COLORS.background, padding: '24px 60px', borderRadius: 24, fontFamily: TYPOGRAPHY.fontFamily, fontSize: 48, fontWeight: 900 }}>
-            🔔 SUBSCRIBE
-          </div>
+          NOT AGI.
         </div>
-
-        <span style={{ fontFamily: TYPOGRAPHY.monospace, fontSize: 36, color: COLORS.textMuted, marginTop: 10 }}>
-          💬 КАКУЮ МОДЕЛЬ ЗАПУСТИЛИ БЫ ВЫ?
-        </span>
+        <div
+          style={{
+            fontSize: '8vw',
+            fontWeight: 800,
+            color: COLORS.secondary,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            lineHeight: 1.1,
+            transform: `scale(${scale2})`,
+            opacity: opacity2,
+          }}
+        >
+          BUT CHECKABLE.
+        </div>
       </div>
     </AbsoluteFill>
   );
 };
 
 // =============================================================================
-// MAIN COMPOSITION ORCHESTRATION
+// FRAGMENT 3: Envelopes & Magnifying Glass (00:12:51 - 00:13:06)
+// =============================================================================
+const Envelope: React.FC<{ delay: number }> = ({ delay }) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [delay, delay + 15], [0, 1], {
+    easing: EASINGS.overshoot,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  return (
+    <div
+      style={{
+        width: '10vw',
+        height: '7vw',
+        backgroundColor: COLORS.surface,
+        borderRadius: '0.5vw',
+        border: `0.3vw solid ${COLORS.primary}`,
+        position: 'relative',
+        transform: `scale(${scale})`,
+        overflow: 'hidden',
+      }}
+    >
+      <svg width="100%" height="100%" viewBox="0 0 100 70">
+        <path
+          d="M 0 0 L 50 40 L 100 0"
+          fill="none"
+          stroke={COLORS.primary}
+          strokeWidth="6"
+        />
+      </svg>
+    </div>
+  );
+};
+
+const MagnifyingGlassScene: React.FC<{ duration: number }> = ({ duration }) => {
+  const frame = useCurrentFrame();
+
+  const glassX = interpolate(frame, [20, 90], [-30, 30], {
+    easing: EASINGS.easeInOut,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const glassOpacity = interpolate(frame, [20, 30], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  
+  const textY = interpolate(frame, [40, 60], [100, 0], {
+    easing: EASINGS.easeOut,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const textOpacity = interpolate(frame, [40, 55], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  const exitOpacity = interpolate(frame, [duration - 15, duration], [1, 0], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  return (
+    <AbsoluteFill
+      style={{
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: exitOpacity,
+        flexDirection: 'column',
+      }}
+    >
+      <div style={{ position: 'relative', width: '60vw', height: '20vw' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: '2vw',
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Envelope key={i} delay={i * 2} />
+          ))}
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            top: '-5vw',
+            left: '50%',
+            transform: `translate(calc(-50% + ${glassX}vw), 0)`,
+            opacity: glassOpacity,
+            zIndex: 10,
+          }}
+        >
+          <svg
+            width="18vw"
+            height="18vw"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={COLORS.secondary}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" fill={`${COLORS.background}99`} backdropFilter="blur(10px)"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: '6vw',
+          fontSize: '4vw',
+          color: COLORS.text,
+          fontWeight: 700,
+          fontFamily: TYPOGRAPHY.fontFamily,
+          backgroundColor: COLORS.surface,
+          padding: '1.5vw 3vw',
+          borderRadius: '2vw',
+          border: `0.3vw solid ${COLORS.primary}`,
+          transform: `translateY(${textY}px)`,
+          opacity: textOpacity,
+        }}
+      >
+        Публичное чтение — идет сейчас
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// =============================================================================
+// FRAGMENT 4: Marketing to Peer Review (00:13:06 - 00:13:20)
+// =============================================================================
+const MarketingToPeerReviewScene: React.FC<{ duration: number }> = ({ duration }) => {
+  const frame = useCurrentFrame();
+
+  // Marketing Phase
+  const marketingOpacity = interpolate(frame, [0, 10, 45, 55], [0, 1, 1, 0], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const marketingScale = interpolate(frame, [0, 15, 45, 55], [0.8, 1, 1, 0.8], {
+    easing: EASINGS.easeOut,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  const crossWidth = interpolate(frame, [20, 35], [0, 100], {
+    easing: EASINGS.easeInOut,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  // Peer Review Phase
+  const peerReviewScale = interpolate(frame, [50, 70], [0.5, 1], {
+    easing: EASINGS.overshoot,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const peerReviewOpacity = interpolate(frame, [50, 65], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  // Subscribe Button
+  const subY = interpolate(frame, [80, 100], [200, 0], {
+    easing: EASINGS.overshoot,
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+  const subOpacity = interpolate(frame, [80, 95], [0, 1], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  const exitOpacity = interpolate(frame, [duration - 15, duration], [1, 0], {
+    extrapolateRight: 'clamp',
+    extrapolateLeft: 'clamp',
+  });
+
+  return (
+    <AbsoluteFill
+      style={{
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: exitOpacity,
+      }}
+    >
+      {/* Marketing Group */}
+      <div
+        style={{
+          position: 'absolute',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2vw',
+          transform: `scale(${marketingScale})`,
+          opacity: marketingOpacity,
+        }}
+      >
+        <svg
+          width="12vw"
+          height="12vw"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={COLORS.primary}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+        <div style={{ position: 'relative' }}>
+          <span
+            style={{
+              fontSize: '5vw',
+              color: COLORS.text,
+              fontWeight: 800,
+              fontFamily: TYPOGRAPHY.fontFamily,
+            }}
+          >
+            Отдел маркетинга
+          </span>
+          {/* Cross out line */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '-5%',
+              width: `${crossWidth}%`,
+              height: '0.8vw',
+              backgroundColor: COLORS.accent,
+              transform: 'translateY(-50%) rotate(-3deg)',
+              boxShadow: `0 0 2vw ${COLORS.accent}`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Peer Review Group */}
+      <div
+        style={{
+          position: 'absolute',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '3vw',
+          transform: `scale(${peerReviewScale}) translateY(-4vw)`,
+          opacity: peerReviewOpacity,
+        }}
+      >
+        <div
+          style={{
+            fontSize: '8vw',
+            color: COLORS.secondary,
+            fontWeight: 900,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            textTransform: 'uppercase',
+            textShadow: `0 0 4vw ${COLORS.secondary}88`,
+          }}
+        >
+          Peer Review
+        </div>
+      </div>
+
+      {/* Subscribe Button */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '15%',
+          transform: `translateY(${subY}px)`,
+          opacity: subOpacity,
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: COLORS.primary,
+            color: COLORS.background,
+            padding: '1.5vw 4vw',
+            borderRadius: '4vw',
+            fontSize: '3.5vw',
+            fontWeight: 800,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            textTransform: 'uppercase',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1.5vw',
+            boxShadow: `0 2vw 4vw rgba(0,0,0,0.6)`,
+          }}
+        >
+          <svg
+            width="4vw"
+            height="4vw"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33 2.78 2.78 0 0 0 1.94 2C5.12 19.5 12 19.5 12 19.5s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z" />
+            <polygon fill={COLORS.background} stroke={COLORS.background} points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+          </svg>
+          Subscribe
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// =============================================================================
+// MAIN COMPONENT
 // =============================================================================
 const Scene: React.FC = () => {
+  // Timings:
+  // F1: 0.00 - 4.88s  => 146 frames
+  // F2: 4.88 - 8.95s  => 123 frames
+  // F3: 8.95 - 12.87s => 117 frames
+  // F4: 12.87 - 17.03s => 125 frames
+  // Total: 511 frames
+  
+  const SCENES = [
+    { id: 'F1', from: 0, duration: 146 },
+    { id: 'F2', from: 146, duration: 123 },
+    { id: 'F3', from: 269, duration: 117 },
+    { id: 'F4', from: 386, duration: 125 },
+  ] as const;
+
   return (
     <AbsoluteFill style={{ backgroundColor: COLORS.background }}>
-      <BackgroundGrid />
-
-      {/* Frag 1: 0.00s - 1.68s (0 - 50 frames) */}
-      <Sequence from={0} durationInFrames={50}>
-        <Fragment1 duration={50} />
-      </Sequence>
-
-      {/* Frag 2: 1.68s - 4.80s (50 - 144 frames) */}
-      <Sequence from={50} durationInFrames={94}>
-        <Fragment2 duration={94} />
-      </Sequence>
-
-      {/* Frag 3: 4.80s - 7.93s (144 - 238 frames) */}
-      <Sequence from={144} durationInFrames={94}>
-        <Fragment3 duration={94} />
-      </Sequence>
+      {SCENES.map((scene) => (
+        <Sequence
+          key={scene.id}
+          from={scene.from}
+          durationInFrames={scene.duration}
+        >
+          {scene.id === 'F1' && <StandsScene duration={scene.duration} />}
+          {scene.id === 'F2' && <NotAgiScene duration={scene.duration} />}
+          {scene.id === 'F3' && <MagnifyingGlassScene duration={scene.duration} />}
+          {scene.id === 'F4' && <MarketingToPeerReviewScene duration={scene.duration} />}
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 };

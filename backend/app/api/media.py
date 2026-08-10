@@ -46,6 +46,22 @@ async def upload_audio(project_path: str = Form(...), target_id: str = Form(...)
         duration = wav.getnframes() / float(wav.getframerate())
     return {"status": "ok", "path": file_path, "duration": duration}
 
+@router.get("/search-stock")
+async def search_stock(query: str, per_page: int = 15, orientation: str = "portrait"):
+    api_key = os.environ.get("PEXELS_API_KEY", "")
+    if not api_key:
+        return {"status": "error", "detail": "PEXELS_API_KEY не задан в файле .env на бэкенде"}
+
+    async with httpx.AsyncClient() as client:
+        res = await client.get(
+            f"https://api.pexels.com/videos/search?query={query}&per_page={per_page}&orientation={orientation}",
+            headers={"Authorization": api_key},
+            timeout=15.0
+        )
+        if res.status_code != 200:
+            return {"status": "error", "detail": f"Ошибка Pexels API: {res.status_code}"}
+        return {"status": "ok", "videos": res.json().get("videos", [])}
+
 @router.post("/download-stock")
 async def download_stock(req: DownloadRequest):
     dest_dir = os.path.join(req.project_path, "assets", req.folder)

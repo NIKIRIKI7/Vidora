@@ -86,12 +86,18 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
     print(f"[RENDER API] Project Path: '{req.project_path}'")
     print(f"[RENDER API] Audio Path: '{req.audio_path}'")
 
-    npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
     temp_output = OUT_DIR / f"{task_id}.mp4"
     merged_output = OUT_DIR / f"{task_id}_merged.mp4"
     cores = max(1, (multiprocessing.cpu_count() or 4) - 1)
-    cmd = [npx_cmd, "remotion", "render", "src/index.ts", "current", f"out/{task_id}.mp4",
-           "--codec=h264", f"--concurrency={cores}"]
+
+    remotion_bin = REMO_DIR / "node_modules" / ".bin" / ("remotion.cmd" if sys.platform == "win32" else "remotion")
+    if remotion_bin.exists():
+        cmd = [str(remotion_bin), "render", "src/index.ts", "current", f"out/{task_id}.mp4",
+               "--codec=h264", f"--concurrency={cores}"]
+    else:
+        npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
+        cmd = [npx_cmd, "--yes", "remotion", "render", "src/index.ts", "current", f"out/{task_id}.mp4",
+               "--codec=h264", f"--concurrency={cores}"]
 
     try:
         if req.tsx_code:

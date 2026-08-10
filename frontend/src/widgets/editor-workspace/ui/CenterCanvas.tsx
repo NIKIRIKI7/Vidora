@@ -9,8 +9,6 @@ interface Props {
   previewFormat: VideoFormat | null
   onChangeView: (view: 'player' | 'code' | 'split' | 'markdown') => void
   onPreviewFormatChange: (format: VideoFormat | null) => void
-  playWithAudio: boolean
-  onTogglePlayWithAudio: () => void
   playingTargetId: string | null
   renderedVideos: Record<string, string>
   audioLoaded: string | null
@@ -32,7 +30,7 @@ interface Props {
 }
 
 export const CenterCanvas = ({
-  centerView, previewFormat, onChangeView, onPreviewFormatChange, playWithAudio, onTogglePlayWithAudio,
+  centerView, previewFormat, onChangeView, onPreviewFormatChange,
   playingTargetId, renderedVideos, audioLoaded, activeScene, project, videoRef, audioRef, onUpdateCode,
   onCodeHistory, isRendering, isAutoPipelineRunning, pipelineStep, renderProgress, onCancelAll,
   onUpdateMarkdown, onCaptureFrame, onUpdateFragmentBounds, showTimeline,
@@ -42,15 +40,12 @@ export const CenterCanvas = ({
   const shouldRenderAudio = Boolean(audioLoaded && !hasRenderedVideo)
 
   const [localMd, setLocalMd] = useState(project.rawMarkdown)
-  const [prevProjectMd, setPrevProjectMd] = useState(project.rawMarkdown)
   const currentFormat = previewFormat || project.format
-
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('app:split-ratio')) || 50)
 
-  if (project.rawMarkdown !== prevProjectMd) {
-    setLocalMd(project.rawMarkdown)
-    setPrevProjectMd(project.rawMarkdown)
-  }
+  useEffect(() => {
+    Promise.resolve().then(() => setLocalMd(project.rawMarkdown))
+  }, [project.rawMarkdown])
 
   useEffect(() => {
     const t = setTimeout(() => { if (localMd !== project.rawMarkdown) onUpdateMarkdown(localMd) }, 1000)
@@ -62,10 +57,13 @@ export const CenterCanvas = ({
     const audio = audioRef.current
     if (!video || !audio || !shouldRenderAudio) return
 
-    const handlePlay = () => { if (playWithAudio) audio.play().catch(() => {}) }
+    const handlePlay = () => { audio.play().catch(() => {}) }
     const handlePause = () => audio.pause()
     const handleSeek = () => { audio.currentTime = video.currentTime }
-    const handleVolumeChange = () => { audio.volume = playWithAudio ? 1 : 0 }
+    const handleVolumeChange = () => {
+      audio.muted = video.muted
+      audio.volume = video.volume
+    }
 
     video.addEventListener('play', handlePlay)
     video.addEventListener('pause', handlePause)
@@ -78,7 +76,7 @@ export const CenterCanvas = ({
       video.removeEventListener('seeked', handleSeek)
       video.removeEventListener('volumechange', handleVolumeChange)
     }
-  }, [shouldRenderAudio, playWithAudio, playingTargetId, videoRef, audioRef])
+  }, [shouldRenderAudio, playingTargetId, videoRef, audioRef])
 
   const handleDrag = useCallback((e: MouseEvent) => {
     const container = document.getElementById('split-container')
@@ -113,7 +111,7 @@ export const CenterCanvas = ({
         </div>
 
         {renderedVideos[playingTargetId || ''] ? (
-          <video ref={videoRef} crossOrigin="anonymous" src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`} autoPlay={!playWithAudio} muted={!playWithAudio} className="w-full h-full object-contain" />
+          <video ref={videoRef} crossOrigin="anonymous" src={`${API}/api/v1/render/media?path=${encodeURIComponent(renderedVideos[playingTargetId || ''])}`} controls className="w-full h-full object-contain" />
         ) : (
           <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-500">
             <div className="w-32 h-32 rounded-full bg-primary/20 blur-3xl absolute animate-pulse" />
@@ -166,7 +164,6 @@ export const CenterCanvas = ({
               <button onClick={() => onPreviewFormatChange('16:9')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '16:9' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}>🖥️ 16:9</button>
               <button onClick={() => onPreviewFormatChange('9:16')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '9:16' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}>📱 9:16</button>
             </div>
-            <Button variant="ghost" icon={playWithAudio ? 'volume_up' : 'volume_off'} onClick={onTogglePlayWithAudio} className="text-xs py-1">{playWithAudio ? 'Звук: Вкл' : 'Звук: Выкл'}</Button>
             {centerView === 'split' && <Button variant="ghost" className="text-xs py-1" onClick={() => setSplitRatio(50)}>50/50</Button>}
           </div>
         )}

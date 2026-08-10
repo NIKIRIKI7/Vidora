@@ -25,7 +25,7 @@ def _get_model(gguf_path: Path):
         from llama_cpp import Llama
         _model = Llama(
             model_path=str(gguf_path),
-            n_ctx=4096,
+            n_ctx=16384,
             n_threads=max(os.cpu_count() or 4, 4),
             # ponytail: GPU-слои выставляются переменной окружения; CPU-по умолчанию безопасно
             n_gpu_layers=int(os.environ.get("VIDORA_LLAMA_GPU_LAYERS", "0")),

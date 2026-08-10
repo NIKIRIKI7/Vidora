@@ -39,10 +39,20 @@ export const SceneSidebar = ({
     if (!stockQuery) return
     setIsSearching(true)
     try {
-      const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(stockQuery)}&per_page=15&orientation=portrait`, { headers: { Authorization: 'wU4uRTYq9l3kF48H7mF3uCq6y3mE8B7k6s4F3l1T8w2mE4H1sR9q0bO3' } })
+      const res = await fetch(`${API}/api/v1/media/search-stock?query=${encodeURIComponent(stockQuery)}`)
       const data = await res.json()
-      setStockResults(data.videos || [])
-    } catch { onShowNotification('Ошибка поиска футажей', 'error') } finally { setIsSearching(false) }
+      if (!res.ok || data.status === 'error') {
+        onShowNotification(data.detail || 'Ошибка поиска футажей', 'error')
+        setStockResults([])
+      } else {
+        setStockResults(data.videos || [])
+      }
+    } catch {
+      onShowNotification('Ошибка соединения при поиске', 'error')
+      setStockResults([])
+    } finally {
+      setIsSearching(false)
+    }
   }
 
   const handleDownloadStock = async (url: string, filename: string) => {
