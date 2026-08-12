@@ -9,47 +9,53 @@ from app.services.yt_parser import YouTubeParser
 from app.services.yt_exporter import YouTubeExporter
 from app.services.trend_analyzer import TrendAnalyzer
 
-MCP_SYSTEM_PROMPT = """Ты — ИИ-агент Vidora с доступом к консольным инструментам для исследования YouTube. Твоя задача — находить вирусные видео по теме пользователя и возвращать их в строгом JSON.
+MCP_SYSTEM_PROMPT = """Ты — ИИ-агент Vidora (Супер-Агент MCP) с доступом к инструментам: YouTube, стоки Pexels, веб-поиск/RAG, линтер TSX и файловая система проекта. Вызывай инструменты через function calling.
 
-## Доступные инструменты (вызывай через function calling)
+## Доступные инструменты
 
-1. search_youtube(query: string)
-   Назначение: поиск свежих вирусных видео по запросу.
-   Возвращает: JSON-массив видео (video_id, title, channel, views, subs, ratio, vph, url, published_at, duration_sec, is_short).
-
-2. download_youtube(url: string, format?: "video" | "audio" = "video")
-   Назначение: скачать видео (mp4) или аудио (wav) с YouTube через yt-dlp.
-   Возвращает: {"status": "success", "path": "абсолютный путь к файлу"}.
-   Параметры:
-   - url — полный URL видео (бери из результата search_youtube).
-   - format — "video" (mp4) или "audio" (wav).
-
-3. ffmpeg_process(input_path: string, action: "trim" | "extract_audio", start_time?: "HH:MM:SS", end_time?: "HH:MM:SS")
-   Назначение: обработка скачанного медиафайла.
-   - action="extract_audio" — извлечь звуковую дорожку в wav.
-   - action="trim" — вырезать фрагмент [start_time, end_time].
-   input_path — путь, полученный из download_youtube.
-   Возвращает: {"status": "success", "path": "путь к результату"}.
-
-## Основные кейсы и какие инструменты вызывать
-
-1. Поиск идей/трендов: ОБЯЗАТЕЛЬНО вызови search_youtube(тема).
-2. Анализ контента конкурента (нужны транскрипция/контент):
-   цепочка search_youtube -> download_youtube(url, format="video") -> ffmpeg_process(path, action="extract_audio").
-3. Только аудио для анализа: search_youtube -> download_youtube(url, format="audio").
-4. Обрезка фрагмента видео: download_youtube(url, format="video") -> ffmpeg_process(path, action="trim", start_time="00:00:05", end_time="00:00:30").
+1. discover_niche_videos(niche) — АВТО-АГЕНТ: сам подбирает трендовые ключевые слова (Google/YouTube/Yandex) по нише и сразу ищет по ним вирусные видео. Возвращает {"keywords": [...], "videos": [...]}. Вызывай ПЕРВЫМ для любой новой темы.
+2. search_youtube(query) — поиск свежих вирусных видео. Возвращает JSON-массив видео (video_id, title, channel, views, subs, ratio, vph, url, published_at, duration_sec, is_short).
+3. download_youtube(url, format="video"|"audio") — скачать mp4 или wav с YouTube через yt-dlp. Возвращает {"status":"success","path":...}.
+4. ffmpeg_process(input_path, action="trim"|"extract_audio", start_time?, end_time?) — обрезка/извлечение аудио локального файла. Формат времени HH:MM:SS.
+5. transcribe_media(input_path) — транскрипция аудио/видео (WhisperX).
+6. search_pexels(query) — стоковые видео на Pexels (запрос на английском). Возвращает [{id, duration, url}].
+7. download_and_trim_remote_media(url, start_time?, end_time?) — скачивает медиа по прямой ссылке (Pexels и др.) и может обрезать его 'на лету' через ffmpeg, чтобы НЕ качать весь файл. Для фрагмента на 3 секунды укажи start_time и end_time (HH:MM:SS), иначе скачается весь ролик.
+8. search_web(query) — веб-поиск (DuckDuckGo RAG). Возвращает URL и сниппеты.
+9. extract_article_text(url) — извлекает основной текст статьи по URL.
+10. check_tsx_syntax(code) — линтер: проверяет синтаксис TSX/React через esbuild. Вызови ПЕРЕД сохранением сцены; при ошибке исправь код и проверь снова.
+11. update_file(filepath, content) — записывает содержимое в файл проекта (например vidora_projects/SCENARIO.md).
+12. get_search_trends(query) — тренды и поисковые подсказки Google/YouTube/Yandex для SEO.
 
 ## Правила вызова инструментов
 
-- Вызывай инструменты ПО ОДНОМУ: дождись результата, прежде чем вызывать следующий. В цепочках (download_youtube -> ffmpeg_process) передавай path из ответа предыдущего вызова, не выдумывай пути.
-- Передавай ВСЕ обязательные параметры, указанные в схеме инструмента.
-- Если инструмент вернул {"status": "error", ...} (например, файл не найден или скачивание заблокировано) — не прерывай работу: пропусти неудачный шаг и продолжай (например, верни результаты поиска без скачивания).
+- Вызывай инструменты ПО ОДНОМУ: дождись результата, прежде чем вызывать следующий. В цепочках передавай path/url из ответа предыдущего вызова, не выдумывай пути.
+- Передавай ВСЕ обязательные параметры. Если инструмент вернул {"status": "error", ...} — не прерывай работу: пропусти неудачный шаг и продолжай.
 - Не придумывай данные — используй только реальные результаты инструментов.
 
 ## Финальный ответ
 
 Верни СТРОГО валидный JSON без markdown-обёртки:
 {"videos": [{"video_id": "...", "title": "...", "channel": "...", "views": 100, "subs": 10, "ratio": 1.5, "vph": 10, "url": "...", "published_at": "2024-01-01T00:00:00Z", "duration_sec": 300, "is_short": false}]}"""
+
+
+async def check_tsx_syntax(code: str) -> str:
+    """Линтер: проверяет синтаксис TSX/React через esbuild remotion-project. Возвращает JSON."""
+    import tempfile
+    import subprocess
+    from pathlib import Path
+    remotion_dir = Path(__file__).resolve().parents[2] / "remotion-project"
+    with tempfile.NamedTemporaryFile(suffix=".tsx", delete=False, mode="w", encoding="utf-8") as f:
+        f.write(code)
+        tmp_path = f.name
+    try:
+        cmd = ["npx.cmd" if os.name == "nt" else "npx", "esbuild", tmp_path]
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(remotion_dir))
+        _, stderr = await proc.communicate()
+        os.remove(tmp_path)
+        return json.dumps({"status": "success"}) if proc.returncode == 0 else json.dumps({"status": "error", "errors": stderr.decode()[:1000]})
+    except Exception as e:
+        os.remove(tmp_path)
+        return json.dumps({"error": str(e)})
 
 
 class YouTubeIdeaAgent:
@@ -227,29 +233,32 @@ class YouTubeIdeaAgent:
             queries = base_queries.copy()
 
             if search_mode == "trending":
-                yield yield_log(f"📊 Анализ мультиплатформенных трендов (YT, Google, Yandex)...")
-                trends_data = await TrendAnalyzer.get_combined_trends(base_queries[0], lang_code)
-                yt_trends = ", ".join(trends_data["youtube"]) if trends_data["youtube"] else "Нет данных"
-                gg_trends = ", ".join(trends_data["google"]) if trends_data["google"] else "Нет данных"
+                if search_engine == "mcp":
+                    yield yield_log("💡 MCP-Агент сам подберёт тренды и ключевые слова через discover_niche_videos...")
+                else:
+                    yield yield_log(f"📊 Анализ мультиплатформенных трендов (YT, Google, Yandex)...")
+                    trends_data = await TrendAnalyzer.get_combined_trends(base_queries[0], lang_code)
+                    yt_trends = ", ".join(trends_data["youtube"]) if trends_data["youtube"] else "Нет данных"
+                    gg_trends = ", ".join(trends_data["google"]) if trends_data["google"] else "Нет данных"
 
-                prompt = f"""Ты AI-Аналитик YouTube. Тематика: '{base_queries[0]}'. Целевой язык: {target_lang}.
+                    prompt = f"""Ты AI-Аналитик YouTube. Тематика: '{base_queries[0]}'. Целевой язык: {target_lang}.
 Тренды:
 YouTube: {yt_trends}
 Google: {gg_trends}
 
 Сгенерируй 5-7 узких, вирусных поисковых запросов для YouTube СТРОГО НА ЯЗЫКЕ '{target_lang}'. Не используй другие языки в ответах. Верни JSON: {{"queries": ["q1", "q2", "q3", "q4", "q5"]}}"""
 
-                llm_res = await self._call_llm(prompt, "", json_format=True, max_tokens=500)
-                data = self._extract_json(llm_res)
+                    llm_res = await self._call_llm(prompt, "", json_format=True, max_tokens=500)
+                    data = self._extract_json(llm_res)
 
-                if "error" in data:
-                    yield yield_log(f"❌ Ошибка LLM (генерация запросов): {data['error']}", "error")
+                    if "error" in data:
+                        yield yield_log(f"❌ Ошибка LLM (генерация запросов): {data['error']}", "error")
 
-                if isinstance(data.get("queries"), list) and len(data["queries"]) > 0:
-                    queries = data["queries"]
-                    yield yield_log(f"📈 Сгенерированы трендовые запросы ({target_lang}): {', '.join(data['queries'])}")
-                else:
-                    yield yield_log(f"⚠️ ИИ не вернул запросы на {target_lang}, иду по базовым: {', '.join(base_queries)}", "warning")
+                    if isinstance(data.get("queries"), list) and len(data["queries"]) > 0:
+                        queries = data["queries"]
+                        yield yield_log(f"📈 Сгенерированы трендовые запросы ({target_lang}): {', '.join(data['queries'])}")
+                    else:
+                        yield yield_log(f"⚠️ ИИ не вернул запросы на {target_lang}, иду по базовым: {', '.join(base_queries)}", "warning")
 
             if search_engine == "ai":
                 yield yield_log("🧠 ИИ самостоятельно генерирует базу вирусных видео (Без API)...")
@@ -291,13 +300,27 @@ Google: {gg_trends}
                     yield yield_log(f"❌ Ошибка вызова скрипта: {e}", "error")
                     raw_videos = []
             elif search_engine == "mcp":
-                yield yield_log("🔌 Активирован MCP-Агент (Tool Calling). LLM имеет доступ к yt-dlp и ffmpeg...")
+                yield yield_log("🔌 Активирован Супер-Агент MCP. LLM имеет доступ к Стокам, RAG-поиску, Линтеру и Файловой системе...")
                 tools = [
                     {
                         "type": "function",
                         "function": {
+                            "name": "discover_niche_videos",
+                            "description": "Авто-агент: сам подбирает трендовые ключевые слова (Google/YouTube/Yandex) для ниши и сразу ищет по ним вирусные видео на YouTube. Вызови ПЕРВЫМ для любой темы.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "niche": {"type": "string", "description": "Тематика ниши (базовый запрос пользователя)"}
+                                },
+                                "required": ["niche"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
                             "name": "search_youtube",
-                            "description": "Ищет свежие вирусные видео на YouTube.",
+                            "description": "Ищет свежие вирусные видео на YouTube по прямому запросу.",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
@@ -338,8 +361,137 @@ Google: {gg_trends}
                                 "required": ["input_path", "action"]
                             }
                         }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "transcribe_media",
+                            "description": "Транскрибирует аудио/видео с помощью Whisper ИИ.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "input_path": {"type": "string", "description": "Абсолютный путь к файлу"}
+                                },
+                                "required": ["input_path"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "search_pexels",
+                            "description": "Ищет стоковые видео на Pexels. Возвращает список URL и длительность.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {"type": "string", "description": "Запрос на английском"}
+                                },
+                                "required": ["query"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "download_and_trim_remote_media",
+                            "description": "Скачивает медиафайл по прямой ссылке (например, с Pexels). МОЖЕТ ОБРЕЗАТЬ ЕГО 'НА ЛЕТУ' (чтобы не качать лишнее!), если указать start_time и end_time.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "url": {"type": "string", "description": "Прямая ссылка на файл (link из search_pexels)"},
+                                    "start_time": {"type": "string", "description": "Начало фрагмента HH:MM:SS"},
+                                    "end_time": {"type": "string", "description": "Конец фрагмента HH:MM:SS"}
+                                },
+                                "required": ["url"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "search_web",
+                            "description": "Поиск информации в интернете (DuckDuckGo RAG). Возвращает URL и сниппеты.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {"type": "string"}
+                                },
+                                "required": ["query"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "extract_article_text",
+                            "description": "Извлекает основной текст из веб-страницы по URL.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "url": {"type": "string"}
+                                },
+                                "required": ["url"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "check_tsx_syntax",
+                            "description": "Линтер: Проверяет синтаксис TSX/React кода через esbuild. Используй перед сохранением сцены!",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {"type": "string"}
+                                },
+                                "required": ["code"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "update_file",
+                            "description": "Файловый менеджер: Записывает содержимое в файл проекта.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "filepath": {"type": "string", "description": "Путь (напр. vidora_projects/SCENARIO.md)"},
+                                    "content": {"type": "string"}
+                                },
+                                "required": ["filepath", "content"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_search_trends",
+                            "description": "SEO Аналитик: Получает тренды и поисковые подсказки из Google/YouTube/Yandex.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {"type": "string"}
+                                },
+                                "required": ["query"]
+                            }
+                        }
                     }
                 ]
+
+                async def mcp_discover_niche_videos(niche: str):
+                    print(f"[MCP] Авто-подбор трендов и видео для ниши: {niche}")
+                    trends = await TrendAnalyzer.get_combined_trends(niche, lang_code)
+                    kws = list(dict.fromkeys(trends.get("youtube", [])[:3] + trends.get("google", [])[:2]))
+                    if not kws:
+                        kws = [niche]
+                    vids = await YouTubeSearcher.search_viral_videos(
+                        queries=kws, days_back=settings.get("days_back", 7),
+                        min_subs=settings.get("min_subs", 1000), max_subs=settings.get("max_subs", 50000),
+                        min_ratio=settings.get("min_ratio", 1.5), api_key=self.api_key,
+                        language=lang_code, video_type=settings.get("video_type", "all")
+                    )
+                    return json.dumps({"keywords": kws, "videos": vids[:10]}, ensure_ascii=False)
 
                 async def mcp_search_youtube(query: str):
                     print(f"[MCP] Выполнение инструмента поиска для: {query}")
@@ -400,10 +552,106 @@ Google: {gg_trends}
                     await process.communicate()
                     return json.dumps({"status": "success", "path": out_path})
 
+                async def mcp_transcribe_media(input_path: str):
+                    import os
+                    import gc
+                    import torch
+                    from pathlib import Path
+                    try:
+                        import whisperx
+                        device = "cuda" if torch.cuda.is_available() else "cpu"
+                        model = whisperx.load_model("small", device=device, compute_type="float16" if device == "cuda" else "int8", download_root=str(Path(__file__).resolve().parents[2] / "ai-models"))
+                        result = model.transcribe(whisperx.load_audio(input_path), batch_size=8, language="ru")
+                        text = " ".join([s["text"].strip() for s in result.get("segments", [])])
+                        del model
+                        gc.collect()
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        return json.dumps({"status": "success", "text": text}, ensure_ascii=False)
+                    except Exception as e:
+                        return json.dumps({"status": "error", "message": str(e)})
+
+                async def mcp_search_pexels(query: str):
+                    api_key = os.environ.get("PEXELS_API_KEY", "")
+                    if not api_key:
+                        return json.dumps({"error": "PEXELS_API_KEY is not set in backend/.env!"})
+                    async with httpx.AsyncClient() as client:
+                        res = await client.get(f"https://api.pexels.com/videos/search?query={query}&per_page=5&orientation=portrait", headers={"Authorization": api_key})
+                        if res.status_code == 200:
+                            return json.dumps([{"id": v["id"], "duration": v["duration"], "url": v.get("video_files", [{}])[0].get("link")} for v in res.json().get("videos", [])], ensure_ascii=False)
+                        return json.dumps({"error": f"Pexels error {res.status_code}"})
+
+                async def mcp_download_and_trim_remote_media(url: str, start_time: str = None, end_time: str = None):
+                    import subprocess
+                    import uuid
+                    out_dir = os.path.abspath(os.path.join(project_path, "assets", "b-roll"))
+                    os.makedirs(out_dir, exist_ok=True)
+                    out_path = f"{out_dir}/{str(uuid.uuid4())[:8]}.mp4"
+                    cmd = ["ffmpeg", "-y"]
+                    if start_time:
+                        cmd.extend(["-ss", start_time])
+                    if end_time:
+                        cmd.extend(["-to", end_time])
+                    cmd.extend(["-i", url, "-c", "copy", out_path])
+                    process = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    _, stderr = await process.communicate()
+                    return json.dumps({"status": "success", "path": out_path}) if process.returncode == 0 else json.dumps({"status": "error", "log": stderr.decode()[:500]})
+
+                async def mcp_search_web(query: str):
+                    import re
+                    from urllib.parse import unquote
+                    try:
+                        async with httpx.AsyncClient(timeout=15.0) as client:
+                            res = await client.get(f"https://html.duckduckgo.com/html/?q={query}", headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                            urls = re.findall(r'class="result__url" href="([^"]+)"', res.text)
+                            snippets = re.findall(r'class="result__snippet[^>]*>(.*?)</a>', res.text, re.DOTALL)
+
+                            def clean(u):
+                                m = re.search(r'uddg=([^&]+)', u)
+                                return unquote(m.group(1)) if m else unquote(u)
+
+                            return json.dumps([{"url": clean(u), "snippet": re.sub(r'<[^>]+>', ' ', s).strip()} for u, s in zip(urls, snippets)][:5], ensure_ascii=False)
+                    except Exception as e:
+                        return json.dumps({"error": str(e)})
+
+                async def mcp_extract_article_text(url: str):
+                    import re
+                    try:
+                        async with httpx.AsyncClient(timeout=15.0) as client:
+                            res = await client.get(url, headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True)
+                            text = re.sub(r'<script.*?</script>|<style.*?</style>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
+                            return json.dumps({"text": re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', text)).strip()[:5000] + "..."})
+                    except Exception as e:
+                        return json.dumps({"error": str(e)})
+
+                async def mcp_check_tsx_syntax(code: str):
+                    return await check_tsx_syntax(code)
+
+                async def mcp_update_file(filepath: str, content: str):
+                    try:
+                        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                        with open(filepath, "w", encoding="utf-8") as f:
+                            f.write(content)
+                        return json.dumps({"status": "success"})
+                    except Exception as e:
+                        return json.dumps({"error": str(e)})
+
+                async def mcp_get_search_trends(query: str):
+                    return json.dumps(await TrendAnalyzer.get_combined_trends(query, lang_code), ensure_ascii=False)
+
                 available_funcs = {
+                    "discover_niche_videos": mcp_discover_niche_videos,
                     "search_youtube": mcp_search_youtube,
                     "download_youtube": mcp_download_youtube,
-                    "ffmpeg_process": mcp_ffmpeg_process
+                    "ffmpeg_process": mcp_ffmpeg_process,
+                    "transcribe_media": mcp_transcribe_media,
+                    "search_pexels": mcp_search_pexels,
+                    "download_and_trim_remote_media": mcp_download_and_trim_remote_media,
+                    "search_web": mcp_search_web,
+                    "extract_article_text": mcp_extract_article_text,
+                    "check_tsx_syntax": mcp_check_tsx_syntax,
+                    "update_file": mcp_update_file,
+                    "get_search_trends": mcp_get_search_trends
                 }
 
                 mcp_user_extra = ""
@@ -413,17 +661,21 @@ Google: {gg_trends}
                 if mcp_skills:
                     mcp_user_extra += f"\nДополнительные инструкции (скиллы):\n{mcp_skills}\n"
 
-                prompt = f"""Используй доступные инструменты:
-1. search_youtube - Обязательно вызови для поиска видео по темам: {', '.join(queries)}.
-2. download_youtube - (Опционально) Можешь скачать 1-2 видео или аудио из результатов.
-3. ffmpeg_process - (Опционально) Можешь обрезать скачанное видео или вытащить звук.
+                prompt = f"""Ты ИИ-продюсер и разработчик. У тебя есть доступ к мощным инструментам.
+Пользователь запросил: {', '.join(queries)}.
 {mcp_user_extra}
-Алгоритм:
-1. Обязательно выполни поиск search_youtube.
-2. Проанализируй данные, выбери 10 лучших видео.
-3. Если считаешь нужным, скачай видео через download_youtube, дождись пути к файлу, затем вызови ffmpeg_process.
-4. В конце верни результат СТРОГО в формате JSON:
-{{"videos": [{{"video_id": "...", "title": "...", "channel": "...", "views": 100, "subs": 10, "ratio": 1.5, "vph": 10, "url": "...", "published_at": "2024-01-01T00:00:00Z", "duration_sec": 300, "is_short": false}}]}}"""
+Ты можешь выполнять любые действия (в контексте канала):
+- НАСТОЯТЕЛЬНО РЕКОМЕНДУЕТСЯ: сначала вызови discover_niche_videos — он сам подберёт трендовые ключевые слова и найдёт вирусные видео по ним.
+- Искать информацию (search_web) и читать статьи (extract_article_text) для RAG-генерации.
+- Искать футажи (search_pexels) и скачивать нужные фрагменты (download_and_trim_remote_media), чтобы не качать всё видео целиком. Сохраняй в 'assets/b-roll/'.
+- Искать YouTube видео (search_youtube), качать и транскрибировать их (transcribe_media).
+- Проверять код на ошибки (check_tsx_syntax).
+- Редактировать файлы проекта (update_file).
+- Анализировать тренды (get_search_trends).
+
+ВАЖНО: Независимо от того, что ты делал, твоим ПОСЛЕДНИМ ответом ДОЛЖЕН быть строго валидный JSON для UI:
+{{"videos": [{{"video_id": "...", "title": "...", "channel": "...", "views": 100, "subs": 10, "ratio": 1.5, "vph": 10, "url": "...", "published_at": "2024-01-01T00:00:00Z", "duration_sec": 300, "is_short": false}}]}}
+Если ты просто написал сценарий в файл, верни в "videos" фейковый элемент как отчет о работе."""
                 llm_res = await self._call_llm(MCP_SYSTEM_PROMPT, prompt, json_format=True, max_tokens=3000, tools=tools, available_functions=available_funcs)
                 data = self._extract_json(llm_res)
                 raw_videos = data.get("videos", [])
@@ -544,18 +796,23 @@ Language: Russian."""
             await asyncio.sleep(1)
         return data
 
-    async def draft_script(self, title: str, description: str, context: str, lang: str = "ru", video_type: str = "long", target_duration: str = "3", custom_prompt: str = "") -> str:
+    async def draft_script(self, title: str, description: str, context: str, lang: str = "ru", video_type: str = "long", target_duration: str = "3", custom_prompt: str = "", audio_engine: str = "") -> str:
         """Создает черновой Markdown сценарий Vidora в 1 клик"""
         lang_map = {"ru": "Russian", "en": "English", "es": "Spanish"}
         target = lang_map.get(lang, "Russian")
         skill = None
-        skill_path = os.path.join(os.path.dirname(__file__), "prompts", "tech_scriptwriter.md")
+        # ponytail: две версии скила сценариста — под движок озвучки (MiniMax по умолчанию / OmniVoice)
+        skill_name = "tech_scriptwriter_omnivoice.md" if "omnivoice" in audio_engine.lower() else "tech_scriptwriter_minimax.md"
+        skill_path = os.path.join(os.path.dirname(__file__), "prompts", skill_name)
         if os.path.exists(skill_path):
             with open(skill_path, "r", encoding="utf-8") as f:
                 skill = f.read()
 
         if custom_prompt:
             prompt = custom_prompt
+            # ponytail: фронтенд уже кладёт скилы (getSkillsForProcess) в custom_prompt —
+            # дублировать 81KB скил в system снова = 160KB запрос, шлюз на нём флаки
+            system = "Ты профессиональный сценарист YouTube для faceless-канала. Следуй инструкциям и скиллам пользователя."
         else:
             target_dur_float = 3.0
             try:
@@ -586,3 +843,14 @@ Return ONLY the markdown text (do not wrap in ```markdown)."""
         system = skill if skill else f"You are a professional YouTube scriptwriter for a faceless tech channel. Language: {target}."
         res = await self._call_llm(system, prompt, max_tokens=3000)
         return res.strip()
+
+
+if __name__ == "__main__":
+    async def _check():
+        ok = json.loads(await check_tsx_syntax("export const X = () => <div>hi</div>;"))
+        assert ok.get("status") == "success", ok
+        bad = json.loads(await check_tsx_syntax("export const Y = () => { return ;"))
+        assert bad.get("status") == "error" and "errors" in bad, bad
+        print("[yt_agent] check_tsx_syntax OK")
+
+    asyncio.run(_check())

@@ -4,7 +4,7 @@ import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy } from 'lucid
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 import { API, formatTimecode } from '@widgets/editor-workspace/lib/helpers'
-import { useSettingsStore, useNotificationStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
+import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
 
 interface Props {
   idea?: any
@@ -113,12 +113,17 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
     setIsGenerating(true)
     try {
       const customPrompt = getScenarioPrompt();
+      const st = useSettingsStore.getState();
+      const activeProj = useProjectStore.getState().projects.find(p => p.name === useProjectStore.getState().activeProjectId);
+      const activeVoice = st.globalVoices.find(v => v.id === activeProj?.activeGlobalVoiceId) || st.globalVoices[0];
+      const audioEngine = activeVoice?.ttsEngine || (aiMode === 'cloud' ? cloudEngines.audio : localEngines.audio) || '';
       const res = await fetch(`${API}/api/v1/youtube/agent/draft-script`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: topic, idea_description: desc,
           channel_context: '', engine: agentEngine, api_keys: activeApiKeys,
-          video_type: genFormat, target_duration: genDuration, custom_prompt: customPrompt
+          video_type: genFormat, target_duration: genDuration, custom_prompt: customPrompt,
+          audio_engine: audioEngine
         })
       })
       const data = await res.json()

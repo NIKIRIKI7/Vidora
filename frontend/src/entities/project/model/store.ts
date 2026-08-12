@@ -6,7 +6,7 @@ import { REMOTION_SKILLS } from '@shared/config/remotionSkills'
 const DEFAULT_SKILLS: Skill[] = REMOTION_SKILLS.map(s => ({
   ...s,
   isCustom: false,
-  applyTo: ['scene', 'fragment', 'project'] as ProcessType[]
+  applyTo: s.applyTo ?? ['scene', 'fragment', 'project'] as ProcessType[]
 }))
 
 export const getSkillsForProcess = (process: ProcessType): string => {

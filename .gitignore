@@ -35,6 +35,7 @@ backend/*/preview/
 
 # Test projects
 backend/TEST1/
+backend/vidora_projects/
 backend/1234/
 test_project/
 

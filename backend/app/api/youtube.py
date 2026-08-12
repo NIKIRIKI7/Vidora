@@ -41,6 +41,7 @@ class DraftReq(BaseModel):
     video_type: str = "long"
     target_duration: str = "3"
     custom_prompt: str = ""
+    audio_engine: str = ""
 
 class SuggestCompetitorsReq(BaseModel):
     niche: str
@@ -75,7 +76,7 @@ async def analyze_hook(req: HookReq):
 async def draft_script(req: DraftReq):
     try:
         agent = YouTubeIdeaAgent(llm_engine=req.engine, api_keys=req.api_keys)
-        res = await agent.draft_script(req.title, req.idea_description, req.channel_context, video_type=req.video_type, target_duration=req.target_duration, custom_prompt=req.custom_prompt)
+        res = await agent.draft_script(req.title, req.idea_description, req.channel_context, video_type=req.video_type, target_duration=req.target_duration, custom_prompt=req.custom_prompt, audio_engine=req.audio_engine)
         return {"status": "ok", "markdown": res}
     except Exception as e:
         raise HTTPException(500, str(e))
