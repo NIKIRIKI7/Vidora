@@ -59,6 +59,7 @@ class AudioGenerationRequest(BaseModel):
     postprocess_output: bool = True
     ref_audio_path: Optional[str] = Field(None, description="Absolute path to reference audio for cloning")
     ref_text: Optional[str] = Field(None, description="Text spoken in reference audio")
+    design_prompt: Optional[str] = Field(None, description="Prompt for voice design")
     project_path: str = Field(..., description="Absolute path to the project directory from Electron")
     auto_offload_vram: bool = True
     engine: Optional[str] = None

@@ -18,6 +18,7 @@ export interface AudioOptions {
   ttsEngine: string
   apiKeys: ApiKeys
   customVoices?: CustomVoice[]
+  designPrompt?: string
 }
 
 const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSettings, opts: AudioOptions) => {
@@ -28,6 +29,7 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
   let finalTtsEngine = opts.ttsEngine
   let finalRefAudioPath: string | null = null
   let finalRefText: string | null = null
+  let finalDesignPrompt: string | null = opts.designPrompt || null
 
   if (project.activeGlobalVoiceId) {
     const { globalVoices } = useSettingsStore.getState()
@@ -42,6 +44,9 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
         finalVoiceModel = 'clone'
         finalRefAudioPath = gv.refAudioPath
         finalRefText = gv.refText || null
+      } else if (gv.voiceModel === 'design') {
+        finalVoiceModel = 'design'
+        finalDesignPrompt = gv.designPrompt || null
       } else if (!['aria', 'marcus', 'nova'].includes(gv.voiceModel) && (gv.ttsEngine === 'omnivoice' || gv.ttsEngine.toLowerCase().includes('omnivoice'))) {
         finalVoiceModel = 'aria' // Защита от старых багованных сохранений
       }
@@ -52,6 +57,7 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
       finalVoiceModel = 'clone'
       finalRefAudioPath = customVoice.refAudioPath
       finalRefText = customVoice.refText
+      finalDesignPrompt = customVoice.designPrompt || null
     }
   }
 
@@ -60,6 +66,7 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
     voice_model: finalVoiceModel,
     ref_audio_path: finalRefAudioPath,
     ref_text: finalRefText,
+    design_prompt: finalDesignPrompt,
     speed: finalSpeed, num_steps: finalNumSteps, guidance_scale: finalGuidanceScale, duration: opts.duration,
     denoise: opts.denoise, preprocess_prompt: opts.preprocessPrompt, postprocess_output: opts.postprocessOutput,
     project_path: getProjectPath(project), auto_offload_vram: opts.autoOffloadVram, engine: finalTtsEngine, api_keys: opts.apiKeys,

@@ -30,6 +30,7 @@ class HookReq(BaseModel):
     transcript: str
     engine: str
     api_keys: dict
+    skills_text: str = ""
 
 class DraftReq(BaseModel):
     title: str
@@ -45,6 +46,7 @@ class SuggestCompetitorsReq(BaseModel):
     niche: str
     engine: str
     api_keys: dict
+    skills_text: str = ""
 
 class AnalyzeChannelReq(BaseModel):
     url_or_name: str
@@ -64,7 +66,7 @@ async def stream_agent_ideas(req: AgentReq):
 async def analyze_hook(req: HookReq):
     try:
         agent = YouTubeIdeaAgent(llm_engine=req.engine, api_keys=req.api_keys)
-        res = await agent.analyze_hook(req.transcript)
+        res = await agent.analyze_hook(req.transcript, req.skills_text)
         return {"status": "ok", "data": res}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -82,7 +84,7 @@ async def draft_script(req: DraftReq):
 async def suggest_competitors(req: SuggestCompetitorsReq):
     try:
         agent = YouTubeIdeaAgent(llm_engine=req.engine, api_keys=req.api_keys)
-        res = await agent.suggest_competitors(req.niche)
+        res = await agent.suggest_competitors(req.niche, req.skills_text)
         return {"status": "ok", "channels": res.get("channels", [])}
     except Exception as e:
         raise HTTPException(500, str(e))

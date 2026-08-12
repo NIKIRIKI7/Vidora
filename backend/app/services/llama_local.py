@@ -34,28 +34,75 @@ def _get_model(gguf_path: Path):
     return _model
 
 
-def _generate_sync(engine: str, system_prompt: str, user_prompt: str) -> str:
+def _generate_sync(engine: str, system_prompt: str, user_prompt: str, tools: list = None, available_functions: dict = None) -> str:
+    import json
+    import inspect
+
     gguf = resolve_gguf(engine)
     if gguf is None:
         return None
+
     llm = _get_model(gguf)
-    # ponytail: глобальный лок: llama.cpp не потокобезопасен для конкурентной генерации
-    with _gen_lock:
-        out = llm.create_chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.6,
-            max_tokens=4096,
-        )
-    return out["choices"][0]["message"]["content"]
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    max_loops = 5
+    for _ in range(max_loops):
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
+
+        with _gen_lock:
+            out = llm.create_chat_completion(
+                messages=messages,
+                temperature=0.6,
+                max_tokens=4096,
+                **kwargs
+            )
+
+        msg = out["choices"][0]["message"]
+
+        if "tool_calls" in msg and msg["tool_calls"]:
+            messages.append(msg)
+            for tool_call in msg["tool_calls"]:
+                func_name = tool_call["function"]["name"]
+                try:
+                    args = json.loads(tool_call["function"]["arguments"])
+                except Exception:
+                    args = {}
+
+                print(f"[LOCAL LLM TOOL CALL] ИИ вызывает инструмент: {func_name}({args})")
+
+                if available_functions and func_name in available_functions:
+                    func = available_functions[func_name]
+                    try:
+                        if inspect.iscoroutinefunction(func):
+                            result = asyncio.run(func(**args))
+                        else:
+                            result = func(**args)
+                    except Exception as e:
+                        result = f"Error: {str(e)}"
+                else:
+                    result = "Function not found"
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "name": func_name,
+                    "content": str(result)
+                })
+        else:
+            return msg.get("content", "")
+
+    return msg.get("content", "")
 
 
-async def local_generate(engine: str, system_prompt: str, user_prompt: str) -> str | None:
+async def local_generate(engine: str, system_prompt: str, user_prompt: str, tools: list = None, available_functions: dict = None) -> str | None:
     """Возвращает ответ локальной GGUF-модели или None, если под движок нет .gguf в ai-models."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _generate_sync, engine, system_prompt, user_prompt)
+    return await loop.run_in_executor(None, _generate_sync, engine, system_prompt, user_prompt, tools, available_functions)
 
 
 if __name__ == "__main__":

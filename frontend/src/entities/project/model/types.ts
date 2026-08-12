@@ -13,6 +13,7 @@ export interface GlobalVoice {
   voiceModel: string
   refAudioPath?: string
   refText?: string
+  designPrompt?: string
   settings: {
     speed: number
     guidanceScale: number
@@ -73,6 +74,7 @@ export interface CustomVoice {
   name: string
   refAudioPath: string
   refText: string
+  designPrompt?: string
   tags?: string[]
 }
 
@@ -112,9 +114,15 @@ export interface PromptTemplates {
   scenario: string
 }
 
-export interface SyncedSkills {
-  synced_at: string
-  skills: { id: string; title: string; description: string; content: string }[]
+export type ProcessType = 'scenario' | 'project' | 'scene' | 'fragment' | 'audio' | 'analysis'
+
+export interface Skill {
+  id: string
+  title: string
+  description: string
+  content: string
+  isCustom: boolean
+  applyTo: ProcessType[]
 }
 
 export interface ProjectSettings {
@@ -131,5 +139,4 @@ export interface ProjectSettings {
   activeGlobalVoiceId?: string
   audioProcessing: AudioProcessingSettings
   use3D?: boolean
-  syncedSkills?: SyncedSkills
 }

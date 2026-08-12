@@ -66,6 +66,16 @@ def _get_audio_duration(path: str) -> float:
         with wave.open(path, 'r') as wav:
             return wav.getnframes() / float(wav.getframerate())
     except Exception:
+        pass
+    # Не-WAV (например, mp3 от MiniMax) — длительность через ffprobe
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+            capture_output=True, text=True,
+        )
+        dur = out.stdout.strip()
+        return float(dur) if dur else 0.0
+    except Exception:
         return 0.0
 
 def _make_fallback_response(fragments, reason: str = "", audio_dur: float = 0.0):

@@ -1,9 +1,95 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2, Plus } from 'lucide-react'
-import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory } from '@entities/project'
+import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2, Plus, ChevronDown } from 'lucide-react'
+import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory, type ProcessType, type Skill } from '@entities/project'
 import { API } from '@widgets/editor-workspace/lib/helpers'
-import { REMOTION_SKILLS } from '@shared/config'
+
+const PROCESS_TYPES: { id: ProcessType, label: string }[] = [
+  { id: 'scenario', label: 'Сценарий' },
+  { id: 'project', label: 'Проект (TSX)' },
+  { id: 'scene', label: 'Сцена (TSX)' },
+  { id: 'fragment', label: 'Фрагмент (TSX)' },
+  { id: 'audio', label: 'Озвучка (TTS)' },
+  { id: 'analysis', label: 'Анализ контента' },
+]
+
+const SkillEditor = ({ skill, onUpdate, onDelete }: { skill: Skill, onUpdate: (s: Partial<Skill>) => void, onDelete: () => void }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  const toggleProcess = (pt: ProcessType) => {
+    const applies = skill.applyTo || []
+    if (applies.includes(pt)) onUpdate({ applyTo: applies.filter(x => x !== pt) })
+    else onUpdate({ applyTo: [...applies, pt] })
+  }
+
+  return (
+    <div className="bg-surface-container-lowest border border-white/10 rounded-xl overflow-hidden">
+      <div className="p-4 flex items-start justify-between cursor-pointer hover:bg-white/5 transition-colors" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-white">{skill.title}</span>
+            {skill.isCustom && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Custom</span>}
+          </div>
+          <span className="text-xs text-on-surface-variant line-clamp-1">{skill.description || 'Нет описания'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 mr-4 hidden md:flex">
+            {PROCESS_TYPES.map(pt => (
+              <span key={pt.id} title={pt.label} className={`w-2 h-2 rounded-full ${(skill.applyTo || []).includes(pt.id) ? 'bg-success' : 'bg-surface-container-highest'}`} />
+            ))}
+          </div>
+          <Button variant="ghost" className="p-1 text-on-surface-variant hover:text-white" onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded) }}>
+            <ChevronDown size={18} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          </Button>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="p-4 border-t border-white/5 flex flex-col gap-4 bg-black/20">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FieldGroup label="Название скилла">
+              <Input value={skill.title} onChange={e => onUpdate({ title: e.target.value })} disabled={!skill.isCustom} className="text-xs" />
+            </FieldGroup>
+            <FieldGroup label="Описание">
+              <Input value={skill.description} onChange={e => onUpdate({ description: e.target.value })} disabled={!skill.isCustom} className="text-xs" />
+            </FieldGroup>
+          </div>
+
+          <FieldGroup label="Применять к процессам">
+            <div className="flex flex-wrap gap-2">
+              {PROCESS_TYPES.map(pt => {
+                const isActive = (skill.applyTo || []).includes(pt.id)
+                return (
+                  <button key={pt.id} onClick={() => toggleProcess(pt.id)} className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${isActive ? 'bg-success/20 border-success/40 text-success' : 'bg-surface-container border-white/10 text-on-surface-variant hover:text-white'}`}>
+                    {pt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </FieldGroup>
+
+          <FieldGroup label="Контент (Markdown)">
+            <textarea
+              className="w-full h-48 bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-xs font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
+              value={skill.content}
+              onChange={e => onUpdate({ content: e.target.value })}
+              disabled={!skill.isCustom}
+              spellCheck={false}
+            />
+          </FieldGroup>
+
+          {skill.isCustom && (
+            <div className="flex justify-end">
+              <Button variant="dashed" onClick={onDelete} className="text-error border-error/30 hover:bg-error/10 text-xs py-1.5 h-auto">
+                <Trash2 size={16} className="mr-2" /> Удалить скилл
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, categoryKey: keyof GlobalPromptSettings, rows: number }) => {
   const { globalPrompts, setGlobalPrompts } = useSettingsStore()
@@ -58,12 +144,13 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
     visualPacingThreshold, setVisualPacingThreshold,
     audioSilenceThreshold, setAudioSilenceThreshold,
     audioWpmMin, setAudioWpmMin,
-    whisperModel, setWhisperModel
+    whisperModel, setWhisperModel,
+    skills, setSkills, addCustomSkill, updateSkill, deleteSkill
   } = useSettingsStore()
 
   const showNotification = useNotificationStore(s => s.showNotification)
 
-  const [activeTab, setActiveTab] = useState<'ai' | 'prompts' | 'audio' | 'voices'>('ai')
+  const [activeTab, setActiveTab] = useState<'ai' | 'prompts' | 'skills' | 'audio' | 'voices'>('ai')
   const [showKey, setShowKey] = useState(false)
 
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string } | null>(null)
@@ -89,11 +176,24 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
     try {
       const res = await fetch(`${API}/api/v1/system/remotion-skills-sync`, { method: 'POST' })
       const data = await res.json()
-      if (res.ok && data.status === 'ok') showNotification(`Синхронизировано скиллов: ${data.skills.length}`, 'success')
+      if (res.ok && data.status === 'ok') {
+        const currentSkills = useSettingsStore.getState().skills || []
+        const newSkills = [...currentSkills]
+        data.skills.forEach((fs: { id: string; title: string; description: string; content: string }) => {
+          const existingIdx = newSkills.findIndex(s => s.id === fs.id)
+          if (existingIdx >= 0) {
+            newSkills[existingIdx] = { ...newSkills[existingIdx], title: fs.title, description: fs.description, content: fs.content }
+          } else {
+            newSkills.push({ ...fs, isCustom: false, applyTo: ['scene', 'fragment', 'project'] as ProcessType[] })
+          }
+        })
+        setSkills(newSkills)
+        showNotification(`Синхронизировано скиллов: ${data.skills.length}`, 'success')
+      }
       else throw new Error()
     } catch { showNotification('Ошибка синхронизации скиллов', 'error') }
     setSyncingSkills(false)
-  }, [showNotification])
+  }, [showNotification, setSkills])
 
   return (
     <div className="flex flex-col h-dvh w-full bg-background animate-in fade-in duration-300">
@@ -106,6 +206,7 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
         <div className="w-64 shrink-0 border-r border-white/10 p-6 flex flex-col gap-2">
           <button onClick={() => setActiveTab('ai')} className={`px-4 py-3 text-sm font-medium rounded-xl text-left transition-all ${activeTab === 'ai' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}>🧠 AI Движки и API</button>
           <button onClick={() => setActiveTab('prompts')} className={`px-4 py-3 text-sm font-medium rounded-xl text-left transition-all ${activeTab === 'prompts' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}>📝 Промпты LLM</button>
+          <button onClick={() => setActiveTab('skills')} className={`px-4 py-3 text-sm font-medium rounded-xl text-left transition-all ${activeTab === 'skills' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}>🛠️ Скиллы (Навыки ИИ)</button>
           <button onClick={() => setActiveTab('audio')} className={`px-4 py-3 text-sm font-medium rounded-xl text-left transition-all ${activeTab === 'audio' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}>🎛️ Аудио и Пайплайн</button>
           <button onClick={() => setActiveTab('voices')} className={`px-4 py-3 text-sm font-medium rounded-xl text-left transition-all ${activeTab === 'voices' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}>🎙️ Глобальные голоса</button>
         </div>
@@ -149,6 +250,23 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                             {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
                         </div>
+                      </FieldGroup>
+                    </div>
+                    <div className="grid grid-cols-1 gap-6 bg-surface-container-lowest/40 p-5 rounded-xl border border-error/20 shadow-inner mt-4">
+                      <FieldGroup label="YouTube Data API v3 Ключ (Для поиска идей)">
+                        <div className="relative">
+                          <Input
+                            type={showKey ? 'text' : 'password'}
+                            value={apiKeys.youtube || ''}
+                            onChange={e => setApiKey('youtube', e.target.value)}
+                            placeholder="AIzaSy..."
+                            className="font-mono text-xs pr-10"
+                          />
+                          <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-white transition-colors">
+                            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-on-surface-variant mt-1">Необходим для работы агента-аналитика и поиска вирусных видео.</p>
                       </FieldGroup>
                     </div>
 
@@ -244,23 +362,29 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                 <PromptVersionEditor label="Промпт для генерации Фрагмента (Remotion TSX)" categoryKey="fragment" rows={8} />
                 <PromptVersionEditor label="Промпт для генерации всего Проекта (Remotion TSX)" categoryKey="project" rows={8} />
                 <PromptVersionEditor label="Промпт для исправления динамики (Pacing Fixer)" categoryKey="fixPacing" rows={8} />
+              </div>
+            )}
 
-                <div className="p-5 bg-surface-container/30 border border-white/5 rounded-2xl mt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-white">Обучающие скиллы Remotion</span>
-                    <Button variant="secondary" icon={LoaderCircle} onClick={handleSyncSkills} disabled={syncingSkills}>
-                      {syncingSkills ? 'Синхронизация...' : 'Обновить с GitHub'}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-on-surface-variant mb-4">Встроенные скиллы и лучшие практики, которые можно добавлять в промпты для повышения качества кода.</p>
-                  <div className="flex flex-col gap-3">
-                    {REMOTION_SKILLS.map(s => (
-                      <div key={s.id} className="p-3 rounded-xl border border-white/10 bg-surface-container-lowest">
-                        <div className="text-sm font-semibold text-on-surface">{s.title}</div>
-                        <div className="text-xs text-on-surface-variant mt-1">{s.description}</div>
-                      </div>
-                    ))}
-                  </div>
+            {activeTab === 'skills' && (
+              <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white">Скиллы (Навыки ИИ)</h3>
+                  <Button variant="secondary" icon={LoaderCircle} onClick={handleSyncSkills} disabled={syncingSkills}>
+                    {syncingSkills ? 'Синхронизация...' : 'Обновить с GitHub'}
+                  </Button>
+                </div>
+                <p className="text-xs text-on-surface-variant bg-surface-container-lowest/50 border border-white/5 p-4 rounded-xl leading-relaxed font-mono">
+                  Скиллы — это инструкции и правила, которые добавляются к промптам для улучшения качества генерации.
+                  Вы можете создавать свои скиллы и назначать их для разных процессов (сценарий, рендер, анализ и т.д.).
+                </p>
+
+                <div className="flex flex-col gap-4">
+                  {skills.map(s => (
+                    <SkillEditor key={s.id} skill={s} onUpdate={(updates) => updateSkill(s.id, updates)} onDelete={() => deleteSkill(s.id)} />
+                  ))}
+                  <Button variant="dashed" onClick={() => addCustomSkill({ id: crypto.randomUUID(), title: 'Новый скилл', description: '', content: '', isCustom: true, applyTo: [] })} className="w-full py-4 text-primary border-primary/30 hover:bg-primary/10">
+                    <Plus size={18} className="mr-2" /> Добавить свой скилл
+                  </Button>
                 </div>
               </div>
             )}

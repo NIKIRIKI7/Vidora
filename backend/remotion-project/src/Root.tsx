@@ -1,7 +1,6 @@
 import React from 'react'
 import { Composition } from 'remotion'
 import * as CurrentSceneModule from './scenes/current'
-import * as LucideDemoModule from './scenes/lucideDemo'
 
 const SceneComponent: React.FC = (props) => {
   const Component =
@@ -26,25 +25,14 @@ const getConfig = () => {
 
 export const Root: React.FC = () => {
   const { fps, width, height, durationInFrames } = getConfig()
-  const l = LucideDemoModule.compositionConfig
   return (
-    <>
-      <Composition
-        id="current"
-        component={SceneComponent}
-        durationInFrames={durationInFrames}
-        fps={fps}
-        width={width}
-        height={height}
-      />
-      <Composition
-        id="lucide-icons-test"
-        component={LucideDemoModule.Scene}
-        durationInFrames={l.durationInFrames}
-        fps={l.fps}
-        width={l.width}
-        height={l.height}
-      />
-    </>
+    <Composition
+      id="current"
+      component={SceneComponent}
+      durationInFrames={durationInFrames}
+      fps={fps}
+      width={width}
+      height={height}
+    />
   )
 }

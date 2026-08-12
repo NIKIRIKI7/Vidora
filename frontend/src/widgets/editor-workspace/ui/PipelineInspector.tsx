@@ -239,6 +239,7 @@ export const PipelineInspector = ({
                       <option value="aria">Neural - Aria (Женский)</option>
                       <option value="marcus">Neural - Marcus (Мужской)</option>
                       <option value="nova">Expressive - Nova (Энергичный)</option>
+                      <option value="English_expressive_narrator">MiniMax - Expressive</option>
                     </optgroup>
                     {globalVoices.length > 0 && (
                       <optgroup label="Глобальные голоса (Audio Hub)">

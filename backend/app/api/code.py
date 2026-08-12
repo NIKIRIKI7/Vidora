@@ -11,7 +11,12 @@ router = APIRouter(prefix="/api/v1/code", tags=["code"])
 
 def _extract_tsx(data: str) -> str:
     match = re.search(r"```tsx\s*(.*?)\s*```", data, re.DOTALL)
-    return match.group(1) if match else data
+    if match:
+        return match.group(1)
+    # Обрезанный ответ: открывающий ```tsx есть, закрывающего нет — вырезаем хотя бы фенс
+    if "```" in data:
+        return data.split("```", 1)[1].lstrip()
+    return data
 
 def _save_code(request: CodeGenerationRequest, tsx_code: str):
     try:

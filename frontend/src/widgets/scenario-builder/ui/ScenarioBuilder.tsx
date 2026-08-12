@@ -4,7 +4,7 @@ import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy } from 'lucid
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 import { API, formatTimecode } from '@widgets/editor-workspace/lib/helpers'
-import { useSettingsStore, useNotificationStore, getActivePrompt } from '@entities/project'
+import { useSettingsStore, useNotificationStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
 
 interface Props {
   idea?: any
@@ -61,7 +61,8 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
       .replace(/\{\{DESCRIPTION\}\}/g, desc)
       .replace(/\{\{FORMAT_TEXT\}\}/g, formatText)
       .replace(/\{\{DURATION\}\}/g, genDuration)
-      .replace(/\{\{WORDS_COUNT\}\}/g, wordsCount.toString());
+      .replace(/\{\{WORDS_COUNT\}\}/g, wordsCount.toString())
+      + getSkillsForProcess('scenario');
   }
 
   const copyText = async (text: string): Promise<boolean> => {
@@ -121,7 +122,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         })
       })
       const data = await res.json()
-      if (res.ok && data.status === 'ok') {
+      if (res.ok && data.status === 'ok' && data.markdown) {
         setMarkdown(data.markdown)
         showNotification('Сценарий сгенерирован!', 'success')
       } else throw new Error()
@@ -302,7 +303,12 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         </div>
       </div>
 
-      <div className="flex-1 p-6 bg-surface-container-lowest/60 flex justify-center overflow-hidden">
+      <div className="flex-1 p-6 bg-surface-container-lowest/60 flex flex-col items-center overflow-hidden gap-4">
+        <div className="w-full max-w-5xl bg-primary/10 border border-primary/20 p-3 rounded-xl flex items-center justify-between shadow-sm shrink-0">
+          <div className="text-xs font-mono text-primary/80 leading-relaxed">
+            <span className="font-bold">Шпаргалка суфлера (MiniMax/OmniVoice):</span> Эмоция сцены: <code className="bg-black/30 px-1 rounded">[emotion: happy|sad|angry]</code> • Паузы: <code className="bg-black/30 px-1 rounded">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/30 px-1 rounded">(breath)</code>, <code className="bg-black/30 px-1 rounded">(sighs)</code>
+          </div>
+        </div>
         <textarea
           className="w-full h-full max-w-5xl bg-surface-container/50 border border-white/10 rounded-2xl p-6 font-mono text-sm leading-relaxed text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar shadow-2xl"
           value={markdown}

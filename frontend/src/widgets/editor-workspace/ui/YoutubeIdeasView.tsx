@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal } from '@shared/ui'
 import { Bot, X, Plus, Sparkles, CirclePlay, List, LayoutGrid, Clapperboard, Paintbrush, BrainCircuit, Flame, FishingHook, Copy, Download, ArrowLeft } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
-import { useSettingsStore, useNotificationStore } from '@entities/project'
+import { useSettingsStore, useNotificationStore, getSkillsForProcess } from '@entities/project'
 
 interface Props {
   onSelectIdea: (idea: any, videos: any[]) => void
@@ -70,6 +70,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   }
 
   const [activeTab, setActiveTab] = useState<'agent' | 'thumbnail'>('agent')
+  const [searchEngine, setSearchEngine] = useState<'api' | 'ai' | 'script' | 'mcp'>('api')
   const [searchMode, setSearchMode] = useState<'trending' | 'competitors'>('trending')
   const [videoType, setVideoType] = useState<'all' | 'long' | 'short'>('all')
   const [language, setLanguage] = useState('ru')
@@ -145,7 +146,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/suggest-competitors`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, api_keys: activeApiKeys })
+        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, api_keys: activeApiKeys, skills_text: getSkillsForProcess('analysis') })
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') {
@@ -182,7 +183,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: finalQuery, project_path: 'vidora_projects/Drafts',
-          settings: { days_back: daysBack, min_subs: minSubs, max_subs: maxSubs, min_ratio: minRatio, search_mode: searchMode, language: language, video_type: videoType, ideas_count: ideasCount, channel_context: channelContext, channels: competitorChannels },
+          settings: { days_back: daysBack, min_subs: minSubs, max_subs: maxSubs, min_ratio: minRatio, search_mode: searchMode, search_engine: searchEngine, language: language, video_type: videoType, ideas_count: ideasCount, channel_context: channelContext, channels: competitorChannels, skills_text: getSkillsForProcess('analysis') },
           youtube_key: apiKeys.youtube || '', llm_engine: agentEngine, api_keys: activeApiKeys
         })
       })
@@ -229,7 +230,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/analyze-hook`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, engine: agentEngine, api_keys: activeApiKeys })
+        body: JSON.stringify({ transcript, engine: agentEngine, api_keys: activeApiKeys, skills_text: getSkillsForProcess('analysis') })
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') setHookData(data.data)
@@ -259,13 +260,23 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
           <>
             <div className="w-[340px] xl:w-[380px] flex flex-col gap-4 bg-surface-container-lowest/30 border-r border-white/10 p-5 shrink-0 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-3">
+                <FieldGroup label="Источник поиска">
+                  <Select value={searchEngine} onChange={e => setSearchEngine(e.target.value as 'api'|'ai'|'script'|'mcp')} className="text-xs">
+                    <option value="api">YouTube API v3 (Бэкенд)</option>
+                    <option value="ai">Только ИИ (Фантазия)</option>
+                    <option value="script">Скрипты (yt_search.ps1)</option>
+                    <option value="mcp">Агент MCP (Tool Calling)</option>
+                  </Select>
+                </FieldGroup>
                 <FieldGroup label="Режим поиска">
                   <Select value={searchMode} onChange={e => setSearchMode(e.target.value as 'trending' | 'competitors')} className="text-xs">
                     <option value="trending">Тренды + ИИ</option>
                     <option value="competitors">Анализ конкурентов</option>
                   </Select>
                 </FieldGroup>
-                <FieldGroup label={`Множитель (>${minRatio.toFixed(1)}x)`}>
+              </div>
+              <div className="mt-2">
+                <FieldGroup label={`Множитель просмотров (>${minRatio.toFixed(1)}x)`}>
                   <Slider min={0.5} max={10.0} step={0.5} value={minRatio} onChange={e => setMinRatio(Number(e.target.value))} />
                 </FieldGroup>
               </div>

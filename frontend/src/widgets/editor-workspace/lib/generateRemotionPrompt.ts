@@ -1,4 +1,4 @@
-import { useSettingsStore, getActivePrompt } from '@entities/project'
+import { useSettingsStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
 import type { ProjectSettings, Scene, SceneFragment, VideoFormat, Resolution } from '@entities/project'
 
 const getDims = (res: Resolution, fmt: VideoFormat) => {
@@ -70,7 +70,7 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
     ? `\n\n> ВАЖНО ДЛЯ МОНТАЖА: В этой сцене вы должны использовать <Audio src={...} startFrom={Math.round(${scene.audioOffset} * fps)} /> потому что аудиофайл является общим для всего проекта, и эта сцена начинается на ${scene.audioOffset} секунде общего файла.`
     : '';
 
-  return promptBody + audioOffsetInstruction;
+  return promptBody + audioOffsetInstruction + getSkillsForProcess('scene');
 }
 
 export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, fragment: SceneFragment): string => {
@@ -84,7 +84,7 @@ export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, f
     SCENE_TITLE: scene.title,
     VISUAL_NOTE: fragment.visualNote,
     TEXT: fragment.text,
-  })
+  }) + getSkillsForProcess('fragment')
 }
 
 export const generateProjectPrompt = (project: ProjectSettings): string => {
@@ -98,5 +98,5 @@ export const generateProjectPrompt = (project: ProjectSettings): string => {
   return replaceVars(project.promptOverrides?.project || getActivePrompt(globalPrompts.project), {
     ...getBaseVars(project),
     SCENES_LIST: scenesList
-  })
+  }) + getSkillsForProcess('project')
 }

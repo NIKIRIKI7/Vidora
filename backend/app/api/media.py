@@ -42,8 +42,21 @@ async def upload_audio(project_path: str = Form(...), target_id: str = Form(...)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     duration = 0.0
-    with wave.open(file_path, 'r') as wav:
-        duration = wav.getnframes() / float(wav.getframerate())
+    try:
+        with wave.open(file_path, 'r') as wav:
+            duration = wav.getnframes() / float(wav.getframerate())
+    except Exception:
+        # mp3-референс — длительность через ffprobe
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", file_path],
+                capture_output=True, text=True,
+            )
+            dur = out.stdout.strip()
+            duration = float(dur) if dur else 0.0
+        except Exception:
+            duration = 0.0
     return {"status": "ok", "path": file_path, "duration": duration}
 
 @router.get("/search-stock")

@@ -122,6 +122,10 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
         }
         return
       }
+    } else if (activeVoice.voiceModel === 'design') {
+      if (!activeVoice.designPrompt || !activeVoice.designPrompt.trim()) {
+        showNotification('Введите промпт для дизайна голоса', 'error'); return
+      }
     }
     showNotification('Голос успешно сохранен и готов к работе в проектах!', 'success')
   }
@@ -137,6 +141,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
         voice_model: activeVoice.voiceModel,
         ref_audio_path: activeVoice.refAudioPath ? activeVoice.refAudioPath.split('?')[0] : null,
         ref_text: activeVoice.refText || null,
+        design_prompt: activeVoice.designPrompt || null,
         speed: activeVoice.settings.speed,
         guidance_scale: activeVoice.settings.guidanceScale,
         num_steps: activeVoice.settings.numSteps,
@@ -246,11 +251,16 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                   </FieldGroup>
                   <FieldGroup label="Voice Model">
                     <Select value={activeVoice.voiceModel} onChange={e => updateActiveVoice({ voiceModel: e.target.value })} className="text-xs font-mono">
-                      <option value="aria">aria (OmniVoice)</option>
-                      <option value="marcus">marcus (OmniVoice)</option>
-                      <option value="nova">nova (OmniVoice/OpenAI)</option>
-                      <option value="clone">Клонирование (OmniVoice)</option>
-                      <option value="English_expressive_narrator">English_expressive_narrator (MiniMax)</option>
+                      <optgroup label="Базовые голоса">
+                        <option value="aria">aria (OmniVoice)</option>
+                        <option value="marcus">marcus (OmniVoice)</option>
+                        <option value="nova">nova (OmniVoice/OpenAI)</option>
+                        <option value="English_expressive_narrator">English_expressive_narrator (MiniMax)</option>
+                      </optgroup>
+                      <optgroup label="Генерация и Копирование">
+                        <option value="clone">Клонирование по аудио (Voice Cloning)</option>
+                        <option value="design">Дизайн голоса по промпту (Voice Design)</option>
+                      </optgroup>
                     </Select>
                   </FieldGroup>
                 </div>
@@ -304,6 +314,22 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 </div>
               )}
 
+              {activeVoice.voiceModel === 'design' && (
+                <div className="bg-surface-container/40 p-6 rounded-2xl border border-secondary/30 flex flex-col gap-5 shadow-[0_0_20px_rgba(79,219,200,0.05)]">
+                  <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
+                    <Wand2 size={18} /> Дизайн голоса
+                  </h3>
+                  <FieldGroup label="Описание голоса (Промпт)">
+                    <textarea
+                      className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:border-secondary/50"
+                      rows={3}
+                      value={activeVoice.designPrompt || ''}
+                      onChange={e => updateActiveVoice({ designPrompt: e.target.value })}
+                      placeholder="Например: Глубокий мужской голос, спокойный, с легкой хрипотцой, подходит для документалок..."
+                    />
+                  </FieldGroup>
+                </div>
+              )}
               <div className="flex items-center gap-4 mt-6">
                 <Button variant="primary" onClick={handleSaveVoice} className="flex-1 shadow-lg py-3 text-sm" disabled={isProcessing}>
                   <Save size={18} className="mr-1" /> Сохранить и проверить голос
@@ -312,8 +338,14 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
               <div className="bg-primary/10 p-6 rounded-2xl border border-primary/20 flex flex-col gap-4 mt-6">
                 <h3 className="text-sm font-label uppercase text-primary tracking-wider flex items-center gap-2">
-                  <Play size={18} /> Тест-Драйв
+                  <Play size={18} /> Тест-Драйв и Шпаргалка Суфлера
                 </h3>
+                <div className="text-xs font-mono text-primary/80 bg-black/20 p-3 rounded-lg border border-primary/20 leading-relaxed">
+                  <span className="font-bold text-primary">Для MiniMax и OmniVoice:</span><br/>
+                  • Эмоция: <code className="bg-black/40 px-1 rounded">[emotion: happy|sad|angry|fearful|disgusted|surprised|calm]</code> в начале.<br/>
+                  • Паузы: <code className="bg-black/40 px-1 rounded">&lt;#1.5#&gt;</code> (от 0.1 до 3.0 сек) между словами.<br/>
+                  • Звуки: <code className="bg-black/40 px-1 rounded">(breath)</code>, <code className="bg-black/40 px-1 rounded">(sighs)</code>, <code className="bg-black/40 px-1 rounded">(chuckle)</code>, <code className="bg-black/40 px-1 rounded">(laughs)</code>.
+                </div>
                 <textarea
                   className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-3 px-4 text-sm text-on-surface resize-none focus:border-primary/50 shadow-inner"
                   rows={2}

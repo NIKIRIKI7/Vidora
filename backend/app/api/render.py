@@ -155,7 +155,8 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             error_msg = "Неизвестная ошибка рендера. Смотрите консоль."
             for line in output_logs:
                 if "Error:" in line or "Error " in line or "Exception" in line:
-                    error_msg = line.strip()
+                    # ponytail: режем ANSI-escape-коды, иначе LLM получает мусор в промпт автофикса
+                    error_msg = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', line).strip()
                     break
 
             asyncio.run_coroutine_threadsafe(

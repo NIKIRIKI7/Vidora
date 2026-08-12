@@ -49,15 +49,29 @@ class AudioService:
             output_path=output_path,
             ref_audio_path=request.ref_audio_path,
             ref_text=request.ref_text,
+            design_prompt=request.design_prompt,
             api_keys=api_keys_dict,
         )
 
         duration = 0.0
         if os.path.exists(output_path):
-            with wave.open(output_path, 'r') as wav_file:
-                frames = wav_file.getnframes()
-                rate = wav_file.getframerate()
-                duration = frames / float(rate)
+            try:
+                with wave.open(output_path, 'r') as wav_file:
+                    frames = wav_file.getnframes()
+                    rate = wav_file.getframerate()
+                    duration = frames / float(rate)
+            except Exception:
+                # MiniMax отдаёт mp3 — длительность через ffprobe
+                try:
+                    import subprocess
+                    out = subprocess.run(
+                        ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", output_path],
+                        capture_output=True, text=True,
+                    )
+                    dur = out.stdout.strip()
+                    duration = float(dur) if dur else 0.0
+                except Exception:
+                    duration = 0.0
 
         await manager.broadcast({
             "type": "AUDIO_GEN_PROGRESS",

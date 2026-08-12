@@ -220,6 +220,7 @@ def _gateway_prep(text: str, voice: str, is_minimax: bool, kwargs: dict):
     """Готовит (text, voice, extra_body) для OpenAI-совместимого шлюза.
     Локальные спикеры маплятся на голос провайдера; для minimax выкусывается [emotion: x]
     и уезжает в voice_setting, который шлюз прокидывает в MiniMax нативно."""
+    raw_voice = voice
     if voice in _LOCAL_SPEAKERS:
         voice = MINIMAX_DEFAULT_VOICE if is_minimax else "nova"
     extra = {}
@@ -231,6 +232,13 @@ def _gateway_prep(text: str, voice: str, is_minimax: bool, kwargs: dict):
         }
         if emotion:
             extra["voice_setting"]["emotion"] = emotion
+    # Дизайн голоса по промпту (MiniMax voice_design) и клонирование по референсу — уходят в voice_setting
+    if raw_voice == 'design' and kwargs.get('design_prompt'):
+        extra.setdefault("voice_setting", {})["design_prompt"] = kwargs.get('design_prompt')
+    if raw_voice == 'clone' and kwargs.get('ref_audio_path'):
+        extra.setdefault("voice_setting", {})["ref_audio_path"] = kwargs.get('ref_audio_path')
+        if kwargs.get('ref_text'):
+            extra["voice_setting"]["ref_text"] = kwargs.get('ref_text')
     return text, voice, extra
 
 class GatewayTTSProvider(BaseTTSProvider):
@@ -243,8 +251,10 @@ class GatewayTTSProvider(BaseTTSProvider):
 
     async def generate_tts(self, text: str, voice_model: str, **kwargs):
         api_keys = kwargs.get("api_keys") or {}
-        if voice_model == 'clone':
-            raise RuntimeError("Клонирование голоса доступно только в локальном режиме (OmniVoice) — переключите режим на «Локально»")
+        if voice_model == 'clone' and not kwargs.get('ref_audio_path'):
+            raise RuntimeError("Для клонирования голоса нужен аудио-референс (ref_audio_path)")
+        if voice_model == 'design' and not kwargs.get('design_prompt'):
+            raise RuntimeError("Для дизайна голоса нужен промпт (design_prompt)")
         is_minimax = self.model.lower().startswith("minimax/")
         text, voice, extra_body = _gateway_prep(text, voice_model or 'nova', is_minimax, kwargs)
 
@@ -261,11 +271,13 @@ class GatewayTTSProvider(BaseTTSProvider):
                 client = AsyncOpenAI(api_key=api_key, base_url=base)
                 # AITUNNEL использует нативные id без префикса провайдера: minimax/speech-2.8-hd -> speech-2.8-hd
                 model = self.model.split("/", 1)[-1] if name == 'AITUNNEL' else self.model
+                # ponytail: MiniMax принимает только mp3|pcm (wav отклоняется ZodError'ом на шлюзе)
+                response_format = "mp3" if is_minimax else "wav"
                 response = await client.audio.speech.create(
                     model=model,
                     voice=voice,
                     input=text,
-                    response_format="wav",
+                    response_format=response_format,
                     extra_body=extra_body or None,
                 )
                 output_path = kwargs.get("output_path", "")
@@ -324,19 +336,23 @@ if __name__ == "__main__":
         assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["emotion"] == "sad" and "[emotion" not in t
         t, v, extra = _gateway_prep("[emotion: sad] Ок.", "marcus", False, {})
         assert v == "nova" and extra == {}
-        # clone/локальные спикеры в облаке запрещены, без ключей — понятная ошибка
+        # клонирование/дизайн в шлюзе: данные уходят в voice_setting, без данных — понятная ошибка
         gw = GatewayTTSProvider("minimax/speech-2.8-hd")
         assert gw.model.split("/", 1)[-1] == "speech-2.8-hd"  # AITUNNEL без префикса провайдера
-        try:
-            await gw.generate_tts("тест", "aria", api_keys={})
-            raise AssertionError("aria должен был смапиться и упасть на отсутствии ключа")
-        except RuntimeError as e:
-            assert "не задан" in str(e) or "Переключите" in str(e), str(e)
+        t, v, extra = _gateway_prep("текст", "clone", True, {"ref_audio_path": "/x/ref.wav", "ref_text": "привет"})
+        assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["ref_audio_path"] == "/x/ref.wav" and extra["voice_setting"]["ref_text"] == "привет"
+        t, v, extra = _gateway_prep("текст", "design", True, {"design_prompt": "глубокий голос"})
+        assert v == "design" and extra["voice_setting"]["design_prompt"] == "глубокий голос"
         try:
             await gw.generate_tts("тест", "clone", api_keys={"routerai": "x"})
-            raise AssertionError("clone должен был быть запрещён")
+            raise AssertionError("clone без референса должен упасть")
         except RuntimeError as e:
-            assert "только в локальном режиме" in str(e)
+            assert "аудио-референс" in str(e)
+        try:
+            await gw.generate_tts("тест", "design", api_keys={"routerai": "x"})
+            raise AssertionError("design без промпта должен упасть")
+        except RuntimeError as e:
+            assert "дизайна голоса" in str(e)
         print("audio_provider gateway mapping OK")
 
     asyncio.run(_check())
