@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Input, Button, Slider, FieldGroup, Icon, Spinner, Select, Modal } from '@shared/ui'
-import { API, getProjectPath } from '@widgets/editor-workspace/lib/helpers'
-import type { ProjectSettings } from '@entities/project'
-import { useSettingsStore, useNotificationStore, useProjectStore } from '@entities/project'
+import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal } from '@shared/ui'
+import { Bot, X, Plus, Sparkles, CirclePlay, List, LayoutGrid, Clapperboard, Paintbrush, BrainCircuit, Flame, FishingHook, Copy, Download, ArrowLeft } from 'lucide-react'
+import { API } from '@widgets/editor-workspace/lib/helpers'
+import { useSettingsStore, useNotificationStore } from '@entities/project'
 
 interface Props {
-  project: ProjectSettings
+  onSelectIdea: (idea: any, videos: any[]) => void
+  onBack: () => void
 }
 
 interface VideoResult {
@@ -54,21 +55,24 @@ const fmtDuration = (v: VideoResult) => {
   return `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}`
 }
 
-export const YoutubeIdeasView = ({ project }: Props) => {
-  const { apiKeys } = useSettingsStore()
+export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
+  const { apiKeys, cloudEngines, cloudProvider } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
-  const addProject = useProjectStore(s => s.addProject)
+
+  const activeApiKeys = {
+    ...apiKeys,
+    routerai: cloudProvider === 'routerai' ? apiKeys.routerai : undefined,
+    aitunnel: cloudProvider === 'aitunnel' ? apiKeys.aitunnel : undefined,
+  }
 
   const [activeTab, setActiveTab] = useState<'agent' | 'thumbnail'>('agent')
-
   const [searchMode, setSearchMode] = useState<'trending' | 'competitors'>('trending')
   const [videoType, setVideoType] = useState<'all' | 'long' | 'short'>('all')
   const [language, setLanguage] = useState('ru')
-
   const [nichePreset, setNichePreset] = useState(NICHE_PRESETS[1].id)
   const [customQuery, setCustomQuery] = useState('')
   const [channelContext, setChannelContext] = useState('')
-  const [agentEngine, setAgentEngine] = useState('openai/gpt-4o')
+  const [agentEngine, setAgentEngine] = useState(cloudEngines.scenario || 'openai/gpt-4o')
 
   const [daysBack, setDaysBack] = useState(30)
   const [minSubs, setMinSubs] = useState(1000)
@@ -78,20 +82,19 @@ export const YoutubeIdeasView = ({ project }: Props) => {
 
   const [competitorChannels, setCompetitorChannels] = useState<string[]>([])
   const [newChannelInput, setNewChannelInput] = useState('')
-  const [isSuggestingCompetitors, setIsSuggestingCompetitors] = useState(false)
 
+  const [isSuggestingCompetitors, setIsSuggestingCompetitors] = useState(false)
   const [isAgentRunning, setIsAgentRunning] = useState(false)
   const [agentLogs, setAgentLogs] = useState<AgentLog[]>([])
   const [agentResults, setAgentResults] = useState<VideoResult[]>([])
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
   const [excelPath, setExcelPath] = useState('')
   const [isGridView, setIsGridView] = useState(false)
-  const logsEndRef = useRef<HTMLDivElement>(null)
 
+  const logsEndRef = useRef<HTMLDivElement>(null)
   const [hookModalOpen, setHookModalOpen] = useState(false)
   const [isHookAnalyzing, setIsHookAnalyzing] = useState(false)
   const [hookData, setHookData] = useState<any>(null)
-  const [draftingIdeaIdx, setDraftingIdeaIdx] = useState<number | null>(null)
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -99,30 +102,21 @@ export const YoutubeIdeasView = ({ project }: Props) => {
 
   const handleSuggestCompetitors = async () => {
     const finalQuery = nichePreset === 'custom' ? customQuery : nichePreset
-    if (!finalQuery.trim()) {
-      showNotification('Укажите нишу для подбора конкурентов', 'error')
-      return
-    }
+    if (!finalQuery.trim()) { showNotification('Укажите нишу для подбора конкурентов', 'error'); return }
     setIsSuggestingCompetitors(true)
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/suggest-competitors`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, api_keys: apiKeys })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, api_keys: activeApiKeys })
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') {
         const newChannels = data.channels.filter((c: string) => !competitorChannels.includes(c))
         setCompetitorChannels(prev => [...prev, ...newChannels])
         showNotification(`Добавлено ${newChannels.length} конкурентов`, 'success')
-      } else {
-        showNotification('Не удалось подобрать конкурентов', 'error')
-      }
-    } catch (e) {
-      showNotification('Ошибка связи с агентом', 'error')
-    } finally {
-      setIsSuggestingCompetitors(false)
-    }
+      } else { showNotification('Не удалось подобрать конкурентов', 'error') }
+    } catch { showNotification('Ошибка связи с агентом', 'error') }
+    finally { setIsSuggestingCompetitors(false) }
   }
 
   const handleAddChannel = () => {
@@ -132,20 +126,12 @@ export const YoutubeIdeasView = ({ project }: Props) => {
     }
   }
 
-  const handleRemoveChannel = (ch: string) => {
-    setCompetitorChannels(competitorChannels.filter(c => c !== ch))
-  }
+  const handleRemoveChannel = (ch: string) => setCompetitorChannels(competitorChannels.filter(c => c !== ch))
 
   const handleRunAgent = async () => {
     const finalQuery = nichePreset === 'custom' ? customQuery : nichePreset
-    if (searchMode === 'trending' && !finalQuery.trim()) {
-      showNotification('Укажите нишу или запрос', 'error')
-      return
-    }
-    if (searchMode === 'competitors' && competitorChannels.length === 0) {
-      showNotification('Укажите хотя бы одного конкурента', 'error')
-      return
-    }
+    if (searchMode === 'trending' && !finalQuery.trim()) { showNotification('Укажите нишу', 'error'); return }
+    if (searchMode === 'competitors' && competitorChannels.length === 0) { showNotification('Укажите конкурентов', 'error'); return }
 
     setIsAgentRunning(true)
     setAgentLogs([])
@@ -155,22 +141,15 @@ export const YoutubeIdeasView = ({ project }: Props) => {
 
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: finalQuery,
-          project_path: getProjectPath(project),
-          settings: {
-            days_back: daysBack, min_subs: minSubs, max_subs: maxSubs,
-            min_ratio: minRatio, search_mode: searchMode, language: language,
-            video_type: videoType, ideas_count: ideasCount, channel_context: channelContext,
-            channels: competitorChannels
-          },
-          youtube_key: apiKeys.youtube || '', llm_engine: agentEngine, api_keys: apiKeys
+          query: finalQuery, project_path: 'vidora_projects/Drafts',
+          settings: { days_back: daysBack, min_subs: minSubs, max_subs: maxSubs, min_ratio: minRatio, search_mode: searchMode, language: language, video_type: videoType, ideas_count: ideasCount, channel_context: channelContext, channels: competitorChannels },
+          youtube_key: apiKeys.youtube || '', llm_engine: agentEngine, api_keys: activeApiKeys
         })
       })
 
-      if (!res.body) throw new Error('Нет ответа от сервера')
+      if (!res.body) throw new Error('Нет ответа')
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -186,22 +165,17 @@ export const YoutubeIdeasView = ({ project }: Props) => {
           if (!line.trim()) continue
           try {
             const msg = JSON.parse(line)
-            if (msg.type === 'log') {
-              setAgentLogs(prev => [...prev, { message: msg.message, status: msg.status }])
-            } else if (msg.type === 'videos_ready') {
-              setAgentResults(msg.results || [])
-            } else if (msg.type === 'excel_ready') {
-              setExcelPath(msg.excel_path || '')
-            } else if (msg.type === 'done') {
+            if (msg.type === 'log') setAgentLogs(prev => [...prev, { message: msg.message, status: msg.status }])
+            else if (msg.type === 'videos_ready') setAgentResults(msg.results || [])
+            else if (msg.type === 'excel_ready') setExcelPath(msg.excel_path || '')
+            else if (msg.type === 'done') {
               if (msg.analysis) setAnalysisData(msg.analysis)
               showNotification('Анализ завершен!', 'success')
             }
-          } catch (err) {
-            console.error('JSON parse error on stream:', err)
-          }
+          } catch (err) { console.error('JSON parse error:', err) }
         }
       }
-    } catch (e) {
+    } catch {
       showNotification('Ошибка связи с агентом', 'error')
       setAgentLogs(prev => [...prev, { message: 'Ошибка соединения.', status: 'error' }])
     } finally {
@@ -210,23 +184,19 @@ export const YoutubeIdeasView = ({ project }: Props) => {
   }
 
   const handleAnalyzeHook = async (transcript?: string) => {
-    if (!transcript) {
-      showNotification('Субтитры недоступны для этого видео', 'error')
-      return
-    }
+    if (!transcript) { showNotification('Субтитры недоступны', 'error'); return }
     setHookData(null)
     setHookModalOpen(true)
     setIsHookAnalyzing(true)
-
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/analyze-hook`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, engine: agentEngine, api_keys: apiKeys })
+        body: JSON.stringify({ transcript, engine: agentEngine, api_keys: activeApiKeys })
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') setHookData(data.data)
-      else throw new Error('Сбой генерации')
-    } catch (e) {
+      else throw new Error()
+    } catch {
       showNotification('Ошибка анализа хука', 'error')
       setHookModalOpen(false)
     } finally {
@@ -234,45 +204,15 @@ export const YoutubeIdeasView = ({ project }: Props) => {
     }
   }
 
-  const handleCreateProject = async (idea: IdeaFormat, index: number) => {
-    setDraftingIdeaIdx(index)
-    try {
-      const res = await fetch(`${API}/api/v1/youtube/agent/draft-script`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: idea.titles[0], idea_description: idea.description,
-          channel_context: channelContext, engine: agentEngine, api_keys: apiKeys
-        })
-      })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
-        const md = data.markdown
-        const newProj: ProjectSettings = {
-          name: `Ideation: ${idea.titles[0].substring(0, 20)}`,
-          format: '16:9', resolution: '1080p',
-          metadata: { title: idea.titles[0], description: idea.thumbnail_concept, tags: [] },
-          montage: { fps: '30', animationStyle: 'screencast', transitions: [], colors: { primary: '#ddb7ff', secondary: '#4fdbc8', background: '#0b1326', surface: '#171f33', accent: '#ffb4ab', text: '#dae2fd' }, typography: { heading: 'Inter', body: 'Geist' } },
-          scenes: [], rawMarkdown: md, audioMode: 'scene',
-          audioProcessing: { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false }
-        }
-        addProject(newProj)
-        showNotification('Проект и скрипт успешно созданы!', 'success')
-      }
-    } catch (e) {
-      showNotification('Ошибка генерации скрипта', 'error')
-    } finally {
-      setDraftingIdeaIdx(null)
-    }
-  }
-
   return (
     <div className="flex flex-col w-full h-full bg-background animate-in fade-in duration-300">
-      <div className="flex border-b border-white/10 bg-surface-container/60 shrink-0 px-6 pt-4 gap-2">
+      <div className="flex border-b border-white/10 bg-surface-container/60 shrink-0 px-6 pt-4 gap-4 items-center">
+        <Button variant="ghost" icon={ArrowLeft} onClick={onBack} className="mb-1 p-2" />
         <button
           onClick={() => setActiveTab('agent')}
           className={`px-8 py-3 text-sm font-semibold uppercase tracking-wide transition-colors rounded-t-xl ${activeTab === 'agent' ? 'bg-primary/20 text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}
         >
-          <Icon name="smart_toy" className="align-middle mr-2" /> AI-Агент (Идеи & Тренды)
+          <Bot size={24} className="align-middle mr-2" /> AI-Агент (Идеи & Тренды)
         </button>
       </div>
 
@@ -280,7 +220,6 @@ export const YoutubeIdeasView = ({ project }: Props) => {
         {activeTab === 'agent' && (
           <>
             <div className="w-[340px] xl:w-[380px] flex flex-col gap-4 bg-surface-container-lowest/30 border-r border-white/10 p-5 shrink-0 overflow-y-auto custom-scrollbar">
-
               <div className="grid grid-cols-2 gap-3">
                 <FieldGroup label="Режим поиска">
                   <Select value={searchMode} onChange={e => setSearchMode(e.target.value as 'trending' | 'competitors')} className="text-xs">
@@ -299,16 +238,16 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                   <div className="flex flex-wrap gap-2">
                     {competitorChannels.map((ch, i) => (
                       <span key={i} className="bg-primary/10 border border-primary/20 text-primary px-2 py-1 rounded text-xs flex items-center gap-1">
-                        {ch} <span className="cursor-pointer hover:text-white" onClick={() => handleRemoveChannel(ch)}><Icon name="close" className="text-[14px]" /></span>
+                        {ch} <span className="cursor-pointer hover:text-white" onClick={() => handleRemoveChannel(ch)}><X size={14} /></span>
                       </span>
                     ))}
                   </div>
                   <div className="flex gap-2 mt-1">
                     <Input value={newChannelInput} onChange={e => setNewChannelInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddChannel()} placeholder="Название или URL..." className="text-xs flex-1" />
-                    <Button variant="secondary" onClick={handleAddChannel} className="shrink-0 px-2 py-1 h-auto"><Icon name="add" className="text-[16px]" /></Button>
+                    <Button variant="secondary" onClick={handleAddChannel} className="shrink-0 px-2 py-1 h-auto"><Plus size={16} /></Button>
                   </div>
                   <Button variant="dashed" onClick={handleSuggestCompetitors} disabled={isSuggestingCompetitors} className="mt-2 text-xs border-secondary/30 text-secondary hover:bg-secondary/10 py-1.5 h-auto">
-                    {isSuggestingCompetitors ? <Spinner className="text-[14px]" /> : <><Icon name="auto_awesome" className="text-[14px] mr-1" /> Подобрать ИИ</>}
+                    {isSuggestingCompetitors ? <Spinner className="text-[14px]" /> : <><Sparkles size={14} className="mr-1" /> Подобрать ИИ</>}
                   </Button>
                 </div>
               ) : (
@@ -364,7 +303,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                 </FieldGroup>
               </div>
 
-              <FieldGroup label="О чем ваш канал? (Контекст для ИИ)">
+              <FieldGroup label="О чем ваш канал? (Контекст)">
                 <textarea
                   className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:border-primary/50"
                   rows={2}
@@ -378,21 +317,16 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                 <FieldGroup label="LLM Движок (Агент)">
                   <Input list="agent-models" value={agentEngine} onChange={e => setAgentEngine(e.target.value)} className="text-xs font-mono" />
                   <datalist id="agent-models">
+                    <option value="anthropic/claude-sonnet-5" />
+                    <option value="anthropic/claude-3.5-sonnet" />
                     <option value="openai/gpt-4o" />
-                    <option value="openai/gpt-4o-mini" />
-                    <option value="qwen/qwen2.5-coder" />
-                    <option value="gemma3:1b" />
-                    <option value="gemma3:4b" />
-                    <option value="gemma3:8b" />
-                    <option value="qwen2.5-coder" />
-                    <option value="llama3.1-8b" />
-                    <option value="deepseek-coder-v2" />
+                    <option value="google/gemini-2.5-pro" />
                   </datalist>
                 </FieldGroup>
               </div>
 
               <Button variant="primary" onClick={handleRunAgent} disabled={isAgentRunning} className="mt-auto shadow-[0_0_20px_rgba(221,183,255,0.2)] py-3 text-base">
-                {isAgentRunning ? <><Spinner className="text-xl" /> Работаем...</> : <><Icon name="play_circle" className="text-xl" /> Найти Идеи</>}
+                {isAgentRunning ? <><Spinner className="text-xl" /> Работаем...</> : <><CirclePlay size={20} /> Найти Идеи</>}
               </Button>
             </div>
 
@@ -412,11 +346,11 @@ export const YoutubeIdeasView = ({ project }: Props) => {
               <div className="flex-1 bg-surface-900/60 border border-white/10 rounded-xl overflow-y-auto custom-scrollbar relative shadow-xl">
                 <div className="sticky top-0 z-30 flex justify-between items-center bg-surface-900/90 backdrop-blur-md px-6 py-3 border-b border-white/10">
                   <div className="flex items-center gap-4">
-                    <button onClick={() => setIsGridView(false)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${!isGridView ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><Icon name="view_list" className="text-[18px]" /> Детали</button>
-                    <button onClick={() => setIsGridView(true)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${isGridView ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><Icon name="grid_view" className="text-[18px]" /> Обложки</button>
+                    <button onClick={() => setIsGridView(false)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${!isGridView ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><List size={18} /> Детали</button>
+                    <button onClick={() => setIsGridView(true)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${isGridView ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><LayoutGrid size={18} /> Обложки</button>
                   </div>
                   {excelPath && (
-                    <Button variant="secondary" icon="download" onClick={() => {
+                    <Button variant="secondary" icon={Download} onClick={() => {
                       const a = document.createElement('a'); a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(excelPath)}`; a.download = 'report.xlsx'; document.body.appendChild(a); a.click(); a.remove();
                     }}>Скачать Excel</Button>
                   )}
@@ -426,7 +360,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                   {analysisData?.ideas && (
                     <div>
                       <h3 className="text-success font-bold text-2xl mb-4 flex items-center gap-3">
-                        <Icon name="tips_and_updates" className="text-3xl" /> Готовые Идеи и Упаковка
+                        <Sparkles size={30} /> Готовые Идеи и Упаковка
                       </h3>
                       <div className="flex flex-col gap-6">
                         {analysisData.ideas.map((idea, idx) => (
@@ -439,13 +373,13 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                                     <h4 key={i} className={`text-lg font-bold ${i===0 ? 'text-white' : 'text-white/60 text-base'}`}>{i===0 && '🔥 '}{t}</h4>
                                   ))}
                                 </div>
-                                <Button variant="primary" onClick={() => handleCreateProject(idea, idx)} disabled={draftingIdeaIdx !== null} className="shrink-0 bg-success hover:bg-success/80 text-black shadow-[0_0_15px_rgba(74,222,128,0.3)]">
-                                  {draftingIdeaIdx === idx ? <Spinner /> : <><Icon name="movie_edit" className="text-lg" /> Создать проект</>}
+                                <Button variant="primary" onClick={() => onSelectIdea(idea, agentResults)} className="shrink-0 bg-success hover:bg-success/80 text-black shadow-[0_0_15px_rgba(74,222,128,0.3)]">
+                                  <Clapperboard size={18} /> Создать проект
                                 </Button>
                               </div>
                               <p className="text-on-surface-variant text-sm leading-relaxed mb-4">{idea.description}</p>
                               <div className="bg-secondary/10 border border-secondary/20 p-4 rounded-xl flex items-start gap-3">
-                                <Icon name="brush" className="text-secondary mt-0.5" />
+                                <Paintbrush size={24} className="text-secondary mt-0.5" />
                                 <div>
                                   <span className="text-xs text-secondary font-bold uppercase tracking-wider block mb-1">ТЗ для превью</span>
                                   <span className="text-sm text-on-surface leading-snug">{idea.thumbnail_concept}</span>
@@ -461,7 +395,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                   {analysisData?.conclusions && (
                     <div>
                       <h3 className="text-primary font-bold text-xl mb-4 flex items-center gap-2">
-                        <Icon name="psychology" className="text-2xl" /> Почему эти форматы зашли?
+                        <BrainCircuit size={24} /> Почему эти форматы зашли?
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {analysisData.conclusions.map((conc, i) => (
@@ -477,13 +411,13 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                   {agentResults.length > 0 && (
                     <div>
                       <h3 className="text-on-surface font-bold text-xl mb-4 flex items-center gap-2">
-                        <Icon name="local_fire_department" className="text-error text-2xl" /> {searchMode === 'competitors' ? 'Аномалии конкурентов' : 'Референсы (Топ по VPH)'}
+                        <Flame size={24} className="text-error" /> {searchMode === 'competitors' ? 'Аномалии конкурентов' : 'Референсы (Топ по VPH)'}
                       </h3>
                       {isGridView ? (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                           {agentResults.map((v, i) => (
                             <div key={i} className="relative group rounded-xl overflow-hidden aspect-video bg-black cursor-pointer" onClick={() => window.open(v.url, '_blank')}>
-                              <img src={`https://i.ytimg.com/vi/${v.video_id}/maxresdefault.jpg`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <img src={`https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all" />
                               <div className="absolute bottom-1 right-1 bg-error text-white px-1.5 py-0.5 rounded text-[10px] font-bold shadow-md">
                                 {v.vph} VPH
                               </div>
@@ -495,7 +429,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                           {agentResults.map((v, i) => (
                             <div key={i} className="bg-black/40 border border-white/10 p-3 rounded-2xl flex flex-col gap-3 group hover:border-primary/30 transition-colors shadow-md relative">
                               <div className="relative rounded-xl overflow-hidden aspect-video">
-                                <img src={`https://i.ytimg.com/vi/${v.video_id}/maxresdefault.jpg`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                <img src={`https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                                 <div className="absolute top-2 right-2 bg-error text-white px-2 py-1 rounded-lg text-xs font-black shadow-lg border border-error/50">
                                   {v.vph} VPH 🔥
                                 </div>
@@ -511,7 +445,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                               <div className="mt-auto pt-2 flex flex-col gap-1">
                                 {v.keyword_found && <span className="text-[10px] text-on-surface-variant/60">{v.keyword_found}</span>}
                                 <Button variant="dashed" className="w-full text-xs py-1.5 border-secondary/30 text-secondary hover:bg-secondary/10" onClick={() => handleAnalyzeHook(v.transcript_sample)}>
-                                  <Icon name="phishing" className="text-[14px] mr-1" /> Украсть Хук
+                                  <FishingHook size={14} className="mr-1" /> Украсть Хук
                                 </Button>
                               </div>
                             </div>
@@ -541,7 +475,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                 <p className="text-sm italic text-white/90 leading-relaxed">"{hookData.original_hook}"</p>
               </div>
               <div className="bg-secondary/10 border border-secondary/20 p-5 rounded-xl">
-                <span className="text-[10px] text-secondary uppercase tracking-wider font-bold block mb-2 flex items-center gap-1"><Icon name="psychology" className="text-[14px]" /> Почему это работает?</span>
+                <span className="text-[10px] text-secondary uppercase tracking-wider font-bold block mb-2 flex items-center gap-1"><BrainCircuit size={14} /> Почему это работает?</span>
                 <p className="text-sm text-secondary font-medium leading-relaxed">{hookData.psychology}</p>
               </div>
               <div>
@@ -551,7 +485,7 @@ export const YoutubeIdeasView = ({ project }: Props) => {
                     <div key={i} className="bg-surface-container-lowest/50 border border-white/10 p-4 rounded-xl text-sm relative group pr-12">
                       {h}
                       <button onClick={() => { navigator.clipboard.writeText(h); showNotification('Скопировано!', 'success') }} className="absolute top-1/2 -translate-y-1/2 right-3 text-on-surface-variant hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Icon name="content_copy" className="text-[18px]" />
+                        <Copy size={18} />
                       </button>
                     </div>
                   ))}

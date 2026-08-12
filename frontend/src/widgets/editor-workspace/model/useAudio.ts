@@ -341,6 +341,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
   }
 
   const runSyncAllScenes = async (scenesToSync?: Scene[]) => {
+    const whisperModel = useSettingsStore.getState().whisperModel || 'small'
     let targetScenes = Array.isArray(scenesToSync) ? scenesToSync : project.scenes
     if (project.audioMode === 'project') targetScenes = project.scenes
     setIsSyncing(true)
@@ -359,7 +360,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
           body: JSON.stringify({
             scene_id: 'project_sync', audio_path: globalAudioPath,
             fragments: allFragments, project_path: getProjectPath(project),
-            use_whisper: useWhisper, auto_offload_vram: autoOffloadVram,
+            use_whisper: useWhisper, auto_offload_vram: autoOffloadVram, whisper_model: whisperModel,
           }),
           signal: abortControllerRef.current.signal,
         })
@@ -400,7 +401,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
             body: JSON.stringify({
               scene_id: scene.id, audio_path: getAudioPathForScene(project, scene),
               fragments: scene.fragments.map(f => ({ id: f.id, text: f.text })),
-              project_path: getProjectPath(project), use_whisper: useWhisper, auto_offload_vram: autoOffloadVram,
+              project_path: getProjectPath(project), use_whisper: useWhisper, auto_offload_vram: autoOffloadVram, whisper_model: whisperModel,
             }),
             signal: abortControllerRef.current.signal,
           })

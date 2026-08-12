@@ -39,7 +39,7 @@ class MultiProviderClient:
             return None
         try:
             response = await self.aitunnel.chat.completions.create(
-                model=model,
+                model=_aitunnel_model(model),
                 messages=messages,
                 **kwargs,
             )
@@ -49,8 +49,19 @@ class MultiProviderClient:
             return None
 
 
+def _aitunnel_model(model: str) -> str:
+    # AITUNNEL использует нативные id без префикса провайдера: openai/gpt-5.1 -> gpt-5.1
+    return model.split("/", 1)[-1]
+
+
 if __name__ == "__main__":
     import asyncio
+
+    assert _aitunnel_model("openai/gpt-5.1") == "gpt-5.1"
+    assert _aitunnel_model("anthropic/claude-sonnet-5") == "claude-sonnet-5"
+    assert _aitunnel_model("google/gemini-3.1-pro-preview") == "gemini-3.1-pro-preview"
+    assert _aitunnel_model("minimax/speech-2.8-hd") == "speech-2.8-hd"
+    print("llm_client model mapping OK")
 
     async def _demo():
         ai = MultiProviderClient()
@@ -58,7 +69,7 @@ if __name__ == "__main__":
             print("Ключи не заданы — заполните backend/.env (ROUTERAI_API_KEY / AITUNNEL_API_KEY)")
             return
         answer = await ai.chat(
-            model="openai/gpt-4o",
+            model="anthropic/claude-sonnet-5",
             messages=[{"role": "user", "content": "Напиши функцию сортировки массива на Python"}],
         )
         print(answer)

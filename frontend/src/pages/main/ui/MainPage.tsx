@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react'
 import { ProjectCreator } from '@widgets/project-creator'
 import { EditorWorkspace } from '@widgets/editor-workspace'
+import { YoutubeIdeasView } from '@widgets/editor-workspace/ui/YoutubeIdeasView'
+import { ScenarioBuilder } from '@widgets/scenario-builder/ui/ScenarioBuilder'
+import { GlobalSettingsView } from '@widgets/global-settings'
 import { useProjectStore, useNotificationStore } from '@entities/project'
-import { Icon, Spinner } from '@shared/ui'
+import { Spinner } from '@shared/ui'
+import { CircleCheckBig, TriangleAlert, Info } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
 
+type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings'
+
 export const MainPage = () => {
   const [isBooting, setIsBooting] = useState(true)
+  const [view, setView] = useState<ViewState>('hub')
+
+  const [selectedIdea, setSelectedIdea] = useState<any>(null)
+  const [selectedVideos, setSelectedVideos] = useState<any[]>([])
 
   const projects = useProjectStore(s => s.projects)
   const activeProjectId = useProjectStore(s => s.activeProjectId)
@@ -15,8 +25,8 @@ export const MainPage = () => {
   const addProject = useProjectStore(s => s.addProject)
   const updateProject = useProjectStore(s => s.updateProject)
   const deleteProject = useProjectStore(s => s.deleteProject)
-  const { notification } = useNotificationStore()
 
+  const { notification } = useNotificationStore()
   const activeProject = projects.find(p => p.name === activeProjectId)
 
   useEffect(() => {
@@ -54,25 +64,59 @@ export const MainPage = () => {
               notification.type === 'error' ? 'bg-error/10 border-error/50 text-error' :
                 'bg-primary/10 border-primary/50 text-primary'}
           `}>
-            <Icon name={notification.type === 'success' ? 'check_circle' : notification.type === 'error' ? 'error' : 'info'} className="text-xl" filled />
+            {notification.type === 'success' && <CircleCheckBig size={20} fill="currentColor" />}
+            {notification.type === 'error' && <TriangleAlert size={20} fill="currentColor" />}
+            {notification.type === 'info' && <Info size={20} fill="currentColor" />}
             <span className="font-medium text-sm">{notification.message}</span>
           </div>
         </div>
       )}
 
-      {!activeProject ? (
-        <ProjectCreator
-          onCreate={addProject}
-          onCancel={projects.length > 0 ? () => setActiveProject(projects[0].name) : undefined}
-        />
-      ) : (
+      {activeProject ? (
         <EditorWorkspace
           key={activeProject.name}
           project={activeProject}
           projects={projects}
           onSwitchProject={setActiveProject}
-          onNewProject={() => setActiveProject(null)}
+          onNewProject={() => {
+            setActiveProject(null)
+            setView('hub')
+          }}
           onUpdateProject={updateProject}
+          onDeleteProject={deleteProject}
+        />
+      ) : view === 'settings' ? (
+        <GlobalSettingsView onBack={() => setView('hub')} />
+      ) : view === 'ideas' ? (
+        <YoutubeIdeasView
+          onBack={() => setView('hub')}
+          onSelectIdea={(idea, videos) => {
+            setSelectedIdea(idea)
+            setSelectedVideos(videos)
+            setView('scenario')
+          }}
+        />
+      ) : view === 'scenario' ? (
+        <ScenarioBuilder
+          idea={selectedIdea}
+          videos={selectedVideos}
+          onBack={() => setView(selectedIdea ? 'ideas' : 'hub')}
+          onCreate={(p) => {
+            addProject(p)
+            setActiveProject(p.name)
+          }}
+        />
+      ) : (
+        <ProjectCreator
+          onGoIdeas={() => setView('ideas')}
+          onGoScenario={() => {
+            setSelectedIdea(null)
+            setSelectedVideos([])
+            setView('scenario')
+          }}
+          onGoSettings={() => setView('settings')}
+          projects={projects}
+          onOpenProject={setActiveProject}
           onDeleteProject={deleteProject}
         />
       )}

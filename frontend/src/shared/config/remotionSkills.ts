@@ -60,4 +60,16 @@ export const REMOTION_SKILLS: RemotionSkill[] = [
 5. Для теней используй \`<ContactShadows frames={1} />\` — обязательно \`frames={1}\`, чтобы запечь тень и сэкономить ресурсы при покадровом рендере.
 6. 2D интерфейс (Tailwind) располагай поверх \`ThreeCanvas\` в отдельном \`<AbsoluteFill>\` с \`pointer-events-none\`.`,
   },
+  {
+    id: 'lucide-icons',
+    title: 'Использование иконок (Lucide React)',
+    description: 'Как правильно импортировать и стилизовать векторные иконки в сценах.',
+    content: `## Иконки (Lucide React)
+1. В проекте доступна библиотека \`lucide-react\`. ИСПОЛЬЗУЙ ТОЛЬКО ЕЁ для иконок.
+2. Импортируй нужные иконки напрямую: \`import { Cpu, Zap, Activity, MonitorPlay } from 'lucide-react';\`
+3. Стилизуй их через Tailwind классы для размера, а цвет передавай через inline-style:
+   \`<Cpu className="w-12 h-12" style={{ color: COLORS.primary }} />\`
+4. У иконок Lucide есть свойство \`strokeWidth\`. Для более тонкого кинематографичного вида задавай \`strokeWidth={1.5}\` (по умолчанию 2).
+5. Если не уверен в точном названии, используй стандартные: \`Play\`, \`Pause\`, \`ChevronRight\`, \`Settings\`, \`User\`, \`Image\`, \`Monitor\`, \`Smartphone\`, \`Video\`.`,
+  },
 ]

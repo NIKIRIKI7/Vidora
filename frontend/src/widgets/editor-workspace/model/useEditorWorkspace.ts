@@ -17,7 +17,6 @@ interface Props {
 export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [centerView, setCenterView] = useState<CenterViewMode>('player')
-  const [workspaceView, setWorkspaceView] = useState<'editor' | 'ideas'>('editor')
   const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
   
   const [voiceModel, setVoiceModel] = useState('aria')
@@ -67,10 +66,17 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const undo = useProjectStore(s => s.undo)
   const redo = useProjectStore(s => s.redo)
   const aiMode = useSettingsStore(s => s.aiMode)
+  const cloudProvider = useSettingsStore(s => s.cloudProvider)
   const cloudEngines = useSettingsStore(s => s.cloudEngines)
   const localEngines = useSettingsStore(s => s.localEngines)
   const apiKeys = useSettingsStore(s => s.apiKeys)
-  const globalPrompts = useSettingsStore(s => s.globalPrompts)
+
+  // ponytail: передаём только ключ выбранного провайдера, чтобы шлюз не путался
+  const activeApiKeys = {
+    ...apiKeys,
+    routerai: cloudProvider === 'routerai' ? apiKeys.routerai : undefined,
+    aitunnel: cloudProvider === 'aitunnel' ? apiKeys.aitunnel : undefined,
+  }
 
   const ttsEngine = aiMode === 'cloud' ? cloudEngines.audio : localEngines.audio
   const llmEngine = aiMode === 'cloud' ? cloudEngines.visual : localEngines.visual
@@ -85,10 +91,10 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     onUpdateProject(newProject)
   }, [project, onUpdateProject])
 
-  const voiceOpts: AudioOptions = { voiceModel, speed, numSteps, guidanceScale, duration, denoise, preprocessPrompt, postprocessOutput, autoOffloadVram, ttsEngine, apiKeys, customVoices: project.customVoices }
+  const voiceOpts: AudioOptions = { voiceModel, speed, numSteps, guidanceScale, duration, denoise, preprocessPrompt, postprocessOutput, autoOffloadVram, ttsEngine, apiKeys: activeApiKeys, customVoices: project.customVoices }
 
   const audio = useAudio({ project, onUpdateProject: handleUpdateProjectSync, activeScene, activeSceneId, voiceOpts, useWhisper, autoOffloadVram, showNotification, abortControllerRef })
-  const render = useRender({ project, onUpdateProject: handleUpdateProjectSync, activeScene, llmEngine, apiKeys, audioLoaded: audio.audioLoaded, showNotification, abortControllerRef, currentTaskIdRef })
+  const render = useRender({ project, onUpdateProject: handleUpdateProjectSync, activeScene, llmEngine, apiKeys: activeApiKeys, audioLoaded: audio.audioLoaded, showNotification, abortControllerRef, currentTaskIdRef })
 
   const handleSelectScene = (id: string) => { setActiveSceneId(id); render.setPlayingTargetId(id) }
 
@@ -419,7 +425,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const scene = project.scenes.find(s => s.id === sceneId)
     if (!scene) return
     const md = serializeSceneToMarkdown(scene)
-    const template = project.promptOverrides?.fixPacing || globalPrompts.fixPacing || ''
+    const template = project.promptOverrides?.fixPacing || useSettingsStore.getState().globalPrompts.fixPacing || ''
     const prompt = template
       .replace(/\{\{CURRENT_PACING\}\}/g, currentPacing.toFixed(1))
       .replace(/\{\{THRESHOLD\}\}/g, threshold.toString())
@@ -527,11 +533,10 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   return {
     ...audio, ...render,
-    workspaceView, setWorkspaceView,
     activeSceneId, activeScene, centerView, previewFormat, voiceModel, speed, numSteps, guidanceScale, duration,
     denoise, preprocessPrompt, postprocessOutput, isAiSettingsOpen, playWithAudio, isVoiceboxOpen,
     newVoiceName, newVoiceText, newVoiceTags, newVoiceAudioPath, isAutoPipelineRunning, pipelineStep,
-    isSettingsOpen, useWhisper, autoOffloadVram, videoRef, audioRef, refVoiceInputRef, ttsEngine, llmEngine, apiKeys,
+    isSettingsOpen, useWhisper, autoOffloadVram, videoRef, audioRef, refVoiceInputRef, ttsEngine, llmEngine, apiKeys: activeApiKeys,
 
     setActiveSceneId: handleSelectScene, setCenterView, setPreviewFormat, setVoiceModel, setSpeed, setNumSteps,
     setGuidanceScale, setDuration, setDenoise, setPreprocessPrompt, setPostprocessOutput, setIsAiSettingsOpen,

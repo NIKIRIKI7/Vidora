@@ -138,6 +138,13 @@ You are an expert Remotion video developer. Generate production-ready TSX files 
 5. **NO CUSTOM CSS FILES:**
    Do not write standard CSS or create external stylesheets. Combine Tailwind classes and inline styles as described above.
 
+6. **ICONS (LUCIDE-REACT):**
+   You MUST use 'lucide-react' for vector icons.
+   Example: \`import { Cpu, Zap, Activity } from 'lucide-react';\`
+   Apply colors via style prop and sizes via Tailwind:
+   \`<Cpu className="w-16 h-16" style={{ color: COLORS.primary }} />\`
+   For a cinematic look set \`strokeWidth={1.5}\` (default is 2).
+
 ---
 
 ## Code Structure (MANDATORY)
@@ -468,6 +475,9 @@ interface SettingsStore {
   aiMode: 'cloud' | 'local'
   setAiMode: (mode: 'cloud' | 'local') => void
 
+  cloudProvider: 'routerai' | 'aitunnel'
+  setCloudProvider: (provider: 'routerai' | 'aitunnel') => void
+
   cloudEngines: { scenario: string; visual: string; audio: string }
   setCloudEngine: (task: 'scenario' | 'visual' | 'audio', model: string) => void
 
@@ -485,6 +495,8 @@ interface SettingsStore {
   setAudioWpmMin: (v: number) => void
   globalVoices: GlobalVoice[]
   setGlobalVoices: (voices: GlobalVoice[]) => void
+  whisperModel: string
+  setWhisperModel: (v: string) => void
 
   uiPreferences: {
     showSceneSidebar: boolean
@@ -506,10 +518,13 @@ export const useSettingsStore = create<SettingsStore>()(
       aiMode: 'cloud',
       setAiMode: (mode) => set({ aiMode: mode }),
 
+      cloudProvider: 'routerai',
+      setCloudProvider: (p) => set({ cloudProvider: p }),
+
       cloudEngines: {
-        scenario: 'anthropic/claude-3.5-sonnet',
-        visual: 'google/gemini-2.5-flash',
-        audio: 'minimax/speech-01-hd',
+        scenario: 'anthropic/claude-sonnet-5',
+        visual: 'anthropic/claude-sonnet-5',
+        audio: 'minimax/speech-2.8-hd',
       },
       setCloudEngine: (task, model) => set((s) => ({ cloudEngines: { ...s.cloudEngines, [task]: model } })),
 
@@ -530,6 +545,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setAudioWpmMin: (v) => set({ audioWpmMin: v }),
       globalVoices: [],
       setGlobalVoices: (v) => set({ globalVoices: v }),
+      whisperModel: 'small',
+      setWhisperModel: (v) => set({ whisperModel: v }),
 
       uiPreferences: DEFAULT_UI_PREFS,
       setUiPreferences: (p) => set((s) => ({ uiPreferences: { ...s.uiPreferences, ...p } })),

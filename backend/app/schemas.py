@@ -89,6 +89,7 @@ class AudioSyncRequest(BaseModel):
     project_path: str = ""
     use_whisper: bool = True
     auto_offload_vram: bool = True
+    whisper_model: str = "small"
 
 class AudioConcatRequest(BaseModel):
     audio_paths: List[str]

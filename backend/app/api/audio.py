@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, AdvancedSilenceRequest
 from app.services.audio_service import AudioService
-from app.services.audio_provider import OmniVoiceProvider
+from app.services.audio_provider import OmniVoiceProvider, clean_voice_tags
 
 # ponytail: avoid Cyrillic in cache path — torch.jit.load uses fopen() which
 # garbles non-ASCII on Windows. Keep models under ~/.cache (always ASCII).
@@ -306,13 +306,14 @@ async def sync_audio(request: AudioSyncRequest):
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
-        print(f"[AUDIO SYNC] [INFO] Загрузка WhisperX (device={device}, compute_type={compute_type})...")
+        print(f"[AUDIO SYNC] [INFO] Загрузка WhisperX ({request.whisper_model}, device={device}, compute_type={compute_type})...")
 
-        model = whisperx.load_model("base", device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
+        model = whisperx.load_model(request.whisper_model, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
         audio = whisperx.load_audio(audio_path)
 
-        print("[AUDIO SYNC] [INFO] Транскрибация речи...")
-        result = model.transcribe(audio, batch_size=8)
+        print("[AUDIO SYNC] [INFO] Транскрибация речи (форсирован русский язык)...")
+        # ponytail: tiny/base путают русский с украинским/болгарским — форсируем ru жёстко
+        result = model.transcribe(audio, batch_size=8, language="ru")
         lang = result.get("language", "ru")
 
         recognized_words = []
@@ -344,7 +345,8 @@ async def sync_audio(request: AudioSyncRequest):
         reco_cursor = 0
 
         for idx, frag in enumerate(request.fragments):
-            frag_words = frag.text.lower().split()
+            # ponytail: теги озвучки ([emotion: x], <#1.5#>, (sighs)) не произносятся — не должны попадать в матчинг
+            frag_words = clean_voice_tags(frag.text).lower().split()
             if not frag_words:
                 continue
 

@@ -1,13 +1,12 @@
-import type { ButtonHTMLAttributes } from 'react'
-import { Icon } from '@shared/ui'
+import type { ButtonHTMLAttributes, ElementType } from 'react'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'glass' | 'icon' | 'dashed'
-  icon?: string
+  icon?: ElementType
   filledIcon?: boolean
 }
 
-export const Button = ({ variant = 'primary', icon, filledIcon, children, className = '', ...props }: ButtonProps) => {
+export const Button = ({ variant = 'primary', icon: IconComp, filledIcon, children, className = '', ...props }: ButtonProps) => {
   const base = 'transition-all active:scale-95 flex items-center justify-center text-center'
   const variants = {
     primary:
@@ -25,8 +24,12 @@ export const Button = ({ variant = 'primary', icon, filledIcon, children, classN
 
   return (
     <button className={`${base} ${variants[variant]} ${className}`} {...props}>
-      {icon && (
-        <Icon name={icon} filled={filledIcon} className={variant === 'glass' ? 'text-[24px]' : 'text-[20px]'} />
+      {IconComp && (
+        <IconComp
+          size={variant === 'glass' ? 24 : 20}
+          fill={filledIcon ? 'currentColor' : 'none'}
+          strokeWidth={2}
+        />
       )}
       {children}
     </button>

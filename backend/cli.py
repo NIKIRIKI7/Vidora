@@ -18,7 +18,7 @@ async def main():
     analyze_p = subparsers.add_parser("yt-analyze", help="Скачать метаданные и сгенерировать промпт для превью")
     analyze_p.add_argument("url", type=str, help="URL YouTube видео")
     analyze_p.add_argument("--out", type=str, default="./downloads", help="Папка для сохранения")
-    analyze_p.add_argument("--engine", type=str, default="openai/gpt-4o",
+    analyze_p.add_argument("--engine", type=str, default="anthropic/claude-sonnet-5",
                            help="Модель: облако (provider/model) или Ollama (qwen2.5-coder, gemma3:1b)")
 
     args = parser.parse_args()

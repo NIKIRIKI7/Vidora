@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { Icon } from '@shared/ui'
+import { X } from 'lucide-react'
 
 interface ModalProps {
   isOpen: boolean
@@ -44,7 +44,7 @@ export const Modal = ({ isOpen, onClose, title, children, className = '' }: Moda
             onClick={onClose}
             className="p-1 rounded hover:bg-white/10 text-on-surface-variant transition-colors"
           >
-            <Icon name="close" className="text-[20px]" />
+            <X size={20} />
           </button>
         </div>
         <div className="p-4 overflow-y-auto max-h-[70vh] custom-scrollbar">

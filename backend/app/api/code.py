@@ -25,8 +25,8 @@ def _save_code(request: CodeGenerationRequest, tsx_code: str):
 
 # OpenAI-совместимые шлюзы: движок → модель. RouterAI — основной, AITUNNEL — резерв.
 LLM_GATEWAY_MODELS = {
-    "routerai_gpt4o": "openai/gpt-4o",
-    "routerai_claude": "anthropic/claude-sonnet-4.5",
+    "routerai_gpt4o": "openai/gpt-5.1",
+    "routerai_claude": "anthropic/claude-sonnet-5",
 }
 
 @router.post("/generate")
@@ -61,7 +61,7 @@ async def generate_code(request: CodeGenerationRequest):
                 res = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    json={"model": "gpt-4o", "messages": [{"role": "user", "content": request.prompt}], "max_tokens": 4096},
+                    json={"model": "gpt-5.1", "messages": [{"role": "user", "content": request.prompt}], "max_tokens": 4096},
                     timeout=120.0,
                 )
                 if res.status_code != 200:
@@ -119,7 +119,7 @@ async def generate_code(request: CodeGenerationRequest):
         return {"status": "error", "tsx_code": f"// Внутренняя ошибка сервера: {str(global_err)}"}
 
 if __name__ == "__main__":
-    assert LLM_GATEWAY_MODELS["routerai_gpt4o"] == "openai/gpt-4o"
-    assert LLM_GATEWAY_MODELS["routerai_claude"] == "anthropic/claude-sonnet-4.5"
-    assert "/" in "google/gemini-2.5-flash"
+    assert LLM_GATEWAY_MODELS["routerai_gpt4o"] == "openai/gpt-5.1"
+    assert LLM_GATEWAY_MODELS["routerai_claude"] == "anthropic/claude-sonnet-5"
+    assert "/" in "google/gemini-3.1-pro-preview"
     print("code.py gateway mapping OK")

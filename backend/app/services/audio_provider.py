@@ -1,4 +1,5 @@
-import os
+﻿import os
+import re
 import wave
 import struct
 import asyncio
@@ -8,6 +9,31 @@ from abc import ABC, abstractmethod
 from typing import Optional
 import numpy as np
 import httpx
+
+_EMOTION_TAG_RE = re.compile(r'\[emotion:\s*([a-z-]+)\]', re.IGNORECASE)
+# ponytail: 2.8-hd не поддерживает whisper/fluent (это 2.6) — держим строгий набор для нашей модели
+_MINIMAX_EMOTIONS = frozenset({"happy", "sad", "angry", "fearful", "disgusted", "surprised", "calm"})
+_LOCAL_SPEAKERS = frozenset({"aria", "marcus", "nova", "kolya", "kseniya", "alloy", "clone"})
+MINIMAX_DEFAULT_VOICE = "English_expressive_narrator"
+
+
+def split_emotion_tag(text: str):
+    """Вытаскивает '[emotion: calm]' из текста: (текст_без_тега, эмоция | None).
+    Невалидная эмоция тоже вырезается из текста — иначе диктор произнесёт её вслух."""
+    match = _EMOTION_TAG_RE.search(text)
+    if not match:
+        return text, None
+    clean_text = _EMOTION_TAG_RE.sub('', text).strip()
+    emotion = match.group(1).lower()
+    return clean_text, emotion if emotion in _MINIMAX_EMOTIONS else None
+
+
+def clean_voice_tags(text: str) -> str:
+    """Убирает теги озвучки ([emotion: x], <#1.5#>, (sighs)) — для Whisper-синхронизации, где тегов быть не должно."""
+    text = _EMOTION_TAG_RE.sub('', text)
+    text = re.sub(r'<#[\d.]+#>', '', text)
+    text = re.sub(r'\([a-z][a-z-]*\)', ' ', text)
+    return text
 
 class BaseTTSProvider(ABC):
     @abstractmethod
@@ -190,36 +216,57 @@ class OpenAIProvider(BaseTTSProvider):
                 with open(output_path, 'wb') as f:
                     f.write(res.content)
 
+def _gateway_prep(text: str, voice: str, is_minimax: bool, kwargs: dict):
+    """Готовит (text, voice, extra_body) для OpenAI-совместимого шлюза.
+    Локальные спикеры маплятся на голос провайдера; для minimax выкусывается [emotion: x]
+    и уезжает в voice_setting, который шлюз прокидывает в MiniMax нативно."""
+    if voice in _LOCAL_SPEAKERS:
+        voice = MINIMAX_DEFAULT_VOICE if is_minimax else "nova"
+    extra = {}
+    if is_minimax:
+        text, emotion = split_emotion_tag(text)
+        extra["voice_setting"] = {
+            "speed": float(kwargs.get("speed", 1.0)),
+            "pitch": int(kwargs.get("pitch", 0)),
+        }
+        if emotion:
+            extra["voice_setting"]["emotion"] = emotion
+    return text, voice, extra
+
 class GatewayTTSProvider(BaseTTSProvider):
     """TTS через OpenAI-совместимый маршрут: RouterAI — основной, AITUNNEL — резерв.
-    Модель задаётся в UI как 'provider/model' (например minimax/speech-01-hd)."""
+    Модель задаётся в UI как 'provider/model' (например minimax/speech-2.8-hd).
+    Для minimax/* нативные параметры (emotion, speed, pitch) уходят в extra_body.voice_setting."""
 
     def __init__(self, model: str):
         self.model = model
 
     async def generate_tts(self, text: str, voice_model: str, **kwargs):
         api_keys = kwargs.get("api_keys") or {}
-        voice = voice_model or 'nova'
-        # ponytail: спикеры OmniVoice локальные; у шлюза свои голоса — маппим на OpenAI-дефолт
-        if voice in ("aria", "marcus", "kolya", "kseniya", "alloy"):
-            voice = 'nova'
-        if voice == 'clone':
+        if voice_model == 'clone':
             raise RuntimeError("Клонирование голоса доступно только в локальном режиме (OmniVoice) — переключите режим на «Локально»")
+        is_minimax = self.model.lower().startswith("minimax/")
+        text, voice, extra_body = _gateway_prep(text, voice_model or 'nova', is_minimax, kwargs)
+
         from openai import AsyncOpenAI
         routes = [
             (api_keys.get('routerai') or os.environ.get('ROUTERAI_API_KEY', ''), 'https://routerai.ru/api/v1', 'RouterAI'),
             (api_keys.get('aitunnel') or os.environ.get('AITUNNEL_API_KEY', ''), 'https://api.aitunnel.ru/v1/', 'AITUNNEL'),
         ]
+        last_error = None
         for api_key, base, name in routes:
             if not api_key:
                 continue
             try:
                 client = AsyncOpenAI(api_key=api_key, base_url=base)
+                # AITUNNEL использует нативные id без префикса провайдера: minimax/speech-2.8-hd -> speech-2.8-hd
+                model = self.model.split("/", 1)[-1] if name == 'AITUNNEL' else self.model
                 response = await client.audio.speech.create(
-                    model=self.model,
+                    model=model,
                     voice=voice,
                     input=text,
                     response_format="wav",
+                    extra_body=extra_body or None,
                 )
                 output_path = kwargs.get("output_path", "")
                 if output_path:
@@ -228,7 +275,8 @@ class GatewayTTSProvider(BaseTTSProvider):
                 return
             except Exception as exc:
                 print(f"[WARN] {name} TTS error: {exc}. Переключение на следующий шлюз...")
-        raise RuntimeError("Gateway TTS недоступен: ключ не задан или сервисы не ответили")
+                last_error = exc
+        raise RuntimeError(f"Gateway TTS недоступен: {last_error or 'ключи не заданы'}")
 
 class TTSProviderFactory:
     @staticmethod
@@ -255,16 +303,30 @@ except Exception:
 if __name__ == "__main__":
     import asyncio
 
-    # pure-logic checks (без сети): маршрутизация движков и замена локальных спикеров
+    # pure-logic checks (без сети): маршрутизация движков, замена локальных спикеров, парсинг тегов озвучки
     async def _check():
         factory = TTSProviderFactory
         assert isinstance(factory.get_provider("k2-fsa/OmniVoice"), OmniVoiceProvider)
         assert isinstance(factory.get_provider("snakers4/silero-models"), SileroProvider)
         assert isinstance(factory.get_provider("openai/tts-1-hd"), GatewayTTSProvider)
-        assert isinstance(factory.get_provider("minimax/speech-01-hd"), GatewayTTSProvider)
-        assert isinstance(factory.get_provider("openai"), OpenAIProvider)
-        # clone в облаке запрещён, локальные спикеры замалплены на дефолт
-        gw = GatewayTTSProvider("minimax/speech-01-hd")
+        assert isinstance(factory.get_provider("minimax/speech-2.8-hd"), GatewayTTSProvider)
+        mm = factory.get_provider("minimax/speech-2.8-hd")
+        assert mm.model == "minimax/speech-2.8-hd"
+        assert factory.get_provider("openai") is not None
+        # emotion-тег вырезается и валидируется; whisper на 2.8 не поддержан -> auto
+        t, e = split_emotion_tag("  [emotion: angry] Какого черта это упало? ")
+        assert (t, e) == ("Какого черта это упало?", "angry")
+        t, e = split_emotion_tag("Стало страшно? <#1.5#> (sighs) [emotion: whisper] скорее нет")
+        assert e is None and "[emotion" not in t
+        assert clean_voice_tags("[emotion: calm] Я жду <#1.5#> (sighs) ответа.").lower().split() == ["я", "жду", "ответа."]
+        # шлюз: minimax получает очищенный текст + voice_setting.emotion в extra_body
+        t, v, extra = _gateway_prep("[emotion: sad] База исчезла.", "aria", True, {})
+        assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["emotion"] == "sad" and "[emotion" not in t
+        t, v, extra = _gateway_prep("[emotion: sad] Ок.", "marcus", False, {})
+        assert v == "nova" and extra == {}
+        # clone/локальные спикеры в облаке запрещены, без ключей — понятная ошибка
+        gw = GatewayTTSProvider("minimax/speech-2.8-hd")
+        assert gw.model.split("/", 1)[-1] == "speech-2.8-hd"  # AITUNNEL без префикса провайдера
         try:
             await gw.generate_tts("тест", "aria", api_keys={})
             raise AssertionError("aria должен был смапиться и упасть на отсутствии ключа")

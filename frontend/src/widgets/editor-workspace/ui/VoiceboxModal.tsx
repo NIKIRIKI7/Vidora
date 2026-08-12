@@ -1,6 +1,7 @@
 import type React from 'react'
 import type { ProjectSettings } from '@entities/project'
-import { Button, FieldGroup, Icon, Input, Modal } from '@shared/ui'
+import { Button, FieldGroup, Input, Modal } from '@shared/ui'
+import { Trash2, Upload } from 'lucide-react'
 
 interface Props {
   isOpen: boolean
@@ -56,7 +57,7 @@ export const VoiceboxModal = ({
             accept="audio/*"
             onChange={onUploadRefVoiceAudio}
           />
-          <Button variant="dashed" icon="upload" onClick={() => refVoiceInputRef.current?.click()}>
+          <Button variant="dashed" icon={Upload} onClick={() => refVoiceInputRef.current?.click()}>
             {newVoiceAudioPath ? 'Заменить референс' : 'Загрузить аудиофайл'}
           </Button>
           {newVoiceAudioPath && <span className="text-xs text-secondary font-mono truncate">{newVoiceAudioPath}</span>}
@@ -96,7 +97,7 @@ export const VoiceboxModal = ({
                 <span className="text-xxs text-on-surface-variant/60">{v.tags?.join(', ')}</span>
               </div>
               <button className="text-error hover:text-error/80 p-1" onClick={() => onDeleteCustomVoice(v.id)}>
-                <Icon name="delete" className="text-base" />
+                <Trash2 size={16} />
               </button>
             </div>
           ))}

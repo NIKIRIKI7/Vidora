@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
-import { Button, Icon, Spinner, ProgressBar } from '@shared/ui'
+import { Button, Spinner, ProgressBar } from '@shared/ui'
+import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 import { Timeline } from './Timeline'
 
@@ -106,7 +107,7 @@ export const CenterCanvas = ({
       <div className={`bg-black rounded-xl border border-white/10 shadow-2xl relative flex shrink-0 items-center justify-center overflow-hidden m-auto ${sizeClasses}`}>
         <div className="absolute top-4 right-4 z-20 flex gap-2">
           <button onClick={onCaptureFrame} className="bg-black/50 hover:bg-primary/50 backdrop-blur border border-white/20 p-2 rounded-lg text-white transition-colors" title="Снять скриншот для превью (Thumbnail)">
-            <Icon name="photo_camera" className="text-lg" />
+            <Camera size={18} />
           </button>
         </div>
 
@@ -115,7 +116,7 @@ export const CenterCanvas = ({
         ) : (
           <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-500">
             <div className="w-32 h-32 rounded-full bg-primary/20 blur-3xl absolute animate-pulse" />
-            <Icon name="movie_edit" className="text-6xl text-primary/40 relative z-10" />
+            <Clapperboard size={60} className="text-primary/40 relative z-10" />
             <span className="text-on-surface-variant font-medium relative z-10 text-center">Сцена не отрендерена<br /><span className="text-xs opacity-60">Cmd+Enter для сборки</span></span>
           </div>
         )}
@@ -128,7 +129,7 @@ export const CenterCanvas = ({
     <div className="w-full h-full flex flex-col gap-2">
       {activeScene?.ignoreTsx ? (
         <div className="w-full h-full flex flex-col items-center justify-center bg-black border border-white/10 rounded-xl text-on-surface-variant/60 font-mono text-sm gap-2">
-          <Icon name="block" className="text-4xl text-error" />
+          <Ban size={36} className="text-error" />
           <span>Игнорировать TSX включено</span>
         </div>
       ) : (
@@ -136,8 +137,8 @@ export const CenterCanvas = ({
           <div className="flex justify-between items-center bg-surface-container-lowest border border-white/10 rounded-lg p-2 shrink-0">
             <span className="text-xs text-on-surface-variant ml-2">Версия: {(activeScene?.historyIndex ?? 0) + 1} / {Math.max(1, (activeScene?.remotionCodeHistory?.length || 0))}</span>
             <div className="flex gap-1">
-              <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(-1)} disabled={(activeScene?.historyIndex ?? 0) <= 0}><Icon name="chevron_left" className="text-base" /> Пред</Button>
-              <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(1)} disabled={(activeScene?.historyIndex ?? 0) >= (activeScene?.remotionCodeHistory?.length || 1) - 1}>След <Icon name="chevron_right" className="text-base" /></Button>
+              <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(-1)} disabled={(activeScene?.historyIndex ?? 0) <= 0}><ChevronLeft size={16} /> Пред</Button>
+              <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(1)} disabled={(activeScene?.historyIndex ?? 0) >= (activeScene?.remotionCodeHistory?.length || 1) - 1}>След <ChevronRight size={16} /></Button>
             </div>
           </div>
           <textarea

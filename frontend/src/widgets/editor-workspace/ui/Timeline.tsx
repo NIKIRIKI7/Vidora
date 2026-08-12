@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import type { SceneFragment } from '@entities/project'
-import { Icon, Button } from '@shared/ui'
+import { Button } from '@shared/ui'
+import { Play, Pause, ZoomIn, ZoomOut } from 'lucide-react'
 
 interface TimelineProps {
   fragments: SceneFragment[]
@@ -170,17 +171,17 @@ export const Timeline = ({ fragments, videoRef, onUpdateBounds }: TimelineProps)
       <div className="h-10 border-b border-white/5 flex items-center px-4 justify-between bg-surface-container-lowest/50 shrink-0">
         <div className="flex items-center gap-4">
           <Button variant="ghost" className="p-1 w-8 h-8 rounded-full" onClick={togglePlay}>
-            <Icon name={isPlaying ? 'pause' : 'play_arrow'} className="text-[20px] text-primary" />
+            {isPlaying ? <Pause size={20} className="text-primary" /> : <Play size={20} className="text-primary" />}
           </Button>
           <span className="font-mono text-sm text-primary tracking-widest">{formatTime(currentTime)}</span>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" className="p-1 w-7 h-7" onClick={() => setZoom((z) => Math.max(20, z - 20))}>
-            <Icon name="zoom_out" className="text-[16px]" />
+            <ZoomOut size={16} />
           </Button>
           <span className="text-[10px] text-on-surface-variant font-mono w-8 text-center">{zoom}%</span>
           <Button variant="ghost" className="p-1 w-7 h-7" onClick={() => setZoom((z) => Math.min(300, z + 20))}>
-            <Icon name="zoom_in" className="text-[16px]" />
+            <ZoomIn size={16} />
           </Button>
         </div>
       </div>

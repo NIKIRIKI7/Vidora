@@ -154,6 +154,7 @@ class YouTubeManager:
             "channel": channel,
             "thumbnail_path": thumbnail_path,
             "transcript_sample": (transcript[:1500] + "...") if len(transcript) > 1500 else transcript,
+            "transcript_full": transcript,
         }
 
     async def generate_thumbnail_prompt(self, video_title: str, transcript: str, engine: str, api_keys: dict):

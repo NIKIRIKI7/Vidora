@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
-import { Button, FieldGroup, Icon, Select, Spinner, Switch } from '@shared/ui'
+import { Button, FieldGroup, Select, Spinner, Switch } from '@shared/ui'
+import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, SlidersHorizontal, MicVocal, Play, Lock, AlignStartVertical, RotateCcw, Cpu, AudioLines, Code, Copy, Film, FileOutput } from 'lucide-react'
 import { generateProjectPrompt, generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty } from '@widgets/editor-workspace/lib/helpers'
 
@@ -112,10 +113,10 @@ export const PipelineInspector = ({
           <section className="flex flex-col gap-3">
             <div className="flex justify-between items-center mb-2 gap-2">
               <span className="font-label text-sm font-semibold text-on-surface flex items-center gap-2 truncate">
-                <Icon name="view_timeline" className="text-[18px] text-primary"/> Фрагменты сцены
+                <Logs size={18} className="text-primary"/> Фрагменты сцены
               </span>
               <button className="text-[11px] text-primary bg-primary/10 border border-primary/30 hover:bg-primary/20 px-2 py-1 rounded transition-all flex items-center gap-1 font-medium active:scale-95 shrink-0" onClick={onAddFragment}>
-                <Icon name="add" className="text-[14px]" /> Добавить
+                <Plus size={14} /> Добавить
               </button>
             </div>
 
@@ -134,18 +135,18 @@ export const PipelineInspector = ({
                     if(res.ok) { onUpdateFragmentBRoll(frag.id, data.filename); onShowNotification('B-Roll привязан!', 'success'); }
                   } catch { onShowNotification('Ошибка загрузки медиа', 'error'); }
                 }} className={`p-3 bg-surface-container-lowest/40 border transition-colors rounded-xl flex flex-col gap-2 relative group ${dirtyAudio ? 'border-warning/30 hover:border-warning' : 'border-white/5 hover:border-secondary/30'}`}>
-                  <Icon name="drag_indicator" className="text-[12px] text-on-surface-variant/30 absolute -left-0.5 top-6 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
+                  <GripVertical size={12} className="text-on-surface-variant/30 absolute -left-0.5 top-6 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
 
                   <div className="flex justify-between items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => onNudgeTiming(frag.id, 'start', -0.1)} className="text-on-surface-variant hover:text-primary"><Icon name="remove" className="text-[12px]"/></button>
+                      <button onClick={() => onNudgeTiming(frag.id, 'start', -0.1)} className="text-on-surface-variant hover:text-primary"><Minus size={12}/></button>
                       <span className="text-[10px] font-mono text-secondary font-medium">{frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s</span>
-                      <button onClick={() => onNudgeTiming(frag.id, 'end', 0.1)} className="text-on-surface-variant hover:text-primary"><Icon name="add" className="text-[12px]"/></button>
+                      <button onClick={() => onNudgeTiming(frag.id, 'end', 0.1)} className="text-on-surface-variant hover:text-primary"><Plus size={12}/></button>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
                       <button className={`text-[11px] flex items-center gap-0.5 ${dirtyAudio ? 'text-warning hover:text-warning/80' : 'text-on-surface-variant hover:text-primary'}`} onClick={() => onRunVoiceGenFragment(activeScene.id, frag.id)} title={dirtyAudio ? 'Аудио устарело. Нажмите для переозвучки' : 'Переозвучить'}>
-                        <Icon name="mic" className="text-[14px]" />
+                        <Mic size={14} />
                       </button>
 
                       {frag.audioFileName && (
@@ -157,12 +158,12 @@ export const PipelineInspector = ({
                           a.click();
                           a.remove();
                         }} title="Скачать аудио">
-                          <Icon name="download" className="text-[14px]" />
+                          <Download size={14} />
                         </button>
                       )}
 
                       <label className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5 cursor-pointer" title="Заменить аудио фрагмента">
-                        <Icon name="upload" className="text-[14px]" />
+                        <Upload size={14} />
                         <input type="file" className="hidden" accept="audio/*" onChange={async (e) => {
                            const file = e.target.files?.[0];
                            if (!file) return;
@@ -186,7 +187,7 @@ export const PipelineInspector = ({
                       </label>
 
                       <button className="text-[11px] text-on-surface-variant hover:text-error transition-colors flex items-center gap-0.5" onClick={() => onDeleteFragment(frag.id)} title="Удалить фрагмент">
-                        <Icon name="delete" className="text-[14px]" />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -209,20 +210,20 @@ export const PipelineInspector = ({
             {/* Секция 1: Озвучка */}
             <section className="flex flex-col gap-3">
               <div className="flex justify-between items-center bg-primary/10 p-2 rounded-lg border border-primary/20 gap-2">
-                <span className="font-label text-xs uppercase tracking-wide text-primary flex items-center gap-1.5 truncate"><Icon name="mic" className="text-[16px]"/> Озвучка (TTS)</span>
+                <span className="font-label text-xs uppercase tracking-wide text-primary flex items-center gap-1.5 truncate"><Mic size={16}/> Озвучка (TTS)</span>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button className="text-[11px] text-primary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-primary/20 border border-primary/30" onClick={onOpenAiSettings} title="Настройки TTS"><Icon name="tune" className="text-[14px]" /></button>
-                  <button className="text-[11px] text-secondary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-secondary/20 border border-secondary/30" onClick={onOpenVoicebox} title="Voicebox (Клонирование)"><Icon name="record_voice_over" className="text-[14px]" /></button>
+                  <button className="text-[11px] text-primary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-primary/20 border border-primary/30" onClick={onOpenAiSettings} title="Настройки TTS"><SlidersHorizontal size={14} /></button>
+                  <button className="text-[11px] text-secondary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-secondary/20 border border-secondary/30" onClick={onOpenVoicebox} title="Voicebox (Клонирование)"><MicVocal size={14} /></button>
                 </div>
               </div>
 
               <FieldGroup label="Голосовая модель">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const url = isCustom ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Icon name="play_arrow" className="text-[16px]" /></button>
+                  <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const url = isCustom ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
                   {project.activeGlobalVoiceId ? (
                     <div className="flex-1 bg-primary/10 border border-primary/30 rounded-lg py-2 px-3 text-sm text-primary flex justify-between items-center shadow-inner min-w-0">
                       <span className="truncate pr-2">🌐 {useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)?.name}</span>
-                      <button className="text-primary hover:text-white shrink-0" title="Игнорируется, так как активен глобальный голос"><Icon name="lock" className="text-sm" /></button>
+                      <button className="text-primary hover:text-white shrink-0" title="Игнорируется, так как активен глобальный голос"><Lock size={14} /></button>
                     </div>
                   ) : (
                     <Select value={voiceModel} onChange={e => onChangeVoiceModel(e.target.value)} className="flex-1 min-w-0">
@@ -258,8 +259,8 @@ export const PipelineInspector = ({
                       a.remove();
                     } else { onShowNotification('Ошибка склейки', 'error'); }
                   } catch { onShowNotification('Сбой скачивания', 'error'); }
-                }} title="Скачать все аудио проекта одним файлом"><Icon name="download" className="text-[18px]" /></button>
-                <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors w-9 h-9 rounded hover:bg-white/5 border border-white/10" onClick={onResetAudio} title="Сбросить все аудио"><Icon name="delete" className="text-[18px]" /></button>
+                }} title="Скачать все аудио проекта одним файлом"><Download size={18} /></button>
+                <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors w-9 h-9 rounded hover:bg-white/5 border border-white/10" onClick={onResetAudio} title="Сбросить все аудио"><Trash2 size={18} /></button>
                 </div>
               </div>
             </section>
@@ -269,10 +270,10 @@ export const PipelineInspector = ({
             {/* Секция 2: Синхронизация */}
             <section className="flex flex-col gap-3">
               <div className="flex justify-between items-center bg-secondary/10 p-2 rounded-lg border border-secondary/20 gap-2">
-                <span className="font-label text-xs uppercase tracking-wide text-secondary flex items-center gap-1.5 truncate"><Icon name="align_horizontal_left" className="text-[16px]"/> Синхронизация</span>
+                <span className="font-label text-xs uppercase tracking-wide text-secondary flex items-center gap-1.5 truncate"><AlignStartVertical size={16}/> Синхронизация</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {project.scenes.some(s => s.fragments.some(f => f.startTime !== undefined)) && (
-                    <button className="text-[11px] text-error hover:text-white flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded bg-error/10 border border-error/30" onClick={onResetAllSync} title="Сбросить все тайминги"><Icon name="restart_alt" className="text-[14px]" /></button>
+                    <button className="text-[11px] text-error hover:text-white flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded bg-error/10 border border-error/30" onClick={onResetAllSync} title="Сбросить все тайминги"><RotateCcw size={14} /></button>
                   )}
                 </div>
               </div>
@@ -286,7 +287,7 @@ export const PipelineInspector = ({
                   <span className="flex-1 leading-tight">Авто-освобождение VRAM</span>
                   <input type="checkbox" checked={autoOffloadVram} onChange={e => onChangeAutoOffloadVram(e.target.checked)} className="accent-primary size-3.5 shrink-0" />
                 </label>
-                <button onClick={onUnloadVram} className="text-[11px] text-secondary hover:bg-secondary/10 px-2 py-0.5 rounded transition-all flex items-center gap-1 mt-1 self-start font-medium leading-tight h-auto text-left"><Icon name="memory" className="text-[14px]" /> Очистить VRAM вручную</button>
+                <button onClick={onUnloadVram} className="text-[11px] text-secondary hover:bg-secondary/10 px-2 py-0.5 rounded transition-all flex items-center gap-1 mt-1 self-start font-medium leading-tight h-auto text-left"><Cpu size={14} /> Очистить VRAM вручную</button>
               </div>
 
               <Button variant="dashed" disabled={isSyncing} onClick={onRunSync} className="h-auto py-2 leading-tight">{isSyncing ? <Spinner /> : 'Синхронизировать тайминги'}</Button>
@@ -297,7 +298,7 @@ export const PipelineInspector = ({
             {/* Секция 3: Мастеринг и обработка */}
             <section className="flex flex-col gap-3">
               <div className="flex justify-between items-center bg-warning/10 p-2 rounded-lg border border-warning/20 gap-2">
-                <span className="font-label text-xs uppercase tracking-wide text-warning flex items-center gap-1.5 truncate"><Icon name="graphic_eq" className="text-[16px]"/> Мастеринг аудио</span>
+                <span className="font-label text-xs uppercase tracking-wide text-warning flex items-center gap-1.5 truncate"><AudioLines size={16}/> Мастеринг аудио</span>
                 <div className="flex bg-surface-container-lowest border border-white/5 rounded-md p-0.5 shrink-0">
                   <button className={`text-[10px] px-2 py-1 rounded transition-colors ${processScope === 'scene' ? 'bg-warning/20 text-warning' : 'text-on-surface-variant hover:text-white'}`} onClick={() => setProcessScope('scene')}>Сцена</button>
                   <button className={`text-[10px] px-2 py-1 rounded transition-colors ${processScope === 'project' ? 'bg-warning/20 text-warning' : 'text-on-surface-variant hover:text-white'}`} onClick={() => setProcessScope('project')}>Проект</button>
@@ -315,10 +316,10 @@ export const PipelineInspector = ({
         {activeTab === 'visual' && (
           <section className="flex flex-col gap-3">
             <div className="flex justify-between items-center bg-accent/10 p-2 rounded-lg border border-accent/20 gap-2">
-              <span className="font-label text-xs uppercase tracking-wide text-accent flex items-center gap-1.5 truncate"><Icon name="code" className="text-[16px]"/> Код (TSX)</span>
+              <span className="font-label text-xs uppercase tracking-wide text-accent flex items-center gap-1.5 truncate"><Code size={16}/> Код (TSX)</span>
               <div className="flex flex-wrap gap-1 shrink-0 justify-end">
-                <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10" onClick={() => { if (activeScene) { void navigator.clipboard.writeText(generateRemotionPrompt(project, activeScene)); onShowNotification('Промпт сцены с таймкодами скопирован!', 'success') } }}><Icon name="content_copy" className="text-[12px]" /> Сцену</button>
-                <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10" onClick={() => { void navigator.clipboard.writeText(generateProjectPrompt(project)); onShowNotification('Промпт проекта скопирован!', 'success') }}><Icon name="content_copy" className="text-[12px]" /> Проект</button>
+                <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10" onClick={() => { if (activeScene) { void navigator.clipboard.writeText(generateRemotionPrompt(project, activeScene)); onShowNotification('Промпт сцены с таймкодами скопирован!', 'success') } }}><Copy size={12} /> Сцену</button>
+                <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10" onClick={() => { void navigator.clipboard.writeText(generateProjectPrompt(project)); onShowNotification('Промпт проекта скопирован!', 'success') }}><Copy size={12} /> Проект</button>
               </div>
             </div>
 
@@ -340,7 +341,7 @@ export const PipelineInspector = ({
         {activeTab === 'export' && (
           <section className="flex flex-col gap-3">
             <div className="flex justify-between items-center bg-success/10 p-2 rounded-lg border border-success/20 gap-2">
-              <span className="font-label text-xs uppercase tracking-wide text-success flex items-center gap-1.5 truncate"><Icon name="movie" className="text-[16px]"/> Сборка (Рендер)</span>
+              <span className="font-label text-xs uppercase tracking-wide text-success flex items-center gap-1.5 truncate"><Film size={16}/> Сборка (Рендер)</span>
             </div>
 
             <p className="text-xs text-on-surface-variant mb-2 leading-relaxed">
@@ -356,7 +357,7 @@ export const PipelineInspector = ({
                   Текущая сцена
                 </Button>
                 <Button variant="dashed" disabled={isRendering} onClick={onExportProject} className="flex-1 min-w-[120px] text-xs py-2 px-2 h-auto leading-tight">
-                  Экспорт ZIP <Icon name="file_export" className="text-[14px] ml-1" />
+                  Экспорт ZIP <FileOutput size={14} className="ml-1" />
                 </Button>
               </div>
             </div>

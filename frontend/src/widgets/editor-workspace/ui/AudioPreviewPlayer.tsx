@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button, ProgressBar } from '@shared/ui'
+import { Play, Pause } from 'lucide-react'
 import type { SceneFragment } from '@entities/project'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 
@@ -38,7 +39,7 @@ export const AudioPreviewPlayer = ({ audioPath, fragments, activeFragmentId, onA
     <div className="flex flex-col gap-2 p-3 bg-surface-container border border-white/10 rounded-xl">
       <audio ref={audioRef} src={`${API}/api/v1/render/media?path=${encodeURIComponent(audioPath)}`} onEnded={() => setIsPlaying(false)} />
       <div className="flex items-center gap-3">
-        <Button variant="icon" icon={isPlaying ? 'pause' : 'play_arrow'} onClick={() => {
+        <Button variant="icon" icon={isPlaying ? Pause : Play} onClick={() => {
           const audio = audioRef.current
           if (!audio) return
           if (isPlaying) { audio.pause() } else { audio.play() }
