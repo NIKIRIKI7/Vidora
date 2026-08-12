@@ -17,6 +17,7 @@ interface Props {
   onNewProject: () => void
   onUpdateProject: (project: ProjectSettings) => void
   onDeleteProject: (id: string) => void
+  onOpenGlobalSettings: () => void
 }
 
 export const EditorWorkspace = ({
@@ -26,6 +27,7 @@ export const EditorWorkspace = ({
   onNewProject,
   onUpdateProject,
   onDeleteProject,
+  onOpenGlobalSettings,
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
   const [settingsTab, setSettingsTab] = useState<'project' | 'ui'>('project')
@@ -84,6 +86,7 @@ export const EditorWorkspace = ({
         onSwitchProject={onSwitchProject}
         onNewProject={onNewProject}
         onOpenSettings={() => model.setIsSettingsOpen(true)}
+        onOpenGlobalSettings={onOpenGlobalSettings}
         onFullAutoPipeline={model.handleFullAutoPipeline}
       />
 
@@ -186,6 +189,7 @@ export const EditorWorkspace = ({
                 onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
                 onNudgeTiming={model.handleNudgeTiming}
                 onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
+                onUpdateActiveGlobalVoice={(id) => onUpdateProject({ ...project, activeGlobalVoiceId: id })}
               />
             </div>
           )}

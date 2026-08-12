@@ -55,8 +55,12 @@ const fmtDuration = (v: VideoResult) => {
   return `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}`
 }
 
+const isYoutubeUrl = (url: string) => {
+  return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url);
+}
+
 export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
-  const { apiKeys, cloudEngines, cloudProvider } = useSettingsStore()
+  const { apiKeys, cloudEngines, localEngines, cloudProvider, aiMode } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
 
   const activeApiKeys = {
@@ -72,7 +76,13 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const [nichePreset, setNichePreset] = useState(NICHE_PRESETS[1].id)
   const [customQuery, setCustomQuery] = useState('')
   const [channelContext, setChannelContext] = useState('')
-  const [agentEngine, setAgentEngine] = useState(cloudEngines.scenario || 'openai/gpt-4o')
+
+  const [localAiMode, setLocalAiMode] = useState<'cloud' | 'local'>(aiMode)
+  const [agentEngine, setAgentEngine] = useState(localAiMode === 'cloud' ? (cloudEngines.scenario || 'openai/gpt-4o') : (localEngines.scenario || 'gemma3:4b'))
+
+  useEffect(() => {
+    setAgentEngine(localAiMode === 'cloud' ? cloudEngines.scenario : localEngines.scenario)
+  }, [localAiMode, cloudEngines.scenario, localEngines.scenario])
 
   const [daysBack, setDaysBack] = useState(30)
   const [minSubs, setMinSubs] = useState(1000)
@@ -95,10 +105,38 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const [hookModalOpen, setHookModalOpen] = useState(false)
   const [isHookAnalyzing, setIsHookAnalyzing] = useState(false)
   const [hookData, setHookData] = useState<any>(null)
+  const [isAnalyzingChannel, setIsAnalyzingChannel] = useState(false)
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [agentLogs])
+
+  const handleAnalyzeChannel = async () => {
+    setIsAnalyzingChannel(true)
+    try {
+      const res = await fetch(`${API}/api/v1/youtube/agent/analyze-channel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url_or_name: channelContext,
+          engine: agentEngine,
+          youtube_key: apiKeys.youtube || '',
+          api_keys: activeApiKeys
+        })
+      })
+      const data = await res.json()
+      if (res.ok && data.status === 'ok') {
+        setChannelContext(data.context)
+        showNotification('Канал проанализирован!', 'success')
+      } else {
+        showNotification('Не удалось проанализировать канал', 'error')
+      }
+    } catch {
+      showNotification('Ошибка при анализе канала', 'error')
+    } finally {
+      setIsAnalyzingChannel(false)
+    }
+  }
 
   const handleSuggestCompetitors = async () => {
     const finalQuery = nichePreset === 'custom' ? customQuery : nichePreset
@@ -303,24 +341,53 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                 </FieldGroup>
               </div>
 
-              <FieldGroup label="О чем ваш канал? (Контекст)">
-                <textarea
-                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:border-primary/50"
-                  rows={2}
-                  value={channelContext}
-                  onChange={e => setChannelContext(e.target.value)}
-                  placeholder="Например: Я снимаю туториалы для новичков..."
-                />
-              </FieldGroup>
+        <FieldGroup label="О чем ваш канал? (Контекст)">
+          <div className="relative">
+            <textarea
+              className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 pb-8 text-sm text-on-surface resize-none focus:border-primary/50"
+              rows={3}
+              value={channelContext}
+              onChange={e => setChannelContext(e.target.value)}
+              placeholder="Вставьте ссылку на канал или опишите его (Например: Я снимаю туториалы для новичков...)"
+            />
+            {isYoutubeUrl(channelContext.trim()) && (
+              <div className="absolute bottom-2 right-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleAnalyzeChannel}
+                  disabled={isAnalyzingChannel}
+                  className="text-[10px] py-1 px-2 h-auto"
+                >
+                  {isAnalyzingChannel ? <Spinner className="w-3 h-3 mr-1" /> : <Sparkles size={12} className="mr-1" />}
+                  Анализировать канал
+                </Button>
+              </div>
+            )}
+          </div>
+        </FieldGroup>
 
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl flex flex-col gap-2">
+                <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
+                  <button onClick={() => setLocalAiMode('cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
+                  <button onClick={() => setLocalAiMode('local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
+                </div>
                 <FieldGroup label="LLM Движок (Агент)">
                   <Input list="agent-models" value={agentEngine} onChange={e => setAgentEngine(e.target.value)} className="text-xs font-mono" />
                   <datalist id="agent-models">
-                    <option value="anthropic/claude-sonnet-5" />
-                    <option value="anthropic/claude-3.5-sonnet" />
-                    <option value="openai/gpt-4o" />
-                    <option value="google/gemini-2.5-pro" />
+                    {localAiMode === 'cloud' ? (
+                      <>
+                        <option value="anthropic/claude-sonnet-5" />
+                        <option value="anthropic/claude-3.5-sonnet" />
+                        <option value="openai/gpt-4o" />
+                        <option value="google/gemini-2.5-pro" />
+                      </>
+                    ) : (
+                      <>
+                        <option value="gemma3:4b" />
+                        <option value="qwen2.5-coder" />
+                        <option value="llama3.1-8b" />
+                      </>
+                    )}
                   </datalist>
                 </FieldGroup>
               </div>

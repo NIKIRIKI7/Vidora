@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, FieldGroup, Select, Spinner, Switch } from '@shared/ui'
-import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, SlidersHorizontal, MicVocal, Play, Lock, AlignStartVertical, RotateCcw, Cpu, AudioLines, Code, Copy, Film, FileOutput } from 'lucide-react'
+import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, SlidersHorizontal, MicVocal, Play, AlignStartVertical, RotateCcw, Cpu, AudioLines, Code, Copy, Film, FileOutput } from 'lucide-react'
 import { generateProjectPrompt, generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty } from '@widgets/editor-workspace/lib/helpers'
 
@@ -45,6 +45,7 @@ interface Props {
   onUnlinkFragmentBRoll: (fragId: string) => void
   onNudgeTiming: (fragId: string, type: 'start' | 'end', delta: number) => void
   onReplaceFragmentAudio: (fragId: string, path: string) => void
+  onUpdateActiveGlobalVoice: (id: string | undefined) => void
 }
 
 type TabKey = 'content' | 'audio' | 'visual' | 'export';
@@ -54,8 +55,9 @@ export const PipelineInspector = ({
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onAddFragment, onDeleteFragment, onFragmentTextChange,
   onFragDragStart, onFragDrop, onOpenVoicebox, onOpenAiSettings, onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync,
   onResetAudio, onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onRunRender, onExportProject, onShowNotification,
-  onUpdateFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio
+  onUpdateFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio, onUpdateActiveGlobalVoice
 }: Props) => {
+  const { globalVoices } = useSettingsStore()
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('project')
 
   // Сохраняем состояние активной вкладки
@@ -219,20 +221,36 @@ export const PipelineInspector = ({
 
               <FieldGroup label="Голосовая модель">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const url = isCustom ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
-                  {project.activeGlobalVoiceId ? (
-                    <div className="flex-1 bg-primary/10 border border-primary/30 rounded-lg py-2 px-3 text-sm text-primary flex justify-between items-center shadow-inner min-w-0">
-                      <span className="truncate pr-2">🌐 {useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)?.name}</span>
-                      <button className="text-primary hover:text-white shrink-0" title="Игнорируется, так как активен глобальный голос"><Lock size={14} /></button>
-                    </div>
-                  ) : (
-                    <Select value={voiceModel} onChange={e => onChangeVoiceModel(e.target.value)} className="flex-1 min-w-0">
+                  <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel) || globalVoices.find(v => v.id === project.activeGlobalVoiceId); const url = isCustom?.refAudioPath ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
+                  <Select
+                    value={project.activeGlobalVoiceId ? `global_${project.activeGlobalVoiceId}` : voiceModel}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val.startsWith('global_')) {
+                        onUpdateActiveGlobalVoice(val.replace('global_', ''));
+                      } else {
+                        onUpdateActiveGlobalVoice(undefined);
+                        onChangeVoiceModel(val);
+                      }
+                    }}
+                    className="flex-1 min-w-0 font-medium"
+                  >
+                    <optgroup label="Базовые голоса (OmniVoice)">
                       <option value="aria">Neural - Aria (Женский)</option>
                       <option value="marcus">Neural - Marcus (Мужской)</option>
                       <option value="nova">Expressive - Nova (Энергичный)</option>
-                      {project.customVoices?.map(v => <option key={v.id} value={v.id}>🎙️ Cloned - {v.name}</option>)}
-                    </Select>
-                  )}
+                    </optgroup>
+                    {globalVoices.length > 0 && (
+                      <optgroup label="Глобальные голоса (Audio Hub)">
+                        {globalVoices.map(v => <option key={`global_${v.id}`} value={`global_${v.id}`}>🌐 {v.name}</option>)}
+                      </optgroup>
+                    )}
+                    {project.customVoices && project.customVoices.length > 0 && (
+                      <optgroup label="Локальные клоны проекта">
+                        {project.customVoices.map(v => <option key={v.id} value={v.id}>🎙️ Cloned - {v.name}</option>)}
+                      </optgroup>
+                    )}
+                  </Select>
                 </div>
               </FieldGroup>
 

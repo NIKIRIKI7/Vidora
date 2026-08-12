@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { Button, Input, Select, FieldGroup, Spinner } from '@shared/ui'
-import { ArrowLeft, Wand2, FileText, Download, FileUp } from 'lucide-react'
+import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy } from 'lucide-react'
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
-import { API } from '@widgets/editor-workspace/lib/helpers'
+import { API, formatTimecode } from '@widgets/editor-workspace/lib/helpers'
 import { useSettingsStore, useNotificationStore } from '@entities/project'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
-  const { apiKeys, cloudEngines, cloudProvider } = useSettingsStore()
+  const { apiKeys, cloudEngines, localEngines, cloudProvider, aiMode } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
 
   const activeApiKeys = {
@@ -32,15 +32,92 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const [localAiMode, setLocalAiMode] = useState<'cloud' | 'local'>(aiMode)
+  const [agentEngine, setAgentEngine] = useState(localAiMode === 'cloud' ? (cloudEngines.scenario || 'openai/gpt-4o') : (localEngines.scenario || 'gemma3:4b'))
+  const [customTopic, setCustomTopic] = useState('')
+  const [genFormat, setGenFormat] = useState<'long' | 'short'>('long')
+  const [genDuration, setGenDuration] = useState('3')
+
+  const estimatedDuration = useMemo(() => {
+    if (!markdown) return 0
+    let cleanText = markdown.replace(/^---\n[\s\S]+?\n---/, '')
+    cleanText = cleanText.replace(/\[.*?\]\s*\(.*?\)/g, '')
+    cleanText = cleanText.replace(/\*\([\s\S]*?\)\*/g, '')
+    const words = cleanText.split(/\s+/).filter(w => w.trim().length > 0)
+    return words.length / 2.5
+  }, [markdown])
+
+  const getScenarioPrompt = () => {
+    const globalPrompts = useSettingsStore.getState().globalPrompts;
+    const topic = idea ? idea.titles[0] : customTopic;
+    const desc = idea ? idea.description : '';
+    const formatText = genFormat === 'short' ? 'Вертикальный Shorts/Reels (сверхбыстрый темп, без воды)' : 'Горизонтальное длинное видео';
+    const wordsCount = Math.round(Number(genDuration) * 150);
+
+    const template = globalPrompts.scenario || `Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).\nНапиши подробный сценарий на тему: "{{TITLE}}".\n\nФормат видео: {{FORMAT_TEXT}}.\nОриентировочный хронометраж: {{DURATION}} мин. (напиши текст диктора объемом строго около {{WORDS_COUNT}} слов).\n\nОбязательные требования:\n1. Разбей сценарий на логические блоки: [Хук] (00:00:00), [Вступление], [Основная часть], [Кульминация], [Заключение]. Укажи примерные таймкоды.\n2. В начале каждого фрагмента укажи визуальную ремарку в скобках.\n3. Напиши текст для закадрового голоса.\n4. Все английские термины напиши русскими буквами.\n5. Верни сценарий строго в формате Markdown.`;
+
+    return template
+      .replace(/\{\{TITLE\}\}/g, topic)
+      .replace(/\{\{DESCRIPTION\}\}/g, desc)
+      .replace(/\{\{FORMAT_TEXT\}\}/g, formatText)
+      .replace(/\{\{DURATION\}\}/g, genDuration)
+      .replace(/\{\{WORDS_COUNT\}\}/g, wordsCount.toString());
+  }
+
+  const copyText = async (text: string): Promise<boolean> => {
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // fall through to execCommand fallback
+      }
+    }
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.opacity = "0";
+      document.body.prepend(textArea);
+      textArea.focus();
+      textArea.select();
+      const ok = document.execCommand('copy');
+      textArea.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  const handleCopyPrompt = async () => {
+    const topic = idea ? idea.titles[0] : customTopic;
+    if (!topic.trim()) { showNotification('Укажите тему для сценария', 'error'); return; }
+
+    const prompt = getScenarioPrompt();
+    const ok = await copyText(prompt);
+    if (ok) {
+      showNotification('Промпт скопирован в буфер обмена!', 'success');
+    } else {
+      console.error('Copy failed');
+      showNotification('Ошибка копирования. Скопируйте текст вручную.', 'error');
+    }
+  }
+
   const handleGenerateAI = async () => {
-    if (!idea) return
+    const topic = idea ? idea.titles[0] : customTopic;
+    const desc = idea ? idea.description : '';
+    if (!topic.trim()) { showNotification('Укажите тему для сценария', 'error'); return; }
+
     setIsGenerating(true)
     try {
+      const customPrompt = getScenarioPrompt();
       const res = await fetch(`${API}/api/v1/youtube/agent/draft-script`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: idea.titles[0], idea_description: idea.description,
-          channel_context: '', engine: cloudEngines.scenario, api_keys: activeApiKeys
+          title: topic, idea_description: desc,
+          channel_context: '', engine: agentEngine, api_keys: activeApiKeys,
+          video_type: genFormat, target_duration: genDuration, custom_prompt: customPrompt
         })
       })
       const data = await res.json()
@@ -103,14 +180,58 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6 custom-scrollbar">
-          {idea && (
-            <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex flex-col gap-3">
-              <span className="text-[10px] uppercase font-bold text-primary tracking-wider">Генерация</span>
-              <Button variant="primary" onClick={handleGenerateAI} disabled={isGenerating} className="w-full text-xs">
-                {isGenerating ? <Spinner /> : <><Wand2 size={16} /> Написать AI-Сценарий по Идее</>}
+          <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex flex-col gap-3">
+            <span className="text-[10px] uppercase font-bold text-primary tracking-wider">Генерация AI-сценария</span>
+            {!idea && (
+              <FieldGroup label="Тема для генерации (если лень писать)">
+                <Input value={customTopic} onChange={e => setCustomTopic(e.target.value)} placeholder="Например: Как работают нейросети" className="text-xs border-primary/30" />
+              </FieldGroup>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <FieldGroup label="Формат видео">
+                <Select value={genFormat} onChange={e => {
+                  setGenFormat(e.target.value as 'long'|'short');
+                  if (e.target.value === 'short') setGenDuration('1');
+                }} className="text-xs border-primary/30">
+                  <option value="long">Длинное (16:9)</option>
+                  <option value="short">Shorts (9:16)</option>
+                </Select>
+              </FieldGroup>
+              <FieldGroup label="Хронометраж (мин)">
+                <Input type="number" min={0.5} max={60} step={0.5} value={genDuration} onChange={e => setGenDuration(e.target.value)} className="text-xs border-primary/30" />
+              </FieldGroup>
+            </div>
+
+            <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
+              <button onClick={() => setLocalAiMode('cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
+              <button onClick={() => setLocalAiMode('local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
+            </div>
+            <Input list="agent-models" value={agentEngine} onChange={e => setAgentEngine(e.target.value)} className="text-xs font-mono" placeholder="LLM Движок (Агент)" />
+            <datalist id="agent-models">
+              {localAiMode === 'cloud' ? (
+                <>
+                  <option value="anthropic/claude-sonnet-5" />
+                  <option value="openai/gpt-4o" />
+                  <option value="google/gemini-2.5-pro" />
+                </>
+              ) : (
+                <>
+                  <option value="gemma3:4b" />
+                  <option value="qwen2.5-coder" />
+                  <option value="llama3.1-8b" />
+                </>
+              )}
+            </datalist>
+            <div className="flex gap-2">
+              <Button variant="primary" onClick={handleGenerateAI} disabled={isGenerating || (!idea && !customTopic.trim())} className="flex-1 text-xs px-2">
+                {isGenerating ? <Spinner /> : <><Wand2 size={14} className="mr-1" /> Написать Сценарий</>}
+              </Button>
+              <Button variant="dashed" onClick={handleCopyPrompt} disabled={isGenerating || (!idea && !customTopic.trim())} className="text-xs text-primary border-primary/30 hover:bg-primary/20 px-3 shrink-0" title="Скопировать промпт для ChatGPT / Claude">
+                <Copy size={14} className="mr-1" /> Промпт
               </Button>
             </div>
-          )}
+          </div>
 
           {videos && videos.length > 0 && (
             <div className="bg-secondary/10 border border-secondary/20 p-4 rounded-xl flex flex-col gap-3">
@@ -171,6 +292,10 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         </div>
 
         <div className="p-4 bg-surface-container-lowest/50 border-t border-white/5">
+          <div className="flex items-center justify-between mb-3 text-sm font-medium text-on-surface-variant bg-white/5 p-2 rounded-lg border border-white/10">
+            <span className="flex items-center gap-1.5"><Clock size={16} className="text-secondary" /> Хронометраж:</span>
+            <span className="text-secondary font-mono tracking-widest">{formatTimecode(estimatedDuration)}</span>
+          </div>
           <Button variant="primary" onClick={handleCreate} disabled={isGenerating || !name || !markdown} className="w-full py-3 shadow-[0_0_20px_rgba(221,183,255,0.2)]">
             <FileText size={18} /> Создать проект
           </Button>

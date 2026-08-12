@@ -4,13 +4,14 @@ import { EditorWorkspace } from '@widgets/editor-workspace'
 import { YoutubeIdeasView } from '@widgets/editor-workspace/ui/YoutubeIdeasView'
 import { ScenarioBuilder } from '@widgets/scenario-builder/ui/ScenarioBuilder'
 import { GlobalSettingsView } from '@widgets/global-settings'
+import { AudioHubView } from '@widgets/audio-hub'
 import { useProjectStore, useNotificationStore } from '@entities/project'
 import { Spinner } from '@shared/ui'
 import { CircleCheckBig, TriangleAlert, Info } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
 
-type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings'
+type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
 
 export const MainPage = () => {
   const [isBooting, setIsBooting] = useState(true)
@@ -84,9 +85,8 @@ export const MainPage = () => {
           }}
           onUpdateProject={updateProject}
           onDeleteProject={deleteProject}
+          onOpenGlobalSettings={() => setView('settings')}
         />
-      ) : view === 'settings' ? (
-        <GlobalSettingsView onBack={() => setView('hub')} />
       ) : view === 'ideas' ? (
         <YoutubeIdeasView
           onBack={() => setView('hub')}
@@ -106,6 +106,8 @@ export const MainPage = () => {
             setActiveProject(p.name)
           }}
         />
+      ) : view === 'audio-hub' ? (
+        <AudioHubView onBack={() => setView('hub')} />
       ) : (
         <ProjectCreator
           onGoIdeas={() => setView('ideas')}
@@ -115,10 +117,17 @@ export const MainPage = () => {
             setView('scenario')
           }}
           onGoSettings={() => setView('settings')}
+          onGoAudioHub={() => setView('audio-hub')}
           projects={projects}
           onOpenProject={setActiveProject}
           onDeleteProject={deleteProject}
         />
+      )}
+
+      {view === 'settings' && (
+        <div className="fixed inset-0 z-[150] bg-background">
+          <GlobalSettingsView onBack={() => setView('hub')} />
+        </div>
       )}
     </>
   )

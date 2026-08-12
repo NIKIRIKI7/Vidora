@@ -1,6 +1,6 @@
 import type { ProjectSettings } from '@entities/project'
 import { Button, Dropdown, DropdownItem } from '@shared/ui'
-import { Folder, ChevronDown, Plus, Settings, LayoutGrid, SquareCheckBig, Square, Zap } from 'lucide-react'
+import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap } from 'lucide-react'
 
 interface Props {
   project: ProjectSettings
@@ -13,6 +13,7 @@ interface Props {
   onSwitchProject: (id: string) => void
   onNewProject: () => void
   onOpenSettings: () => void
+  onOpenGlobalSettings: () => void
   onFullAutoPipeline: () => void
 }
 
@@ -27,6 +28,7 @@ export const EditorHeader = ({
   onSwitchProject,
   onNewProject,
   onOpenSettings,
+  onOpenGlobalSettings,
   onFullAutoPipeline,
 }: Props) => (
   <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
@@ -52,7 +54,10 @@ export const EditorHeader = ({
           <Plus size={16} className="inline mr-1" /> Новый проект
         </DropdownItem>
         <DropdownItem onClick={onOpenSettings}>
-          <Settings size={16} className="inline mr-1" /> Настройки
+          ⚙️ Настройки проекта
+        </DropdownItem>
+        <DropdownItem onClick={onOpenGlobalSettings}>
+          🌍 Глобальные настройки
         </DropdownItem>
       </Dropdown>
 

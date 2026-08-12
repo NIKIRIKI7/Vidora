@@ -90,6 +90,7 @@ export interface PromptTemplates {
   fragment: string
   project: string
   fixPacing: string
+  scenario: string
 }
 
 export interface SyncedSkills {

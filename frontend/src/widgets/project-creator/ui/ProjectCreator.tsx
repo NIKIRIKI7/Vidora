@@ -1,22 +1,23 @@
 import { Button } from '@shared/ui'
-import { Lightbulb, FileText, Folder, Trash2, Settings } from 'lucide-react'
+import { Lightbulb, FileText, Folder, Trash2, Globe, Mic } from 'lucide-react'
 import type { ProjectSettings } from '@entities/project'
 
 interface Props {
   onGoIdeas: () => void
   onGoScenario: () => void
   onGoSettings: () => void
+  onGoAudioHub: () => void
   projects: ProjectSettings[]
   onOpenProject: (id: string) => void
   onDeleteProject: (id: string) => void
 }
 
-export const ProjectCreator = ({ onGoIdeas, onGoScenario, onGoSettings, projects, onOpenProject, onDeleteProject }: Props) => {
+export const ProjectCreator = ({ onGoIdeas, onGoScenario, onGoSettings, onGoAudioHub, projects, onOpenProject, onDeleteProject }: Props) => {
   return (
     <div className="flex flex-col items-center min-h-dvh p-8 pb-20 bg-background overflow-y-auto custom-scrollbar relative">
 
-      <Button variant="ghost" icon={Settings} onClick={onGoSettings} className="absolute top-6 right-6 text-on-surface-variant hover:text-primary">
-        Настройки
+      <Button variant="ghost" icon={Globe} onClick={onGoSettings} className="absolute top-6 right-6 text-on-surface-variant hover:text-primary">
+        Глобальные настройки
       </Button>
 
       <div className="w-full max-w-4xl flex flex-col gap-10 mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -25,16 +26,16 @@ export const ProjectCreator = ({ onGoIdeas, onGoScenario, onGoSettings, projects
           <p className="text-on-surface-variant text-lg">AI-пайплайн для создания видео</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-gradient-to-br from-secondary/10 to-surface-container border border-secondary/30 p-8 rounded-3xl flex flex-col items-start gap-4 hover:border-secondary/60 transition-all group">
             <div className="w-14 h-14 bg-secondary/20 rounded-2xl flex items-center justify-center text-secondary group-hover:scale-110 transition-transform">
               <Lightbulb size={32} />
             </div>
-            <h3 className="text-2xl font-bold text-white">Найти идею на YouTube</h3>
+            <h3 className="text-xl font-bold text-white">Идеи на YouTube</h3>
             <p className="text-on-surface-variant text-sm leading-relaxed mb-4">
-              ИИ-агент проанализирует тренды, найдет аномалии конкурентов, украдет лучшие хуки и предложит готовую упаковку.
+              ИИ-агент проанализирует тренды и найдет аномалии конкурентов.
             </p>
-            <Button variant="secondary" onClick={onGoIdeas} className="mt-auto px-6 py-2.5 text-sm font-semibold">
+            <Button variant="secondary" onClick={onGoIdeas} className="mt-auto w-full py-2.5 text-sm font-semibold">
               Запустить Агента
             </Button>
           </div>
@@ -43,12 +44,25 @@ export const ProjectCreator = ({ onGoIdeas, onGoScenario, onGoSettings, projects
             <div className="w-14 h-14 bg-primary/20 rounded-2xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
               <FileText size={32} />
             </div>
-            <h3 className="text-2xl font-bold text-white">Создать из Markdown</h3>
+            <h3 className="text-xl font-bold text-white">Создать сценарий</h3>
             <p className="text-on-surface-variant text-sm leading-relaxed mb-4">
-              У вас уже есть готовый сценарий? Вставьте текст, настройте формат, цвета и сразу переходите к генерации видео.
+              Вставьте текст в Markdown, настройте формат и цвета.
             </p>
-            <Button variant="primary" onClick={onGoScenario} className="mt-auto px-6 py-2.5 text-sm font-semibold">
-              Написать сценарий
+            <Button variant="primary" onClick={onGoScenario} className="mt-auto w-full py-2.5 text-sm font-semibold">
+              Писать сценарий
+            </Button>
+          </div>
+
+          <div className="bg-gradient-to-br from-accent/10 to-surface-container border border-accent/30 p-8 rounded-3xl flex flex-col items-start gap-4 hover:border-accent/60 transition-all group">
+            <div className="w-14 h-14 bg-accent/20 rounded-2xl flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+              <Mic size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-white">Vidora Audio</h3>
+            <p className="text-on-surface-variant text-sm leading-relaxed mb-4">
+              Управление глобальными голосами, клонирование и генерация дикторов.
+            </p>
+            <Button variant="dashed" onClick={onGoAudioHub} className="mt-auto w-full py-2.5 text-sm font-semibold border-accent/50 text-accent hover:bg-accent/10 hover:text-accent">
+              База голосов
             </Button>
           </div>
         </div>

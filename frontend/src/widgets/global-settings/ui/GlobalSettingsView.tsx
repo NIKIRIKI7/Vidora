@@ -164,12 +164,12 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                     <div className="flex flex-col gap-4 mt-2">
                       <FieldGroup label="🧠 Модель для сценариев (Локально)">
                         <Input list="loc-scen" value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="loc-scen"><option value="qwen2.5-coder" /><option value="llama3.1-8b" /><option value="gemma3:4b" /></datalist>
+                        <datalist id="loc-scen"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="llama3.1-8b" /></datalist>
                       </FieldGroup>
 
                       <FieldGroup label="🎬 Модель для визуала и кода (Локально)">
                         <Input list="loc-vis" value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="loc-vis"><option value="qwen2.5-coder" /><option value="deepseek-coder-v2" /><option value="gemma3:4b" /></datalist>
+                        <datalist id="loc-vis"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="deepseek-coder-v2" /></datalist>
                       </FieldGroup>
 
                       <FieldGroup label="🎙️ Модель для озвучки (Локально)">
@@ -192,8 +192,12 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                 </div>
                 <div className="text-xs text-on-surface-variant bg-surface-container-lowest/50 border border-white/5 p-4 rounded-xl leading-relaxed font-mono">
                   <span className="text-primary font-bold">Доступные переменные:</span><br/>
-                  {`{{FORMAT}}, {{WIDTH}}, {{HEIGHT}}, {{DURATION}}, {{DURATION_FRAMES}}, {{FPS}}, {{COLORS}}, {{SCENE_TITLE}}, {{FRAGMENTS}}, {{VISUAL_NOTE}}, {{TEXT}}, {{SCENES_LIST}}, {{CURRENT_PACING}}, {{THRESHOLD}}, {{SCENE_MARKDOWN}}`}
+                  {`{{FORMAT}}, {{WIDTH}}, {{HEIGHT}}, {{DURATION}}, {{DURATION_FRAMES}}, {{FPS}}, {{COLORS}}, {{SCENE_TITLE}}, {{FRAGMENTS}}, {{VISUAL_NOTE}}, {{TEXT}}, {{SCENES_LIST}}, {{CURRENT_PACING}}, {{THRESHOLD}}, {{SCENE_MARKDOWN}}, {{TITLE}}, {{DESCRIPTION}}, {{FORMAT_TEXT}}, {{WORDS_COUNT}}`}
                 </div>
+
+                <FieldGroup label="Промпт для генерации Сценария">
+                  <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-4 text-[13px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar" rows={8} spellCheck={false} value={globalPrompts.scenario} onChange={e => setGlobalPrompts({ scenario: e.target.value })} />
+                </FieldGroup>
 
                 <FieldGroup label="Промпт для генерации Сцены">
                   <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-4 text-[13px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar" rows={6} spellCheck={false} value={globalPrompts.scene} onChange={e => setGlobalPrompts({ scene: e.target.value })} />

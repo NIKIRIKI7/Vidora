@@ -63,6 +63,53 @@ class YouTubeIdeaAgent:
         res = await self._call_llm(prompt, "", json_format=True, max_tokens=300)
         return self._extract_json(res)
 
+    async def analyze_channel(self, channel_url_or_name: str) -> str:
+        if not self.api_key:
+            return "Ошибка: YOUTUBE_API_KEY не задан."
+        base_url = "https://www.googleapis.com/youtube/v3"
+
+        query = channel_url_or_name.strip()
+        if "youtube.com" in query or "youtu.be" in query:
+            parts = [p for p in query.split("/") if p]
+            if parts:
+                query = parts[-1].split("?")[0]
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            search_res = await client.get(f"{base_url}/search", params={
+                "part": "snippet", "q": query, "type": "channel", "maxResults": 1, "key": self.api_key
+            })
+            search_data = search_res.json()
+            if not search_data.get("items"):
+                return "Не удалось найти канал."
+
+            channel_id = search_data["items"][0]["id"]["channelId"]
+            channel_res = await client.get(f"{base_url}/channels", params={
+                "part": "snippet,contentDetails", "id": channel_id, "key": self.api_key
+            })
+            channel_data = channel_res.json()
+            if not channel_data.get("items"):
+                return "Не удалось получить информацию о канале."
+
+            channel_info = channel_data["items"][0]
+            description = channel_info["snippet"].get("description", "")
+
+            try:
+                uploads_id = channel_info["contentDetails"]["relatedPlaylists"]["uploads"]
+                playlist_res = await client.get(f"{base_url}/playlistItems", params={
+                    "part": "snippet", "playlistId": uploads_id, "maxResults": 15, "key": self.api_key
+                })
+                playlist_data = playlist_res.json()
+                recent_videos = [item["snippet"]["title"] for item in playlist_data.get("items", [])]
+            except Exception:
+                recent_videos = []
+
+        videos_text = "\n".join([f"- {t}" for t in recent_videos])
+        prompt = f"Проанализируй описание YouTube-канала и названия его последних видео.\nНапиши кратко (2-3 предложения) от первого лица, о чем этот канал, в каком стиле и для кого он снимает видео.\n\nОписание канала:\n{description}\n\nПоследние видео:\n{videos_text}"
+        system_prompt = "Ты эксперт по YouTube. Отвечай кратко, емко и только от первого лица (Я снимаю...)."
+
+        res = await self._call_llm(system_prompt, prompt, max_tokens=300)
+        return res.strip()
+
     async def run_pipeline(self, user_query: str, settings: Dict[str, Any], project_path: str) -> AsyncGenerator[str, None]:
         def yield_log(msg: str, status: str = "info"):
             print(f"[YT_AGENT] {msg}")
@@ -202,7 +249,7 @@ Language: Russian."""
         res = await self._call_llm(prompt, f"TRANSCRIPT:\n{sample}", json_format=True, max_tokens=1000)
         return self._extract_json(res)
 
-    async def draft_script(self, title: str, description: str, context: str, lang: str = "ru") -> str:
+    async def draft_script(self, title: str, description: str, context: str, lang: str = "ru", video_type: str = "long", target_duration: str = "3", custom_prompt: str = "") -> str:
         """Создает черновой Markdown сценарий Vidora в 1 клик"""
         lang_map = {"ru": "Russian", "en": "English", "es": "Spanish"}
         target = lang_map.get(lang, "Russian")
@@ -211,10 +258,26 @@ Language: Russian."""
         if os.path.exists(skill_path):
             with open(skill_path, "r", encoding="utf-8") as f:
                 skill = f.read()
-        prompt = f"""You are a professional YouTube scriptwriter for a faceless tech channel.
+
+        if custom_prompt:
+            prompt = custom_prompt
+        else:
+            target_dur_float = 3.0
+            try:
+                if target_duration:
+                    target_dur_float = float(target_duration)
+            except Exception:
+                pass
+            format_instruction = "Формат: вертикальный Shorts/Reels (сверхбыстрый темп, удержание внимания, до 60 секунд)" if video_type == "short" else "Формат: классическое горизонтальное видео"
+            duration_instruction = f"- Ориентировочный хронометраж: {target_duration} минут (напиши текст для диктора объемом строго около {int(target_dur_float * 150)} слов). Рассчитывай объем текста исходя из того, что диктор читает ~150 слов в минуту." if target_duration else ""
+            prompt = f"""You are a professional YouTube scriptwriter for a faceless tech channel.
 Write a script draft for the video titled: "{title}".
 Idea context: {description}.
 Channel context: {context}.
+
+Requirements:
+- {format_instruction}
+{duration_instruction}
 
 RULES:
 - Output MUST be valid Vidora Markdown.

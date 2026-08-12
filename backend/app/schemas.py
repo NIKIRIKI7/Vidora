@@ -112,4 +112,8 @@ class RenderRequest(BaseModel):
     tsx_code: str = ""
     audio_path: Optional[str] = ""
 
+class TranscribeRequest(BaseModel):
+    audio_path: str
+    whisper_model: str = "small"
+
 

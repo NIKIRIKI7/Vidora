@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore", message=".*Audio is shorter than 30s.*")
 warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, AdvancedSilenceRequest
+from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, AdvancedSilenceRequest, TranscribeRequest
 from app.services.audio_service import AudioService
 from app.services.audio_provider import OmniVoiceProvider, clean_voice_tags
 
@@ -212,6 +212,32 @@ async def undo_audio(request: AudioProcessRequest):
         shutil.copy2(backup_path, audio_path)
         return {"status": "ok", "processed_audio_path": audio_path, "detail": "\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u044b"}
     return {"status": "error", "detail": "\u041d\u0435\u0442 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u0434\u043b\u044f \u043e\u0442\u043a\u0430\u0442\u0430"}
+
+@router.post("/transcribe")
+async def transcribe_audio(req: TranscribeRequest):
+    audio_path = _resolve_path(req.audio_path)
+    if not os.path.exists(audio_path):
+        return {"status": "error", "detail": "Файл не найден"}
+
+    try:
+        import whisperx
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
+
+        print(f"[AUDIO API] Загрузка WhisperX ({req.whisper_model}) для авто-транскрибации...")
+        model = whisperx.load_model(req.whisper_model, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
+        audio = whisperx.load_audio(audio_path)
+
+        print(f"[AUDIO API] Распознавание речи...")
+        result = model.transcribe(audio, batch_size=8, language="ru")
+
+        text = " ".join([seg["text"].strip() for seg in result["segments"]]).strip()
+        _free_vram()
+        return {"status": "ok", "text": text}
+    except Exception as e:
+        _free_vram()
+        return {"status": "error", "detail": str(e)}
 
 @router.post("/process/advanced-silence")
 async def process_advanced_silence(req: AdvancedSilenceRequest):

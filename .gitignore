@@ -82,3 +82,6 @@ test-results/
 .turbo/
 .vite/
 stats.html
+
+# Playwright MCP output
+.playwright-mcp/

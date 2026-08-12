@@ -37,10 +37,19 @@ class DraftReq(BaseModel):
     channel_context: str
     engine: str
     api_keys: dict
+    video_type: str = "long"
+    target_duration: str = "3"
+    custom_prompt: str = ""
 
 class SuggestCompetitorsReq(BaseModel):
     niche: str
     engine: str
+    api_keys: dict
+
+class AnalyzeChannelReq(BaseModel):
+    url_or_name: str
+    engine: str
+    youtube_key: str = ""
     api_keys: dict
 
 @router.post("/agent/stream")
@@ -64,7 +73,7 @@ async def analyze_hook(req: HookReq):
 async def draft_script(req: DraftReq):
     try:
         agent = YouTubeIdeaAgent(llm_engine=req.engine, api_keys=req.api_keys)
-        res = await agent.draft_script(req.title, req.idea_description, req.channel_context)
+        res = await agent.draft_script(req.title, req.idea_description, req.channel_context, video_type=req.video_type, target_duration=req.target_duration, custom_prompt=req.custom_prompt)
         return {"status": "ok", "markdown": res}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -75,6 +84,15 @@ async def suggest_competitors(req: SuggestCompetitorsReq):
         agent = YouTubeIdeaAgent(llm_engine=req.engine, api_keys=req.api_keys)
         res = await agent.suggest_competitors(req.niche)
         return {"status": "ok", "channels": res.get("channels", [])}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@router.post("/agent/analyze-channel")
+async def analyze_channel(req: AnalyzeChannelReq):
+    try:
+        agent = YouTubeIdeaAgent(llm_engine=req.engine, api_key=req.youtube_key, api_keys=req.api_keys)
+        res = await agent.analyze_channel(req.url_or_name)
+        return {"status": "ok", "context": res}
     except Exception as e:
         raise HTTPException(500, str(e))
 
