@@ -1,4 +1,4 @@
-import { useSettingsStore } from '@entities/project'
+import { useSettingsStore, getActivePrompt } from '@entities/project'
 import type { ProjectSettings, Scene, SceneFragment, VideoFormat, Resolution } from '@entities/project'
 
 const getDims = (res: Resolution, fmt: VideoFormat) => {
@@ -57,7 +57,7 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
   const globalPrompts = useSettingsStore.getState().globalPrompts
   const durationSec = getSceneDuration(scene.fragments)
 
-  const promptBody = replaceVars(project.promptOverrides?.scene || globalPrompts.scene, {
+  const promptBody = replaceVars(project.promptOverrides?.scene || getActivePrompt(globalPrompts.scene), {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
     DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
@@ -77,7 +77,7 @@ export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, f
   const globalPrompts = useSettingsStore.getState().globalPrompts
   const durationSec = Math.max((fragment.endTime || 5) - (fragment.startTime || 0), 1)
 
-  return replaceVars(project.promptOverrides?.fragment || globalPrompts.fragment, {
+  return replaceVars(project.promptOverrides?.fragment || getActivePrompt(globalPrompts.fragment), {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
     DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
@@ -95,7 +95,7 @@ export const generateProjectPrompt = (project: ProjectSettings): string => {
     return `### Сцена ${si + 1}: ${scene.title}\nТаймкод: ${scene.timecode} | Длительность: ~${Math.ceil(duration)}с\n${scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}: "${frag.text}"\n  Визуал: ${frag.visualNote}`).join('\n')}`
   }).join('\n\n')
 
-  return replaceVars(project.promptOverrides?.project || globalPrompts.project, {
+  return replaceVars(project.promptOverrides?.project || getActivePrompt(globalPrompts.project), {
     ...getBaseVars(project),
     SCENES_LIST: scenesList
   })

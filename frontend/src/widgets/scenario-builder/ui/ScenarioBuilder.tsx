@@ -4,7 +4,7 @@ import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy } from 'lucid
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 import { API, formatTimecode } from '@widgets/editor-workspace/lib/helpers'
-import { useSettingsStore, useNotificationStore } from '@entities/project'
+import { useSettingsStore, useNotificationStore, getActivePrompt } from '@entities/project'
 
 interface Props {
   idea?: any
@@ -54,7 +54,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
     const formatText = genFormat === 'short' ? 'Вертикальный Shorts/Reels (сверхбыстрый темп, без воды)' : 'Горизонтальное длинное видео';
     const wordsCount = Math.round(Number(genDuration) * 150);
 
-    const template = globalPrompts.scenario || `Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).\nНапиши подробный сценарий на тему: "{{TITLE}}".\n\nФормат видео: {{FORMAT_TEXT}}.\nОриентировочный хронометраж: {{DURATION}} мин. (напиши текст диктора объемом строго около {{WORDS_COUNT}} слов).\n\nОбязательные требования:\n1. Разбей сценарий на логические блоки: [Хук] (00:00:00), [Вступление], [Основная часть], [Кульминация], [Заключение]. Укажи примерные таймкоды.\n2. В начале каждого фрагмента укажи визуальную ремарку в скобках.\n3. Напиши текст для закадрового голоса.\n4. Все английские термины напиши русскими буквами.\n5. Верни сценарий строго в формате Markdown.`;
+    const template = getActivePrompt(globalPrompts.scenario) || `Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).\nНапиши подробный сценарий на тему: "{{TITLE}}".\n\nФормат видео: {{FORMAT_TEXT}}.\nОриентировочный хронометраж: {{DURATION}} мин. (напиши текст диктора объемом строго около {{WORDS_COUNT}} слов).\n\nОбязательные требования:\n1. Разбей сценарий на логические блоки: [Хук] (00:00:00), [Вступление], [Основная часть], [Кульминация], [Заключение]. Укажи примерные таймкоды.\n2. В начале каждого фрагмента укажи визуальную ремарку в скобках.\n3. Напиши текст для закадрового голоса.\n4. Все английские термины напиши русскими буквами.\n5. Верни сценарий строго в формате Markdown.`;
 
     return template
       .replace(/\{\{TITLE\}\}/g, topic)

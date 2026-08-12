@@ -1,15 +1,59 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2 } from 'lucide-react'
-import { useSettingsStore, useNotificationStore } from '@entities/project'
+import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2, Plus } from 'lucide-react'
+import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory } from '@entities/project'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 import { REMOTION_SKILLS } from '@shared/config'
+
+const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, categoryKey: keyof GlobalPromptSettings, rows: number }) => {
+  const { globalPrompts, setGlobalPrompts } = useSettingsStore()
+  const category = globalPrompts[categoryKey]
+  const activeVersion = category.versions.find(v => v.id === category.activeId) || category.versions[0]
+
+  const updateCategory = (updates: Partial<PromptCategory>) => setGlobalPrompts({ [categoryKey]: { ...category, ...updates } } as Partial<GlobalPromptSettings>)
+  const updateActiveVersion = (content: string) => updateCategory({ versions: category.versions.map(v => v.id === category.activeId ? { ...v, content } : v) })
+  const renameActiveVersion = (name: string) => updateCategory({ versions: category.versions.map(v => v.id === category.activeId ? { ...v, name } : v) })
+
+  const addNewVersion = () => {
+    const newId = crypto.randomUUID()
+    updateCategory({ activeId: newId, versions: [...category.versions, { id: newId, name: `Версия ${category.versions.length + 1}`, content: activeVersion.content }] })
+  }
+
+  const deleteActiveVersion = () => {
+    if (category.versions.length <= 1) return
+    const newVersions = category.versions.filter(v => v.id !== category.activeId)
+    updateCategory({ activeId: newVersions[0].id, versions: newVersions })
+  }
+
+  return (
+    <div className="flex flex-col gap-3 bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5">
+      <div className="flex justify-between items-center gap-4">
+        <span className="text-sm font-medium text-white flex-1">{label}</span>
+        <div className="flex items-center gap-2">
+          <Select value={category.activeId} onChange={(e) => updateCategory({ activeId: e.target.value })} className="w-48 text-xs py-1.5 font-medium">
+            {category.versions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </Select>
+          <Button variant="ghost" onClick={addNewVersion} className="p-1.5 text-secondary hover:text-white hover:bg-secondary/20" title="Клонировать и создать новую версию"><Plus size={16} /></Button>
+          <Button variant="ghost" disabled={category.versions.length <= 1} onClick={deleteActiveVersion} className="p-1.5 text-error hover:text-white hover:bg-error/20" title="Удалить активную версию"><Trash2 size={16} /></Button>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-on-surface-variant w-24">Имя версии:</span>
+        <Input value={activeVersion.name} onChange={(e) => renameActiveVersion(e.target.value)} className="text-xs py-1.5 bg-background" />
+      </div>
+      <textarea
+        className="w-full bg-background border border-white/10 rounded-lg p-3 text-[12px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
+        rows={rows} spellCheck={false} value={activeVersion.content} onChange={e => updateActiveVersion(e.target.value)}
+      />
+    </div>
+  )
+}
 
 export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
   const {
     aiMode, setAiMode, cloudProvider, setCloudProvider, apiKeys, setApiKey,
     cloudEngines, setCloudEngine, localEngines, setLocalEngine,
-    globalPrompts, setGlobalPrompts, resetGlobalPrompts,
+    resetGlobalPrompts,
     globalVoices, setGlobalVoices,
     visualPacingThreshold, setVisualPacingThreshold,
     audioSilenceThreshold, setAudioSilenceThreshold,
@@ -195,17 +239,11 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                   {`{{FORMAT}}, {{WIDTH}}, {{HEIGHT}}, {{DURATION}}, {{DURATION_FRAMES}}, {{FPS}}, {{COLORS}}, {{SCENE_TITLE}}, {{FRAGMENTS}}, {{VISUAL_NOTE}}, {{TEXT}}, {{SCENES_LIST}}, {{CURRENT_PACING}}, {{THRESHOLD}}, {{SCENE_MARKDOWN}}, {{TITLE}}, {{DESCRIPTION}}, {{FORMAT_TEXT}}, {{WORDS_COUNT}}`}
                 </div>
 
-                <FieldGroup label="Промпт для генерации Сценария">
-                  <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-4 text-[13px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar" rows={8} spellCheck={false} value={globalPrompts.scenario} onChange={e => setGlobalPrompts({ scenario: e.target.value })} />
-                </FieldGroup>
-
-                <FieldGroup label="Промпт для генерации Сцены">
-                  <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-4 text-[13px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar" rows={6} spellCheck={false} value={globalPrompts.scene} onChange={e => setGlobalPrompts({ scene: e.target.value })} />
-                </FieldGroup>
-
-                <FieldGroup label="Промпт для генерации Фрагмента">
-                  <textarea className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-4 text-[13px] font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar" rows={4} spellCheck={false} value={globalPrompts.fragment} onChange={e => setGlobalPrompts({ fragment: e.target.value })} />
-                </FieldGroup>
+                <PromptVersionEditor label="Промпт для генерации Сценария (LLM Агент)" categoryKey="scenario" rows={8} />
+                <PromptVersionEditor label="Промпт для генерации Сцены (Remotion TSX)" categoryKey="scene" rows={8} />
+                <PromptVersionEditor label="Промпт для генерации Фрагмента (Remotion TSX)" categoryKey="fragment" rows={8} />
+                <PromptVersionEditor label="Промпт для генерации всего Проекта (Remotion TSX)" categoryKey="project" rows={8} />
+                <PromptVersionEditor label="Промпт для исправления динамики (Pacing Fixer)" categoryKey="fixPacing" rows={8} />
 
                 <div className="p-5 bg-surface-container/30 border border-white/5 rounded-2xl mt-4">
                   <div className="flex items-center justify-between mb-3">

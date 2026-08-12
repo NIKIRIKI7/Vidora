@@ -85,6 +85,25 @@ export interface ApiKeys {
   youtube?: string
 }
 
+export interface PromptVersion {
+  id: string
+  name: string
+  content: string
+}
+
+export interface PromptCategory {
+  activeId: string
+  versions: PromptVersion[]
+}
+
+export interface GlobalPromptSettings {
+  scene: PromptCategory
+  fragment: PromptCategory
+  project: PromptCategory
+  fixPacing: PromptCategory
+  scenario: PromptCategory
+}
+
 export interface PromptTemplates {
   scene: string
   fragment: string

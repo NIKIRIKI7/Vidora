@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
-import type { ProjectSettings, PromptTemplates, ApiKeys, GlobalVoice } from './types'
+import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory } from './types'
 
 interface ProjectStore {
   projects: ProjectSettings[]
@@ -374,8 +374,19 @@ const ProductShowcase: React.FC = () => {
 
 export default ProductShowcase;`
 
-export const DEFAULT_PROMPTS: PromptTemplates = {
-  scene: `${REMOTION_EXPERT_PROMPT}
+export const getActivePrompt = (category?: PromptCategory): string => {
+  if (!category || !category.versions) return ''
+  const active = category.versions.find(v => v.id === category.activeId)
+  return active?.content || category.versions[0]?.content || ''
+}
+
+const createDefaultCategory = (content: string, name = 'Default'): PromptCategory => ({
+  activeId: 'default',
+  versions: [{ id: 'default', name, content }]
+})
+
+export const DEFAULT_PROMPTS: GlobalPromptSettings = {
+  scene: createDefaultCategory(`${REMOTION_EXPERT_PROMPT}
 
 {{USE_3D_INSTRUCTION}}
 
@@ -404,8 +415,8 @@ export const compositionConfig = {
 **Fragments (Sync animation to these timings):**
 {{FRAGMENTS}}
 
-Generate ONLY the complete TSX code for this scene. No markdown wrapping outside the code block, no explanations.`,
-  fragment: `${REMOTION_EXPERT_PROMPT}
+Generate ONLY the complete TSX code for this scene. No markdown wrapping outside the code block, no explanations.`, 'Default Scene (TSX)'),
+  fragment: createDefaultCategory(`${REMOTION_EXPERT_PROMPT}
 
 {{USE_3D_INSTRUCTION}}
 
@@ -434,8 +445,8 @@ export const compositionConfig = {
 **Visual:** {{VISUAL_NOTE}}
 **Voiceover:** "{{TEXT}}"
 
-Generate ONLY the complete TSX code for this fragment. No markdown wrapping outside the code block, no explanations.`,
-  project: `${REMOTION_EXPERT_PROMPT}
+Generate ONLY the complete TSX code for this fragment. No markdown wrapping outside the code block, no explanations.`, 'Default Fragment (TSX)'),
+  project: createDefaultCategory(`${REMOTION_EXPERT_PROMPT}
 
 {{USE_3D_INSTRUCTION}}
 
@@ -462,9 +473,9 @@ export const compositionConfig = {
 **Scenes List:**
 {{SCENES_LIST}}
 
-Generate ONLY the complete TSX code for the entire project. No markdown wrapping outside the code block, no explanations.`,
-  fixPacing: `Эта сцена слишком скучная и медленная (кадр меняется лишь раз в {{CURRENT_PACING}} сек, а нужно не реже чем раз в {{THRESHOLD}} сек).\nПожалуйста, перепиши эту сцену, чтобы она стала динамичнее. Разбей длинные фрагменты текста на более короткие и добавь к каждому новому фрагменту визуальную ремарку *(В таких скобках)*. Текст озвучки менять не нужно, просто добавь больше смен кадра (B-roll, зум, анимация).\n\nИсходная сцена:\n{{SCENE_MARKDOWN}}\n\nВерни только исправленный Markdown-код сцены:`,
-  scenario: `Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).
+Generate ONLY the complete TSX code for the entire project. No markdown wrapping outside the code block, no explanations.`, 'Default Project (TSX)'),
+  fixPacing: createDefaultCategory(`Эта сцена слишком скучная и медленная (кадр меняется лишь раз в {{CURRENT_PACING}} сек, а нужно не реже чем раз в {{THRESHOLD}} сек).\nПожалуйста, перепиши эту сцену, чтобы она стала динамичнее. Разбей длинные фрагменты текста на более короткие и добавь к каждому новому фрагменту визуальную ремарку *(В таких скобках)*. Текст озвучки менять не нужно, просто добавь больше смен кадра (B-roll, зум, анимация).\n\nИсходная сцена:\n{{SCENE_MARKDOWN}}\n\nВерни только исправленный Markdown-код сцены:`, 'Pacing Fixer'),
+  scenario: createDefaultCategory(`Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).
 Напиши подробный сценарий на тему: "{{TITLE}}".
 
 Детали идеи: {{DESCRIPTION}}
@@ -477,12 +488,12 @@ Generate ONLY the complete TSX code for the entire project. No markdown wrapping
 2. В начале каждого фрагмента укажи визуальную ремарку в скобках, например: *(Крупный план: код на экране)* или *(B-roll: серверная стойка)*.
 3. Напиши текст для закадрового голоса. Он должен быть динамичным, без ИИ-штампов ("Важно отметить", "Кроме того").
 4. Все английские термины напиши русскими буквами (например, "эпл", "пайтон", "энджинкс") для правильной работы синтезатора речи.
-5. Верни сценарий строго в формате Markdown.`
+5. Верни сценарий строго в формате Markdown.`, 'Scenario Creator')
 }
 
 interface SettingsStore {
-  globalPrompts: PromptTemplates
-  setGlobalPrompts: (prompts: Partial<PromptTemplates>) => void
+  globalPrompts: GlobalPromptSettings
+  setGlobalPrompts: (prompts: Partial<GlobalPromptSettings>) => void
   resetGlobalPrompts: () => void
 
   // --- AI: Облако / Локально, движок на каждую задачу ---
@@ -567,13 +578,41 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'vidora-settings',
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as object),
-        globalPrompts: { ...DEFAULT_PROMPTS, ...(persisted as Partial<SettingsStore>)?.globalPrompts },
-        globalVoices: (persisted as Partial<SettingsStore>)?.globalVoices || [],
-        uiPreferences: { ...DEFAULT_UI_PREFS, ...(persisted as Partial<SettingsStore>)?.uiPreferences },
-      }),
+      merge: (persisted, current) => {
+        const persistedObj = persisted as Partial<SettingsStore> | undefined
+        const persistedPrompts = persistedObj?.globalPrompts as unknown
+        const migratedPrompts: GlobalPromptSettings = { ...DEFAULT_PROMPTS }
+
+        if (persistedPrompts) {
+          if (typeof (persistedPrompts as Record<string, unknown>).scene === 'string') {
+            // Миграция старых плоских строк -> категория с legacy-версией
+            const old = persistedPrompts as Record<string, string>
+            for (const k of Object.keys(DEFAULT_PROMPTS)) {
+              const key = k as keyof GlobalPromptSettings
+              if (old[key]) {
+                migratedPrompts[key] = {
+                  activeId: 'legacy',
+                  versions: [...DEFAULT_PROMPTS[key].versions, { id: 'legacy', name: 'Мой промпт (Legacy)', content: old[key] }],
+                }
+              }
+            }
+          } else {
+            for (const k of Object.keys(DEFAULT_PROMPTS)) {
+              const key = k as keyof GlobalPromptSettings
+              const v = (persistedPrompts as Record<string, PromptCategory | undefined>)[key]
+              if (v && Array.isArray(v.versions) && v.versions.length > 0) migratedPrompts[key] = v
+            }
+          }
+        }
+
+        return {
+          ...current,
+          ...(persistedObj as object),
+          globalPrompts: migratedPrompts,
+          globalVoices: persistedObj?.globalVoices || [],
+          uiPreferences: { ...DEFAULT_UI_PREFS, ...persistedObj?.uiPreferences },
+        }
+      },
     } satisfies PersistOptions<SettingsStore>
   )
 )

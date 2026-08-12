@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type ChangeEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice, VideoFormat } from '@entities/project'
-import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeSceneToMarkdown, parseSceneMarkdown, serializeProjectToMarkdown } from '@entities/project'
+import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeSceneToMarkdown, parseSceneMarkdown, serializeProjectToMarkdown, getActivePrompt } from '@entities/project'
 import { generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import { API, getProjectPath, parseTcString, hashCode, sanitizeFilename } from '@widgets/editor-workspace/lib/helpers'
@@ -425,7 +425,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     const scene = project.scenes.find(s => s.id === sceneId)
     if (!scene) return
     const md = serializeSceneToMarkdown(scene)
-    const template = project.promptOverrides?.fixPacing || useSettingsStore.getState().globalPrompts.fixPacing || ''
+    const template = project.promptOverrides?.fixPacing || getActivePrompt(useSettingsStore.getState().globalPrompts.fixPacing) || ''
     const prompt = template
       .replace(/\{\{CURRENT_PACING\}\}/g, currentPacing.toFixed(1))
       .replace(/\{\{THRESHOLD\}\}/g, threshold.toString())
