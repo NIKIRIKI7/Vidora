@@ -14,7 +14,7 @@ interface Props {
 }
 
 export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
-  const { apiKeys, cloudEngines, localEngines, cloudProvider, aiMode } = useSettingsStore()
+  const { apiKeys, cloudEngines, localEngines, cloudProvider, taskModes, setTaskMode, setCloudEngine, setLocalEngine } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
 
   const activeApiKeys = {
@@ -32,8 +32,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [localAiMode, setLocalAiMode] = useState<'cloud' | 'local'>(aiMode)
-  const [agentEngine, setAgentEngine] = useState(localAiMode === 'cloud' ? (cloudEngines.scenario || 'openai/gpt-4o') : (localEngines.scenario || 'gemma3:4b'))
+  const agentEngine = taskModes.scenario === 'cloud' ? cloudEngines.scenario : localEngines.scenario
   const [customTopic, setCustomTopic] = useState('')
   const [genFormat, setGenFormat] = useState<'long' | 'short'>('long')
   const [genDuration, setGenDuration] = useState('3')
@@ -116,7 +115,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
       const st = useSettingsStore.getState();
       const activeProj = useProjectStore.getState().projects.find(p => p.name === useProjectStore.getState().activeProjectId);
       const activeVoice = st.globalVoices.find(v => v.id === activeProj?.activeGlobalVoiceId) || st.globalVoices[0];
-      const audioEngine = activeVoice?.ttsEngine || (aiMode === 'cloud' ? cloudEngines.audio : localEngines.audio) || '';
+      const audioEngine = activeVoice?.ttsEngine || (st.taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio) || '';
       const res = await fetch(`${API}/api/v1/youtube/agent/draft-script`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,12 +209,12 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
             </div>
 
             <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
-              <button onClick={() => setLocalAiMode('cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
-              <button onClick={() => setLocalAiMode('local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
+              <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
+              <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
             </div>
-            <Input list="agent-models" value={agentEngine} onChange={e => setAgentEngine(e.target.value)} className="text-xs font-mono" placeholder="LLM Движок (Агент)" />
+            <Input list="agent-models" value={agentEngine} onChange={e => taskModes.scenario === 'cloud' ? setCloudEngine('scenario', e.target.value) : setLocalEngine('scenario', e.target.value)} className="text-xs font-mono" placeholder="LLM Движок (Агент)" />
             <datalist id="agent-models">
-              {localAiMode === 'cloud' ? (
+              {taskModes.scenario === 'cloud' ? (
                 <>
                   <option value="anthropic/claude-sonnet-5" />
                   <option value="openai/gpt-4o" />

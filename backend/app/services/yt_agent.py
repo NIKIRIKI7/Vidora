@@ -801,8 +801,10 @@ Language: Russian."""
         lang_map = {"ru": "Russian", "en": "English", "es": "Spanish"}
         target = lang_map.get(lang, "Russian")
         skill = None
-        # ponytail: две версии скила сценариста — под движок озвучки (MiniMax по умолчанию / OmniVoice)
-        skill_name = "tech_scriptwriter_omnivoice.md" if "omnivoice" in audio_engine.lower() else "tech_scriptwriter_minimax.md"
+        # ponytail: локальные LLM-TTS (OmniVoice/Qwen/Moss/Silero) не понимают теги MiniMax — отдельный скил
+        _LOCAL_TTS_MARKERS = ("omnivoice", "qwen-tts", "moss-tts", "silero")
+        is_local_tts = any(m in audio_engine.lower() for m in _LOCAL_TTS_MARKERS)
+        skill_name = "tech_scriptwriter_omnivoice.md" if is_local_tts else "tech_scriptwriter_minimax.md"
         skill_path = os.path.join(os.path.dirname(__file__), "prompts", skill_name)
         if os.path.exists(skill_path):
             with open(skill_path, "r", encoding="utf-8") as f:

@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, AdvancedSilenceRequest, TranscribeRequest
 from app.services.audio_service import AudioService
-from app.services.audio_provider import OmniVoiceProvider, clean_voice_tags
+from app.services.audio_provider import OmniVoiceProvider, LocalLLMTTSProvider, clean_voice_tags
 
 # ponytail: avoid Cyrillic in cache path — torch.jit.load uses fopen() which
 # garbles non-ASCII on Windows. Keep models under ~/.cache (always ASCII).
@@ -102,6 +102,8 @@ def _make_fallback_response(fragments, reason: str = "", audio_dur: float = 0.0)
 async def unload_vram_endpoint():
     print("[VRAM] Запрос на ручную очистку памяти GPU...")
     OmniVoiceProvider.unload_model()
+    # ponytail: LLM-TTS живёт в subprocess — VRAM освобождается при его завершении; вызов no-op для надёжности
+    LocalLLMTTSProvider.unload_model()
     _free_vram()
     return {"status": "ok", "detail": "VRAM полностью очищена"}
 
@@ -155,9 +157,10 @@ async def process_audio(request: AudioProcessRequest):
 
     cmds = {
         "normalize": ["ffmpeg", "-y", "-i", audio_path, "-af", "loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
-        "denoise": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn", temp_out],
-        "enhance": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,acompressor,equalizer=f=3000:width_type=h:width=200:g=3", temp_out],
-        "mastering": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,afftdn,acompressor=ratio=4:makeup=2,loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
+        # ponytail: agate срезает тихое шипение/потрескивание LLM-TTS (<-40dB) перед шумодавом/компрессией
+        "denoise": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,agate=threshold=-40dB:ratio=10:attack=10:release=250,afftdn", temp_out],
+        "enhance": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,agate=threshold=-40dB:ratio=10:attack=10:release=250,acompressor,equalizer=f=3000:width_type=h:width=200:g=3", temp_out],
+        "mastering": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,agate=threshold=-40dB:ratio=10:attack=10:release=250,afftdn,acompressor=ratio=4:makeup=2,loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
     }
 
     if request.action == "silero_vad":
@@ -333,8 +336,9 @@ async def sync_audio(request: AudioSyncRequest):
         return _make_fallback_response(request.fragments, reason="Файл аудио не найден", audio_dur=audio_dur)
 
     if request.auto_offload_vram:
-        print("[AUDIO SYNC] [VRAM] Выгрузка OmniVoice из памяти GPU...")
+        print("[AUDIO SYNC] [VRAM] Выгрузка локальных TTS из памяти GPU...")
         OmniVoiceProvider.unload_model()
+        LocalLLMTTSProvider.unload_model()
 
     try:
         import whisperx

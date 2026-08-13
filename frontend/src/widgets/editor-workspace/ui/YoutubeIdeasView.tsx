@@ -60,7 +60,7 @@ const isYoutubeUrl = (url: string) => {
 }
 
 export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
-  const { apiKeys, cloudEngines, localEngines, cloudProvider, aiMode } = useSettingsStore()
+  const { apiKeys, cloudEngines, localEngines, cloudProvider, taskModes, setTaskMode, setCloudEngine, setLocalEngine } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
 
   const activeApiKeys = {
@@ -78,12 +78,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const [customQuery, setCustomQuery] = useState('')
   const [channelContext, setChannelContext] = useState('')
 
-  const [localAiMode, setLocalAiMode] = useState<'cloud' | 'local'>(aiMode)
-  const [agentEngine, setAgentEngine] = useState(localAiMode === 'cloud' ? (cloudEngines.scenario || 'openai/gpt-4o') : (localEngines.scenario || 'gemma3:4b'))
-
-  useEffect(() => {
-    setAgentEngine(localAiMode === 'cloud' ? cloudEngines.scenario : localEngines.scenario)
-  }, [localAiMode, cloudEngines.scenario, localEngines.scenario])
+  const agentEngine = taskModes.scenario === 'cloud' ? cloudEngines.scenario : localEngines.scenario
 
   const [daysBack, setDaysBack] = useState(30)
   const [minSubs, setMinSubs] = useState(1000)
@@ -379,13 +374,13 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
 
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl flex flex-col gap-2">
                 <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
-                  <button onClick={() => setLocalAiMode('cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
-                  <button onClick={() => setLocalAiMode('local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${localAiMode === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
+                  <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
+                  <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
                 </div>
                 <FieldGroup label="LLM Движок (Агент)">
-                  <Input list="agent-models" value={agentEngine} onChange={e => setAgentEngine(e.target.value)} className="text-xs font-mono" />
+                  <Input list="agent-models" value={agentEngine} onChange={e => taskModes.scenario === 'cloud' ? setCloudEngine('scenario', e.target.value) : setLocalEngine('scenario', e.target.value)} className="text-xs font-mono" />
                   <datalist id="agent-models">
-                    {localAiMode === 'cloud' ? (
+                    {taskModes.scenario === 'cloud' ? (
                       <>
                         <option value="anthropic/claude-sonnet-5" />
                         <option value="anthropic/claude-3.5-sonnet" />

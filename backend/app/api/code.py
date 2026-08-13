@@ -103,6 +103,18 @@ async def generate_code(request: CodeGenerationRequest):
             except Exception as api_err:
                 return {"status": "error", "tsx_code": f"// Ошибка API ({model}): {api_err}"}
 
+        # Локальная GGUF-модель из ai-models (llama_cpp) — фоллбэк на Ollama
+        try:
+            from app.services.llama_local import resolve_gguf, local_generate
+            if resolve_gguf(engine):
+                text = await local_generate(engine, "", request.prompt)
+                if text:
+                    tsx_code = _extract_tsx(text)
+                    _save_code(request, tsx_code)
+                    return {"status": "ok", "tsx_code": tsx_code}
+        except Exception:
+            pass
+
         try:
             async with httpx.AsyncClient() as client:
                 res = await client.post(

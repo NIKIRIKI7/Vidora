@@ -1,6 +1,67 @@
 import type { Scene, ProjectSettings, SceneFragment, FPS } from '../model/types'
 import type { AppColors } from '@shared/config'
 
+const parseMarkdownCore = (rawContent: string): SceneFragment[] => {
+  const fragments: SceneFragment[] = []
+  // Разбиваем контент по визуальным ремаркам вида *(...)*
+  const fragmentRegex = /\*\(([\s\S]*?)\)\*/g
+  let lastIndex = 0
+  let match
+
+  while ((match = fragmentRegex.exec(rawContent)) !== null) {
+    // Текст перед найденной ремаркой принадлежит ПРЕДЫДУЩЕМУ фрагменту
+    const textBefore = rawContent.slice(lastIndex, match.index).trim()
+    if (textBefore) {
+      if (fragments.length > 0) {
+        fragments[fragments.length - 1].text += (fragments[fragments.length - 1].text ? ' ' : '') + textBefore.replace(/\n/g, ' ')
+      } else {
+        // Если текст есть до первой ремарки
+        fragments.push({
+          id: crypto.randomUUID(),
+          visualNote: 'A-roll: Без ремарок',
+          text: textBefore.replace(/\n/g, ' '),
+          startTime: null,
+          endTime: null,
+        })
+      }
+    }
+
+    // Добавляем новый фрагмент с ремаркой (текст заполнится на следующей итерации или в конце)
+    fragments.push({
+      id: crypto.randomUUID(),
+      visualNote: match[1].trim(),
+      text: '',
+      startTime: null,
+      endTime: null,
+    })
+    lastIndex = fragmentRegex.lastIndex
+  }
+
+  // Забираем весь оставшийся текст после последней ремарки
+  const remainingText = rawContent.slice(lastIndex).trim()
+  if (remainingText) {
+    if (fragments.length > 0) {
+      fragments[fragments.length - 1].text += (fragments[fragments.length - 1].text ? ' ' : '') + remainingText.replace(/\n/g, ' ')
+    } else {
+      // Если ремарок вообще не было
+      fragments.push({
+        id: crypto.randomUUID(),
+        visualNote: 'A-roll: Без ремарок',
+        text: remainingText.replace(/\n/g, ' '),
+        startTime: null,
+        endTime: null,
+      })
+    }
+  }
+
+  // Финальная зачистка пробелов
+  fragments.forEach(f => {
+    f.text = f.text.trim()
+  })
+
+  return fragments
+}
+
 export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> => {
   const result: Partial<ProjectSettings> = {
     metadata: { title: '', description: '', tags: [] },
@@ -40,7 +101,7 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
 
     const fpsMatch = yamlStr.match(/fps:\s*(\d+)/)
     if (fpsMatch) result.montage!.fps = fpsMatch[1] as FPS
-
+      
     const use3dMatch = yamlStr.match(/use_3d:\s*(true|false)/)
     if (use3dMatch) result.use3D = use3dMatch[1] === 'true'
 
@@ -54,9 +115,8 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
   }
 
   const bodyText = markdown.replace(/^---\n[\s\S]+?\n---/, '')
-  const sceneRegex = /\[(.*?)\]\s*\((.*?)\)([\s\S]*?)(?=\[|$)/g
+  const sceneRegex = /\[(.*?)\]\s*\(([\d:.\s-]+)\)([\s\S]*?)(?=\n[#\s]*\[.*\]\s*\([\d:.\s-]+\)|$)/g
   let sceneMatch
-
   const scenes: Scene[] = []
 
   while ((sceneMatch = sceneRegex.exec(bodyText)) !== null) {
@@ -64,27 +124,7 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
     const timecode = sceneMatch[2].trim()
     const rawContent = sceneMatch[3].trim()
 
-    const fragmentRegex = /\*\((.*?)\)\*\s*([^*[]+)/g
-    const fragments: SceneFragment[] = []
-    let fragMatch
-
-    while ((fragMatch = fragmentRegex.exec(rawContent)) !== null) {
-      fragments.push({
-        id: crypto.randomUUID(),
-        visualNote: fragMatch[1].trim(),
-        text: fragMatch[2].trim().replace(/\n/g, ' '),
-        startTime: null,
-        endTime: null,
-      })
-    }
-
-    if (fragments.length === 0 && rawContent) {
-      fragments.push({
-        id: crypto.randomUUID(),
-        visualNote: 'A-roll: Без ремарок',
-        text: rawContent.trim()
-      })
-    }
+    const fragments = parseMarkdownCore(rawContent)
 
     scenes.push({ id: crypto.randomUUID(), title, timecode, fragments })
   }
@@ -95,6 +135,7 @@ export const parseMarkdownFull = (markdown: string): Partial<ProjectSettings> =>
 
 export const serializeProjectToMarkdown = (project: ProjectSettings): string => {
   const { metadata, montage, scenes } = project
+
   const yaml = [
     '---',
     `title: "${metadata.title || project.name}"`,
@@ -116,11 +157,11 @@ export const serializeProjectToMarkdown = (project: ProjectSettings): string => 
   const body = scenes.map(s => {
     const header = `[${s.title}] (${s.timecode || '00:00:00'})`
     const frags = s.fragments.map(f => {
-      if (f.visualNote) {
+      if (f.visualNote && f.visualNote !== 'A-roll: Без ремарок') {
         return `*(${f.visualNote})* ${f.text}`
       }
       return f.text
-    }).join('\n')
+    }).join('\n\n')
     return `${header}\n${frags}`
   }).join('\n\n')
 
@@ -129,19 +170,15 @@ export const serializeProjectToMarkdown = (project: ProjectSettings): string => 
 
 export const serializeSceneToMarkdown = (s: Scene): string => {
   const header = `[${s.title}] (${s.timecode || '00:00:00'})`
-  const frags = s.fragments.map(f => f.visualNote ? `*(${f.visualNote})* ${f.text}` : f.text).join('\n')
+  const frags = s.fragments.map(f => (f.visualNote && f.visualNote !== 'A-roll: Без ремарок') ? `*(${f.visualNote})* ${f.text}` : f.text).join('\n\n')
   return `${header}\n${frags}`
 }
 
 export const parseSceneMarkdown = (md: string): Omit<Scene, 'id'> | null => {
-  const match = /\[(.*?)\]\s*\((.*?)\)([\s\S]*)/.exec(md.trim())
+  const match = /\[(.*?)\]\s*\(([\d:.\s-]+)\)([\s\S]*)/.exec(md.trim())
   if (!match) return null
-  const fragments: SceneFragment[] = []
-  const fragmentRegex = /\*\((.*?)\)\*\s*([^*[]+)/g
-  let fragMatch
-  while ((fragMatch = fragmentRegex.exec(match[3].trim())) !== null) {
-    fragments.push({ id: crypto.randomUUID(), visualNote: fragMatch[1].trim(), text: fragMatch[2].trim().replace(/\n/g, ' ') })
-  }
-  if (fragments.length === 0 && match[3].trim()) fragments.push({ id: crypto.randomUUID(), visualNote: 'A-roll: Без ремарок', text: match[3].trim() })
+
+  const fragments = parseMarkdownCore(match[3].trim())
+
   return { title: match[1].trim(), timecode: match[2].trim(), fragments }
 }

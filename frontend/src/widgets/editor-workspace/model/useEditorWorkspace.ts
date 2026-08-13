@@ -65,7 +65,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const showNotification = useNotificationStore(s => s.showNotification)
   const undo = useProjectStore(s => s.undo)
   const redo = useProjectStore(s => s.redo)
-  const aiMode = useSettingsStore(s => s.aiMode)
+  const taskModes = useSettingsStore(s => s.taskModes)
   const cloudProvider = useSettingsStore(s => s.cloudProvider)
   const cloudEngines = useSettingsStore(s => s.cloudEngines)
   const localEngines = useSettingsStore(s => s.localEngines)
@@ -78,8 +78,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     aitunnel: cloudProvider === 'aitunnel' ? apiKeys.aitunnel : undefined,
   }
 
-  const ttsEngine = aiMode === 'cloud' ? cloudEngines.audio : localEngines.audio
-  const llmEngine = aiMode === 'cloud' ? cloudEngines.visual : localEngines.visual
+  const ttsEngine = taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio
+  const llmEngine = taskModes.visual === 'cloud' ? cloudEngines.visual : localEngines.visual
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 

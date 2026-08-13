@@ -13,6 +13,8 @@ frontend/release/
 __pycache__/
 backend/*.spec
 backend/.venv/
+backend/.venv-qwen/
+backend/.venv-moss/
 backend/test_render.py
 .pytest_cache/
 .mypy_cache/

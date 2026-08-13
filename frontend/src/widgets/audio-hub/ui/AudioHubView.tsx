@@ -1,11 +1,20 @@
 import { useState, useRef } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Mic, Plus, Trash2, Upload, Play, AudioLines, BrainCircuit, Wand2, Save } from 'lucide-react'
+import { ArrowLeft, Mic, Plus, Trash2, Upload, Play, AudioLines, BrainCircuit, Wand2, Save, Dices } from 'lucide-react'
 import { useSettingsStore, useNotificationStore, type GlobalVoice } from '@entities/project'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 
+const RANDOM_DESIGN_PROMPTS = [
+  'Глубокий мужской голос, спокойный, с легкой хрипотцой, рассказывает документальный фильм, русский язык',
+  'Энергичный женский голос, радостный, говорит быстро, интонация блогера, русский язык',
+  'Низкий мужской голос, уставший, говорит медленно, русский язык',
+  'Звонкий женский голос, очень эмоциональный, русский язык',
+  'Спокойный женский голос, ASMR, говорит тихо с придыханием, русский язык',
+  'Молодой парень, гик, увлеченно рассказывает про программирование, русский язык',
+]
+
 export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
-  const { globalVoices, setGlobalVoices, aiMode, cloudEngines, localEngines, apiKeys, cloudProvider } = useSettingsStore()
+  const { globalVoices, setGlobalVoices, taskModes, cloudEngines, localEngines, apiKeys, cloudProvider } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
   const activeApiKeys = {
     ...apiKeys,
@@ -30,7 +39,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
     const newVoice: GlobalVoice = {
       id: newId,
       name: 'Новый голос',
-      ttsEngine: aiMode === 'cloud' ? cloudEngines.audio : localEngines.audio,
+      ttsEngine: taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio,
       voiceModel: 'aria',
       settings: { speed: 1.0, guidanceScale: 3.0, numSteps: 32 }
     }
@@ -41,6 +50,12 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
   const updateActiveVoice = (updates: Partial<GlobalVoice>) => {
     if (!activeVoiceId) return
     setGlobalVoices(globalVoices.map(v => v.id === activeVoiceId ? { ...v, ...updates } : v))
+  }
+
+  const handleRandomDesignPrompt = () => {
+    if (!activeVoice) return
+    const prompt = RANDOM_DESIGN_PROMPTS[Math.floor(Math.random() * RANDOM_DESIGN_PROMPTS.length)]
+    updateActiveVoice({ designPrompt: prompt })
   }
 
   const handleUploadRef = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,6 +260,10 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     />
                     <datalist id="tts-engines">
                       <option value="k2-fsa/OmniVoice" />
+                      <option value="qwen-tts/voice-design" />
+                      <option value="qwen-tts/clone" />
+                      <option value="qwen-tts/custom-voice" />
+                      <option value="moss-tts/local" />
                       <option value="minimax/speech-2.8-hd" />
                       <option value="openai/tts-1-hd" />
                     </datalist>
@@ -255,7 +274,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                         <option value="aria">aria (OmniVoice)</option>
                         <option value="marcus">marcus (OmniVoice)</option>
                         <option value="nova">nova (OmniVoice/OpenAI)</option>
-                        <option value="English_expressive_narrator">English_expressive_narrator (MiniMax)</option>
+                        <option value="Russian_ReliableMan">Russian_ReliableMan (MiniMax)</option>
                       </optgroup>
                       <optgroup label="Генерация и Копирование">
                         <option value="clone">Клонирование по аудио (Voice Cloning)</option>
@@ -316,9 +335,14 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
               {activeVoice.voiceModel === 'design' && (
                 <div className="bg-surface-container/40 p-6 rounded-2xl border border-secondary/30 flex flex-col gap-5 shadow-[0_0_20px_rgba(79,219,200,0.05)]">
-                  <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
-                    <Wand2 size={18} /> Дизайн голоса
-                  </h3>
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
+                      <Wand2 size={18} /> Дизайн голоса
+                    </h3>
+                    <Button variant="dashed" onClick={handleRandomDesignPrompt} className="text-xs text-secondary border-secondary/30 hover:bg-secondary/10 py-1 px-2 h-auto">
+                      <Dices size={14} className="mr-1" /> Случайный промпт
+                    </Button>
+                  </div>
                   <FieldGroup label="Описание голоса (Промпт)">
                     <textarea
                       className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:border-secondary/50"
@@ -328,6 +352,9 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                       placeholder="Например: Глубокий мужской голос, спокойный, с легкой хрипотцой, подходит для документалок..."
                     />
                   </FieldGroup>
+                  <div className="text-[10px] text-on-surface-variant/80 bg-black/20 p-3 rounded-lg border border-white/5 leading-relaxed">
+                    💡 <b>Совет для Qwen/Moss 1.7b:</b> модели чувствительны к описанию. Добавляйте «русский язык, четкая дикция» в конец описания, чтобы избежать случайного акцента.
+                  </div>
                 </div>
               )}
               <div className="flex items-center gap-4 mt-6">

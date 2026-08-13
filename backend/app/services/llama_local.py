@@ -5,7 +5,7 @@ from pathlib import Path
 
 _AI_MODELS_DIR = Path(__file__).resolve().parents[2] / "ai-models"
 
-_model = None
+_models: dict = {}
 _model_lock = threading.Lock()
 _gen_lock = threading.Lock()
 
@@ -20,18 +20,21 @@ def resolve_gguf(engine: str):
 
 
 def _get_model(gguf_path: Path):
-    global _model
-    if _model is None:
-        from llama_cpp import Llama
-        _model = Llama(
-            model_path=str(gguf_path),
-            n_ctx=16384,
-            n_threads=max(os.cpu_count() or 4, 4),
-            # ponytail: GPU-слои выставляются переменной окружения; CPU-по умолчанию безопасно
-            n_gpu_layers=int(os.environ.get("VIDORA_LLAMA_GPU_LAYERS", "0")),
-            verbose=False,
-        )
-    return _model
+    key = str(gguf_path)
+    with _model_lock:
+        model = _models.get(key)
+        if model is None:
+            from llama_cpp import Llama
+            model = Llama(
+                model_path=key,
+                n_ctx=16384,
+                n_threads=max(os.cpu_count() or 4, 4),
+                # ponytail: GPU-слои выставляются переменной окружения; CPU-по умолчанию безопасно
+                n_gpu_layers=int(os.environ.get("VIDORA_LLAMA_GPU_LAYERS", "0")),
+                verbose=False,
+            )
+            _models[key] = model
+        return model
 
 
 def _generate_sync(engine: str, system_prompt: str, user_prompt: str, tools: list = None, available_functions: dict = None) -> str:

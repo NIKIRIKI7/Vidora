@@ -22,6 +22,9 @@ export interface AudioOptions {
 }
 
 const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSettings, opts: AudioOptions) => {
+  // ponytail: наследуем эмоцию первой фразы сцены во все фрагменты без своего [emotion: x] — единый тон всего блока
+  const sceneEmotion = scene.fragments[0]?.text.match(/\[emotion:\s*[a-z-]+\]/i)?.[0] || ''
+  const fragText = frag.text.match(/\[emotion:\s*[a-z-]+\]/i) ? frag.text : sceneEmotion ? `${sceneEmotion} ${frag.text}` : frag.text
   let finalVoiceModel = opts.voiceModel
   let finalSpeed = opts.speed
   let finalNumSteps = opts.numSteps
@@ -62,7 +65,7 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
   }
 
   return {
-    fragment_id: frag.id, file_prefix: `Frag_${sanitizeFilename(scene.title)}`, text: frag.text,
+    fragment_id: frag.id, file_prefix: `Frag_${sanitizeFilename(scene.title)}`, text: fragText,
     voice_model: finalVoiceModel,
     ref_audio_path: finalRefAudioPath,
     ref_text: finalRefText,

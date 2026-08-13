@@ -137,7 +137,7 @@ const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, cate
 
 export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
   const {
-    aiMode, setAiMode, cloudProvider, setCloudProvider, apiKeys, setApiKey,
+    taskModes, setTaskMode, cloudProvider, setCloudProvider, apiKeys, setApiKey,
     cloudEngines, setCloudEngine, localEngines, setLocalEngine,
     resetGlobalPrompts,
     globalVoices, setGlobalVoices,
@@ -216,131 +216,132 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
 
             {activeTab === 'ai' && (
               <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="flex p-1 bg-surface-container-lowest/50 rounded-xl border border-white/10 shrink-0">
-                  <button onClick={() => setAiMode('cloud')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-colors ${aiMode === 'cloud' ? 'bg-primary/20 text-primary shadow-md border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>
-                    <Cloud size={16} className="inline mr-2" /> Облако (API)
-                  </button>
-                  <button onClick={() => setAiMode('local')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-colors ${aiMode === 'local' ? 'bg-success/20 text-success shadow-md border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>
-                    <Server size={16} className="inline mr-2" /> Локально (GPU)
-                  </button>
+                <div className="flex items-center gap-3 bg-surface-container-lowest/50 rounded-xl p-4 border border-white/5">
+                  <div className={`w-3 h-3 rounded-full shadow-lg ${hardware?.vram_gb && hardware.vram_gb >= 8 ? 'bg-success shadow-success/50' : 'bg-warning shadow-warning/50'}`} />
+                  <div className="text-sm text-on-surface-variant font-mono">
+                    {hardware ? `${hardware.device} · VRAM: ${hardware.vram_gb.toFixed(1)}GB · RAM: ${hardware.ram_gb.toFixed(1)}GB` : 'Проверка оборудования...'}
+                  </div>
                 </div>
 
-                {aiMode === 'cloud' ? (
-                  <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
-                    <h3 className="text-lg font-bold text-white mb-2">Настройки облачных провайдеров</h3>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-surface-container-lowest/40 p-5 rounded-xl border border-primary/20 shadow-inner">
-                      <FieldGroup label="Провайдер API (Шлюз)">
-                        <Select value={cloudProvider} onChange={e => setCloudProvider(e.target.value as 'routerai'|'aitunnel')}>
-                          <option value="routerai">RouterAI (По умолчанию)</option>
-                          <option value="aitunnel">AITunnel</option>
-                        </Select>
-                      </FieldGroup>
-
-                      <FieldGroup label={`API Ключ (${cloudProvider === 'routerai' ? 'RouterAI' : 'AITunnel'})`}>
-                        <div className="relative">
-                          <Input
-                            type={showKey ? 'text' : 'password'}
-                            value={apiKeys[cloudProvider] || ''}
-                            onChange={e => setApiKey(cloudProvider, e.target.value)}
-                            placeholder={`sk-${cloudProvider}-...`}
-                            className="font-mono text-xs pr-10"
-                          />
-                          <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-white transition-colors">
-                            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
-                        </div>
-                      </FieldGroup>
-                    </div>
-                    <div className="grid grid-cols-1 gap-6 bg-surface-container-lowest/40 p-5 rounded-xl border border-error/20 shadow-inner mt-4">
-                      <FieldGroup label="YouTube Data API v3 Ключ (Для поиска идей)">
-                        <div className="relative">
-                          <Input
-                            type={showKey ? 'text' : 'password'}
-                            value={apiKeys.youtube || ''}
-                            onChange={e => setApiKey('youtube', e.target.value)}
-                            placeholder="AIzaSy..."
-                            className="font-mono text-xs pr-10"
-                          />
-                          <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-white transition-colors">
-                            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-on-surface-variant mt-1">Необходим для работы агента-аналитика и поиска вирусных видео.</p>
-                      </FieldGroup>
-                    </div>
-
-                    <div className="flex flex-col gap-4 mt-2">
-                      <FieldGroup label="🧠 Модель для сценариев (LLM)">
-                        <Input list="cloud-scen" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="cloud-scen">
-                          <option value="anthropic/claude-sonnet-5" />
-                          <option value="anthropic/claude-3.5-sonnet" />
-                          <option value="openai/gpt-4o" />
-                          <option value="deepseek/deepseek-r1" />
-                        </datalist>
-                      </FieldGroup>
-
-                      <FieldGroup label="🎬 Модель для визуала и кода (Remotion TSX)">
-                        <Input list="cloud-vis" value={cloudEngines.visual} onChange={e => setCloudEngine('visual', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="cloud-vis">
-                          <option value="anthropic/claude-sonnet-5" />
-                          <option value="google/gemini-2.5-flash" />
-                          <option value="openai/gpt-4o" />
-                        </datalist>
-                      </FieldGroup>
-
-                      <FieldGroup label="🎙️ Модель для озвучки (TTS)">
-                        <Input list="cloud-aud" value={cloudEngines.audio} onChange={e => setCloudEngine('audio', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="cloud-aud">
-                          <option value="minimax/speech-2.8-hd" />
-                          <option value="minimax/speech-2.8-turbo" />
-                          <option value="minimax/speech-2.6-hd" />
-                          <option value="openai/tts-1-hd" />
-                        </datalist>
-                      </FieldGroup>
-                    </div>
+                <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
+                  <h3 className="text-lg font-bold text-white mb-2">Глобальные настройки (API Ключи)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-surface-container-lowest/40 p-5 rounded-xl border border-primary/20 shadow-inner">
+                    <FieldGroup label="Провайдер API (Шлюз)">
+                      <Select value={cloudProvider} onChange={e => setCloudProvider(e.target.value as 'routerai'|'aitunnel')}>
+                        <option value="routerai">RouterAI (По умолчанию)</option>
+                        <option value="aitunnel">AITunnel</option>
+                      </Select>
+                    </FieldGroup>
+                    <FieldGroup label={`API Ключ (${cloudProvider === 'routerai' ? 'RouterAI' : 'AITunnel'})`}>
+                      <div className="relative">
+                        <Input
+                          type={showKey ? 'text' : 'password'}
+                          value={apiKeys[cloudProvider] || ''}
+                          onChange={e => setApiKey(cloudProvider, e.target.value)}
+                          placeholder={`sk-${cloudProvider}-...`}
+                          className="font-mono text-xs pr-10"
+                        />
+                        <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-white transition-colors">
+                          {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </FieldGroup>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
-                    <div className="flex items-center gap-3 bg-surface-container-lowest/50 rounded-xl p-4 border border-white/5">
-                      <div className={`w-3 h-3 rounded-full shadow-lg ${hardware?.vram_gb && hardware.vram_gb >= 8 ? 'bg-success shadow-success/50' : 'bg-warning shadow-warning/50'}`} />
-                      <div className="text-sm text-on-surface-variant font-mono">
-                        {hardware ? `${hardware.device} · VRAM: ${hardware.vram_gb.toFixed(1)}GB · RAM: ${hardware.ram_gb.toFixed(1)}GB` : 'Проверка оборудования...'}
+                  <div className="grid grid-cols-1 gap-6 bg-surface-container-lowest/40 p-5 rounded-xl border border-error/20 shadow-inner mt-4">
+                    <FieldGroup label="YouTube Data API v3 Ключ (Для поиска идей)">
+                      <div className="relative">
+                        <Input
+                          type={showKey ? 'text' : 'password'}
+                          value={apiKeys.youtube || ''}
+                          onChange={e => setApiKey('youtube', e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="font-mono text-xs pr-10"
+                        />
+                        <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-white transition-colors">
+                          {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
                       </div>
-                    </div>
-
-                    <div className="bg-surface-container-lowest/40 p-5 rounded-xl border border-white/5 flex flex-col gap-4">
-                      <div className="flex items-center gap-2">
-                        <Download size={20} className="text-success" />
-                        <span className="text-sm font-medium text-white">Скачать модель (Hugging Face / Ollama)</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input placeholder="Например: Qwen/Qwen2.5-Coder-7B" value={hfPullUrl} onChange={(e) => setHfPullUrl(e.target.value)} className="font-mono text-sm flex-1" />
-                        <Button variant="primary" onClick={() => handlePull(hfPullUrl)} disabled={!hfPullUrl || pulling !== null} className="bg-success hover:bg-success/80 text-black shrink-0 px-6">
-                          {pulling ? <Spinner /> : 'Pull'}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-4 mt-2">
-                      <FieldGroup label="🧠 Модель для сценариев (Локально)">
-                        <Input list="loc-scen" value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="loc-scen"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="llama3.1-8b" /></datalist>
-                      </FieldGroup>
-
-                      <FieldGroup label="🎬 Модель для визуала и кода (Локально)">
-                        <Input list="loc-vis" value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="loc-vis"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="deepseek-coder-v2" /></datalist>
-                      </FieldGroup>
-
-                      <FieldGroup label="🎙️ Модель для озвучки (Локально)">
-                        <Input list="loc-aud" value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} className="font-mono text-sm" />
-                        <datalist id="loc-aud"><option value="k2-fsa/OmniVoice" /><option value="snakers4/silero-models" /><option value="F5-TTS" /></datalist>
-                      </FieldGroup>
-                    </div>
+                      <p className="text-[10px] text-on-surface-variant mt-1">Необходим для работы агента-аналитика и поиска вирусных видео.</p>
+                    </FieldGroup>
                   </div>
-                )}
+                </div>
+
+                <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
+                  <h3 className="text-lg font-bold text-white mb-2">🧠 Сценарии и Идеи (LLM)</h3>
+                  <div className="flex p-1 bg-surface-container-lowest/50 rounded-xl border border-white/10 shrink-0">
+                    <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary shadow-md border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Cloud size={16} className="inline mr-2" /> Облако
+                    </button>
+                    <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success shadow-md border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Server size={16} className="inline mr-2" /> Локально
+                    </button>
+                  </div>
+                  <FieldGroup label={`Модель для сценариев (${taskModes.scenario === 'cloud' ? 'Облако' : 'Локально'})`}>
+                    {taskModes.scenario === 'cloud' ? (
+                      <Input list="cloud-scen" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} className="font-mono text-sm" />
+                    ) : (
+                      <Input list="loc-scen" value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="font-mono text-sm" />
+                    )}
+                    <datalist id="cloud-scen"><option value="anthropic/claude-sonnet-5" /><option value="anthropic/claude-3.5-sonnet" /><option value="openai/gpt-4o" /><option value="deepseek/deepseek-r1" /></datalist>
+                    <datalist id="loc-scen"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="llama3.1-8b" /></datalist>
+                  </FieldGroup>
+                </div>
+
+                <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
+                  <h3 className="text-lg font-bold text-white mb-2">🎬 Визуал и Код (Remotion TSX)</h3>
+                  <div className="flex p-1 bg-surface-container-lowest/50 rounded-xl border border-white/10 shrink-0">
+                    <button onClick={() => setTaskMode('visual', 'cloud')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.visual === 'cloud' ? 'bg-primary/20 text-primary shadow-md border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Cloud size={16} className="inline mr-2" /> Облако
+                    </button>
+                    <button onClick={() => setTaskMode('visual', 'local')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.visual === 'local' ? 'bg-success/20 text-success shadow-md border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Server size={16} className="inline mr-2" /> Локально
+                    </button>
+                  </div>
+                  <FieldGroup label={`Модель для генерации кода (${taskModes.visual === 'cloud' ? 'Облако' : 'Локально'})`}>
+                    {taskModes.visual === 'cloud' ? (
+                      <Input list="cloud-vis" value={cloudEngines.visual} onChange={e => setCloudEngine('visual', e.target.value)} className="font-mono text-sm" />
+                    ) : (
+                      <Input list="loc-vis" value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} className="font-mono text-sm" />
+                    )}
+                    <datalist id="cloud-vis"><option value="anthropic/claude-sonnet-5" /><option value="google/gemini-2.5-flash" /><option value="openai/gpt-4o" /><option value="deepseek/deepseek-v4-pro" /></datalist>
+                    <datalist id="loc-vis"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="deepseek-coder-v2" /></datalist>
+                  </FieldGroup>
+                </div>
+
+                <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
+                  <h3 className="text-lg font-bold text-white mb-2">🎙️ Озвучка (TTS)</h3>
+                  <div className="flex p-1 bg-surface-container-lowest/50 rounded-xl border border-white/10 shrink-0">
+                    <button onClick={() => setTaskMode('audio', 'cloud')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.audio === 'cloud' ? 'bg-primary/20 text-primary shadow-md border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Cloud size={16} className="inline mr-2" /> Облако
+                    </button>
+                    <button onClick={() => setTaskMode('audio', 'local')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.audio === 'local' ? 'bg-success/20 text-success shadow-md border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Server size={16} className="inline mr-2" /> Локально
+                    </button>
+                  </div>
+                  <FieldGroup label={`Движок озвучки (${taskModes.audio === 'cloud' ? 'Облако' : 'Локально'})`}>
+                    {taskModes.audio === 'cloud' ? (
+                      <Input list="cloud-aud" value={cloudEngines.audio} onChange={e => setCloudEngine('audio', e.target.value)} className="font-mono text-sm" />
+                    ) : (
+                      <Input list="loc-aud" value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} className="font-mono text-sm" />
+                    )}
+                    <datalist id="cloud-aud"><option value="minimax/speech-2.8-hd" /><option value="minimax/speech-2.8-turbo" /><option value="minimax/speech-2.6-hd" /><option value="openai/tts-1-hd" /></datalist>
+                    <datalist id="loc-aud"><option value="k2-fsa/OmniVoice" /><option value="qwen-tts/voice-design" /><option value="qwen-tts/clone" /><option value="qwen-tts/custom-voice" /><option value="moss-tts/local" /><option value="snakers4/silero-models" /><option value="F5-TTS" /></datalist>
+                  </FieldGroup>
+                </div>
+
+                <div className="bg-surface-container-lowest/40 p-5 rounded-xl border border-white/5 flex flex-col gap-4">
+                  <div className="flex items-center gap-2">
+                    <Download size={20} className="text-success" />
+                    <span className="text-sm font-medium text-white">Скачать модель (Hugging Face / Ollama)</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input placeholder="Например: Qwen/Qwen2.5-Coder-7B" value={hfPullUrl} onChange={(e) => setHfPullUrl(e.target.value)} className="font-mono text-sm flex-1" />
+                    <Button variant="primary" onClick={() => handlePull(hfPullUrl)} disabled={!hfPullUrl || pulling !== null} className="bg-success hover:bg-success/80 text-black shrink-0 px-6">
+                      {pulling ? <Spinner /> : 'Pull'}
+                    </Button>
+                  </div>
+                </div>
+
               </div>
             )}
 

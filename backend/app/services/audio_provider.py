@@ -5,7 +5,9 @@ import struct
 import asyncio
 import concurrent.futures
 import logging
+import subprocess
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Optional
 import numpy as np
 import httpx
@@ -14,7 +16,7 @@ _EMOTION_TAG_RE = re.compile(r'\[emotion:\s*([a-z-]+)\]', re.IGNORECASE)
 # ponytail: 2.8-hd не поддерживает whisper/fluent (это 2.6) — держим строгий набор для нашей модели
 _MINIMAX_EMOTIONS = frozenset({"happy", "sad", "angry", "fearful", "disgusted", "surprised", "calm"})
 _LOCAL_SPEAKERS = frozenset({"aria", "marcus", "nova", "kolya", "kseniya", "alloy", "clone"})
-MINIMAX_DEFAULT_VOICE = "English_expressive_narrator"
+MINIMAX_DEFAULT_VOICE = "Russian_ReliableMan"
 
 
 def split_emotion_tag(text: str):
@@ -128,6 +130,8 @@ class OmniVoiceProvider(BaseTTSProvider):
             postprocess_output=postprocess_output,
         )
 
+        # ponytail: локальная модель не понимает теги MiniMax — вычищаем перед озвучкой
+        text = clean_voice_tags(text)
         gen_kwargs = dict(
             text=text.strip(),
             generation_config=gen_config,
@@ -165,6 +169,103 @@ class OmniVoiceProvider(BaseTTSProvider):
                 wav.setframerate(model.sampling_rate if hasattr(model, 'sampling_rate') else 24000)
                 wav.writeframes(waveform_int16.tobytes())
 
+# =====================================================================
+# Локальный LLM TTS через subprocess: Qwen3-TTS / MOSS-TTS.
+# Каждый движок живёт в своём venv (.venv-qwen / .venv-moss), т.к. их
+# зависимости (transformers 4.x / 5.0) несовместимы с основным venv.
+# Генерация запускает worker-скрипт tts_worker.py в отдельном процессе.
+# =====================================================================
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_TTS_WORKER = Path(__file__).resolve().parent / "tts_worker.py"
+_QWEN_PYTHON = _BACKEND_DIR / ".venv-qwen" / "Scripts" / "python.exe"
+_MOSS_PYTHON = _BACKEND_DIR / ".venv-moss" / "Scripts" / "python.exe"
+
+_LOCAL_TTS_ENGINES = {
+    "qwen-tts/voice-design": {"engine": "qwen", "python": _QWEN_PYTHON, "model": "ai-models/Qwen3-TTS-VoiceDesign", "mode": "design"},
+    "qwen-tts/clone": {"engine": "qwen", "python": _QWEN_PYTHON, "model": "ai-models/Qwen3-TTS-Base", "mode": "clone"},
+    "qwen-tts/custom-voice": {"engine": "qwen", "python": _QWEN_PYTHON, "model": "ai-models/Qwen3-TTS-CustomVoice", "mode": "custom"},
+    "moss-tts/local": {"engine": "moss", "python": _MOSS_PYTHON, "model": "ai-models/MOSS-TTS-Local-Transformer", "mode": "moss", "codec": "ai-models/MOSS-Audio-Tokenizer"},
+}
+# ponytail: спикеры CustomVoice нативные к кит./англ. — приблизительное сопоставление для ru
+_QWEN_SPEAKERS = {
+    "aria": "Vivian", "nova": "Serena", "marcus": "Uncle_Fu",
+    "kolya": "Ryan", "kseniya": "Vivian", "alloy": "Ryan",
+}
+# Базовые голоса (aria/marcus/nova) могут клонироваться из заготовленных WAV-референсов
+_SPEAKERS_DIR = str(_BACKEND_DIR / "ai-models" / "speakers")
+
+
+def resolve_clone_reference(voice_model: str, ref_audio_path, ref_text):
+    """Возвращает (ref_audio, ref_text) для voice-clone. Базовые голоса (aria/marcus/nova)
+    падают на заготовленный WAV-референс из ai-models/speakers/, если пользовательский не задан."""
+    if ref_audio_path:
+        return ref_audio_path, ref_text
+    speaker_wav = os.path.join(_SPEAKERS_DIR, f"{voice_model}.wav")
+    if os.path.exists(speaker_wav):
+        return speaker_wav, ref_text
+    raise ValueError(
+        f"Для voice-clone нужен ref_audio_path (референсное аудио), либо положите {voice_model}.wav в {_SPEAKERS_DIR}"
+    )
+
+
+class LocalLLMTTSProvider(BaseTTSProvider):
+    _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    def __init__(self, engine: str, python: Path, model: str, mode: str, codec: str = None):
+        self.engine = engine
+        self.python = python
+        self.model = model
+        self.mode = mode
+        self.codec = codec
+
+    @classmethod
+    def unload_model(cls):
+        # ponytail: модель живёт в отдельном subprocess — выгружается при его завершении
+        pass
+
+    def _generate_sync(self, text: str, voice_model: str, kwargs: dict):
+        text = clean_voice_tags(text).strip()
+        output_path = kwargs.get("output_path", "")
+        args = {
+            "engine": self.engine,
+            "model-id": str(_BACKEND_DIR / self.model),
+            "mode": self.mode,
+            "text": text,
+            "voice-model": voice_model,
+            "language": kwargs.get("language", "Russian"),
+            "output": output_path,
+        }
+        if self.mode == "design":
+            instruct = kwargs.get("design_prompt") or kwargs.get("instruct")
+            if not instruct:
+                raise ValueError("Для voice-design нужен design_prompt (промпт дизайна голоса)")
+            args["design-prompt"] = instruct
+        elif self.mode == "clone":
+            ref_audio, ref_text = resolve_clone_reference(
+                voice_model, kwargs.get("ref_audio_path"), kwargs.get("ref_text")
+            )
+            args["ref-audio"] = ref_audio
+            args["ref-text"] = ref_text or ""
+        elif self.mode == "custom":
+            args["speaker"] = _QWEN_SPEAKERS.get(voice_model, "Vivian")
+        elif self.mode == "moss":
+            args["codec-path"] = str(_BACKEND_DIR / self.codec)
+            # ponytail: MOSS ~10 ГБ — не влезает в 4 ГБ VRAM, форсируем CPU
+            args["device"] = "cpu"
+
+        cmd = [str(self.python), str(_TTS_WORKER)]
+        for k, v in args.items():
+            cmd += [f"--{k}", str(v)]
+
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, encoding="utf-8", errors="replace")
+        if res.returncode != 0:
+            raise RuntimeError(f"TTS worker ({self.engine}) failed: {res.stderr.strip()[-600:]}")
+
+    async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(self._thread_pool, self._generate_sync, text, voice_model, kwargs)
+
+
 class SileroProvider(BaseTTSProvider):
     _model = None
     @classmethod
@@ -179,7 +280,7 @@ class SileroProvider(BaseTTSProvider):
         model = self._get_model()
         sample_rate = 48000
         speaker = 'kseniya' if voice_model in ('', 'aria') else voice_model
-        audio = model.apply_tts(text=text, speaker=speaker, sample_rate=sample_rate)
+        audio = model.apply_tts(text=clean_voice_tags(text), speaker=speaker, sample_rate=sample_rate)
         if audio.dim() == 1:
             audio = audio.unsqueeze(0)
         output_path = kwargs.get("output_path", "")
@@ -194,7 +295,7 @@ class ElevenLabsProvider(BaseTTSProvider):
         voice_id = voice_model or '21m00Tcm4TlvDq8ikWAM'
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         async with httpx.AsyncClient() as client:
-            res = await client.post(url, headers={"xi-api-key": api_key}, json={"text": text, "model_id": "eleven_monolingual_v1", "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}}, timeout=60.0)
+            res = await client.post(url, headers={"xi-api-key": api_key}, json={"text": clean_voice_tags(text), "model_id": "eleven_monolingual_v1", "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}}, timeout=60.0)
             if res.status_code != 200:
                 raise RuntimeError(f"ElevenLabs API error: {res.status_code}")
             output_path = kwargs.get("output_path", "")
@@ -208,7 +309,7 @@ class OpenAIProvider(BaseTTSProvider):
         api_key = api_keys.get('openai', os.environ.get('OPENAI_API_KEY', ''))
         voice = voice_model or 'nova'
         async with httpx.AsyncClient() as client:
-            res = await client.post("https://api.openai.com/v1/audio/speech", headers={"Authorization": f"Bearer {api_key}"}, json={"model": "tts-1", "input": text, "voice": voice, "response_format": "wav"}, timeout=60.0)
+            res = await client.post("https://api.openai.com/v1/audio/speech", headers={"Authorization": f"Bearer {api_key}"}, json={"model": "tts-1", "input": clean_voice_tags(text), "voice": voice, "response_format": "wav"}, timeout=60.0)
             if res.status_code != 200:
                 raise RuntimeError(f"OpenAI TTS API error: {res.status_code}")
             output_path = kwargs.get("output_path", "")
@@ -226,6 +327,8 @@ def _gateway_prep(text: str, voice: str, is_minimax: bool, kwargs: dict):
     extra = {}
     if is_minimax:
         text, emotion = split_emotion_tag(text)
+        # ponytail: форсируем русскую фонетику — без boost модель коверкает русские слова английским голосом
+        extra["language_boost"] = "Russian"
         extra["voice_setting"] = {
             "speed": float(kwargs.get("speed", 1.0)),
             "pitch": int(kwargs.get("pitch", 0)),
@@ -301,6 +404,9 @@ class TTSProviderFactory:
             return OpenAIProvider()
         elif engine == "k2-fsa/OmniVoice":
             return OmniVoiceProvider()
+        elif engine in _LOCAL_TTS_ENGINES:
+            cfg = _LOCAL_TTS_ENGINES[engine]
+            return LocalLLMTTSProvider(cfg["engine"], cfg["python"], cfg["model"], cfg["mode"], cfg.get("codec"))
         elif engine and "/" in engine:
             return GatewayTTSProvider(engine)
         return OmniVoiceProvider()
@@ -325,6 +431,24 @@ if __name__ == "__main__":
         mm = factory.get_provider("minimax/speech-2.8-hd")
         assert mm.model == "minimax/speech-2.8-hd"
         assert factory.get_provider("openai") is not None
+        # Локальные LLM-TTS маршрутизация (без сети): движок -> правильная модель, режим и venv
+        qd = factory.get_provider("qwen-tts/voice-design")
+        assert isinstance(qd, LocalLLMTTSProvider) and qd.mode == "design" and qd.engine == "qwen"
+        assert qd.model == "ai-models/Qwen3-TTS-VoiceDesign"
+        qc = factory.get_provider("qwen-tts/clone")
+        assert isinstance(qc, LocalLLMTTSProvider) and qc.mode == "clone"
+        assert qc.model == "ai-models/Qwen3-TTS-Base"
+        assert isinstance(factory.get_provider("qwen-tts/custom-voice"), LocalLLMTTSProvider)
+        mm = factory.get_provider("moss-tts/local")
+        assert isinstance(mm, LocalLLMTTSProvider) and mm.engine == "moss" and mm.codec == "ai-models/MOSS-Audio-Tokenizer"
+        # voice-clone: пользовательский референс прокидывается как есть; базовый голос без WAV -> понятная ошибка
+        ra, rt = resolve_clone_reference("aria", "/x/ref.wav", "привет")
+        assert (ra, rt) == ("/x/ref.wav", "привет")
+        try:
+            resolve_clone_reference("aria", None, None)
+            raise AssertionError("базовый голос без WAV должен упасть")
+        except ValueError as e:
+            assert "speakers" in str(e)
         # emotion-тег вырезается и валидируется; whisper на 2.8 не поддержан -> auto
         t, e = split_emotion_tag("  [emotion: angry] Какого черта это упало? ")
         assert (t, e) == ("Какого черта это упало?", "angry")
@@ -334,6 +458,7 @@ if __name__ == "__main__":
         # шлюз: minimax получает очищенный текст + voice_setting.emotion в extra_body
         t, v, extra = _gateway_prep("[emotion: sad] База исчезла.", "aria", True, {})
         assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["emotion"] == "sad" and "[emotion" not in t
+        assert extra["language_boost"] == "Russian"  # русская фонетика принудительно
         t, v, extra = _gateway_prep("[emotion: sad] Ок.", "marcus", False, {})
         assert v == "nova" and extra == {}
         # клонирование/дизайн в шлюзе: данные уходят в voice_setting, без данных — понятная ошибка

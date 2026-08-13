@@ -510,9 +510,13 @@ interface SettingsStore {
   setGlobalPrompts: (prompts: Partial<GlobalPromptSettings>) => void
   resetGlobalPrompts: () => void
 
-  // --- AI: Облако / Локально, движок на каждую задачу ---
-  aiMode: 'cloud' | 'local'
-  setAiMode: (mode: 'cloud' | 'local') => void
+  // --- AI: маршрутизация по задачам (cloud/local) ---
+  taskModes: {
+    scenario: 'cloud' | 'local'
+    visual: 'cloud' | 'local'
+    audio: 'cloud' | 'local'
+  }
+  setTaskMode: (task: 'scenario' | 'visual' | 'audio', mode: 'cloud' | 'local') => void
 
   cloudProvider: 'routerai' | 'aitunnel'
   setCloudProvider: (provider: 'routerai' | 'aitunnel') => void
@@ -560,8 +564,12 @@ export const useSettingsStore = create<SettingsStore>()(
       setGlobalPrompts: (p) => set((s) => ({ globalPrompts: { ...s.globalPrompts, ...p } })),
       resetGlobalPrompts: () => set({ globalPrompts: DEFAULT_PROMPTS }),
 
-      aiMode: 'cloud',
-      setAiMode: (mode) => set({ aiMode: mode }),
+      taskModes: {
+        scenario: 'cloud',
+        visual: 'cloud',
+        audio: 'cloud',
+      },
+      setTaskMode: (task, mode) => set((s) => ({ taskModes: { ...s.taskModes, [task]: mode } })),
 
       cloudProvider: 'routerai',
       setCloudProvider: (p) => set({ cloudProvider: p }),
@@ -605,7 +613,9 @@ export const useSettingsStore = create<SettingsStore>()(
     {
       name: 'vidora-settings',
       merge: (persisted, current) => {
-        const persistedObj = persisted as Partial<SettingsStore> | undefined
+        const persistedObj = persisted as (Partial<SettingsStore> & { aiMode?: 'cloud' | 'local' }) | undefined
+        const persistedState = { ...(persistedObj as object) } as Record<string, unknown>
+        delete persistedState.aiMode
         const persistedPrompts = persistedObj?.globalPrompts as unknown
         const migratedPrompts: GlobalPromptSettings = { ...DEFAULT_PROMPTS }
 
@@ -640,10 +650,19 @@ export const useSettingsStore = create<SettingsStore>()(
           ]
         }
 
+        // Миграция: старый глобальный aiMode -> гранулярные taskModes
+        let migratedTaskModes = current.taskModes
+        if (persistedObj?.taskModes) {
+          migratedTaskModes = { ...current.taskModes, ...persistedObj.taskModes }
+        } else if (persistedObj?.aiMode) {
+          migratedTaskModes = { scenario: persistedObj.aiMode, visual: persistedObj.aiMode, audio: persistedObj.aiMode }
+        }
+
         return {
           ...current,
-          ...(persistedObj as object),
+          ...persistedState,
           globalPrompts: migratedPrompts,
+          taskModes: migratedTaskModes,
           globalVoices: persistedObj?.globalVoices || [],
           skills: mergedSkills,
           uiPreferences: { ...DEFAULT_UI_PREFS, ...persistedObj?.uiPreferences },
