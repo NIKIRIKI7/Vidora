@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Mic, Plus, Trash2, Upload, Play, AudioLines, BrainCircuit, Wand2, Save, Dices } from 'lucide-react'
+import { ArrowLeft, Mic, Plus, Trash2, Upload, Play, AudioLines, BrainCircuit, Wand2, Save, Dices, Sparkles, Wand } from 'lucide-react'
 import { useSettingsStore, useNotificationStore, type GlobalVoice } from '@entities/project'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 
@@ -33,6 +33,13 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  const isCosyVoice = activeVoice?.ttsEngine.toLowerCase().includes('cosyvoice')
+
+  const [isSwapping, setIsSwapping] = useState(false)
+  const [swapOriginalAudio, setSwapOriginalAudio] = useState<string | null>(null)
+  const [swapNewAudio, setSwapNewAudio] = useState<string | null>(null)
+  const swapInputRef = useRef<HTMLInputElement>(null)
 
   const handleAddVoice = () => {
     const newId = crypto.randomUUID()
@@ -188,6 +195,77 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
     }
   }
 
+  const handleVoiceSwapUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('project_path', 'vidora_projects')
+    fd.append('folder', 'swaps')
+    try {
+      const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.status === 'ok') {
+        setSwapOriginalAudio(data.path)
+        setSwapNewAudio(null)
+        showNotification('Аудио для замены загружено', 'success')
+      }
+    } catch {
+      showNotification('Ошибка загрузки', 'error')
+    }
+    e.target.value = ''
+  }
+
+  const handleExecuteVoiceSwap = async () => {
+    if (!swapOriginalAudio || !activeVoice) return
+    setIsSwapping(true)
+    try {
+      showNotification('Распознавание оригинального аудио...', 'info')
+      const resTrans = await fetch(`${API}/api/v1/audio/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio_path: swapOriginalAudio, whisper_model: 'small' })
+      })
+      const dataTrans = await resTrans.json()
+      if (dataTrans.status !== 'ok') throw new Error(dataTrans.detail)
+
+      showNotification('Генерация новым голосом...', 'info')
+      const payload = {
+        fragment_id: `swap_${activeVoice.id}`,
+        text: dataTrans.text,
+        voice_model: activeVoice.voiceModel,
+        ref_audio_path: activeVoice.refAudioPath ? activeVoice.refAudioPath.split('?')[0] : null,
+        ref_text: activeVoice.refText || null,
+        design_prompt: activeVoice.designPrompt || null,
+        speed: activeVoice.settings.speed,
+        guidance_scale: activeVoice.settings.guidanceScale,
+        num_steps: activeVoice.settings.numSteps,
+        duration: 0.0,
+        denoise: true,
+        preprocess_prompt: true,
+        postprocess_output: true,
+        project_path: 'vidora_projects',
+        auto_offload_vram: true,
+        engine: activeVoice.ttsEngine,
+        api_keys: activeApiKeys,
+      }
+      const resGen = await fetch(`${API}/api/v1/audio/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const dataGen = await resGen.json()
+      if (dataGen.status === 'ok') {
+        setSwapNewAudio(`${API}/api/v1/render/media?path=${encodeURIComponent('vidora_projects/assets/voice/' + dataGen.audio_url)}`)
+        showNotification('Голос успешно заменен!', 'success')
+      } else throw new Error(dataGen.detail)
+    } catch {
+      showNotification('Ошибка замены голоса', 'error')
+    } finally {
+      setIsSwapping(false)
+    }
+  }
+
   const filteredVoices = globalVoices.filter(v => v.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
@@ -260,6 +338,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     />
                     <datalist id="tts-engines">
                       <option value="k2-fsa/OmniVoice" />
+                      <option value="fishaudio/s2-pro" />
+                      <option value="FunAudioLLM/Fun-CosyVoice3-0.5B" />
                       <option value="qwen-tts/voice-design" />
                       <option value="qwen-tts/clone" />
                       <option value="qwen-tts/custom-voice" />
@@ -297,6 +377,11 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                   <FieldGroup label={`Шаги (Num Steps): ${activeVoice.settings.numSteps}`}>
                     <Slider min={8} max={64} step={1} value={activeVoice.settings.numSteps} onChange={e => updateActiveVoice({ settings: { ...activeVoice.settings, numSteps: Number(e.target.value) } })} />
                   </FieldGroup>
+                  {isCosyVoice && (
+                    <div className="p-3 bg-black/20 border border-white/5 rounded-lg text-xs text-on-surface-variant font-mono">
+                      CosyVoice3 — LLM-движок: Guidance Scale и Steps применяются к diffusion-части (flow-декодер), а стиль/эмоция задаются инструкцией в режиме «Дизайн голоса». Параметры передаются в worker.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -330,6 +415,16 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                       placeholder="Напишите, что именно говорится в аудиофайле (помогает ИИ лучше клонировать интонацию)..."
                     />
                   </FieldGroup>
+                  {isCosyVoice && (
+                    <FieldGroup label="Инструкция стиля клона (Instruct Text)">
+                      <Input
+                        value={activeVoice.designPrompt || ''}
+                        onChange={e => updateActiveVoice({ designPrompt: e.target.value })}
+                        placeholder="Например: Please speak in a happy tone."
+                        className="text-xs border-warning/30"
+                      />
+                    </FieldGroup>
+                  )}
                 </div>
               )}
 
@@ -349,8 +444,15 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                       rows={3}
                       value={activeVoice.designPrompt || ''}
                       onChange={e => updateActiveVoice({ designPrompt: e.target.value })}
-                      placeholder="Например: Глубокий мужской голос, спокойный, с легкой хрипотцой, подходит для документалок..."
+                      placeholder={isCosyVoice
+                        ? "You are a helpful assistant. Please speak with a calm and warm tone."
+                        : "Например: Глубокий мужской голос, спокойный, с легкой хрипотцой, подходит для документалок..."}
                     />
+                    <p className="text-[10px] text-on-surface-variant mt-2">
+                      {isCosyVoice
+                        ? "CosyVoice: инструкция на естественном языке (эмоция, скорость, диалект). Токен <|endofprompt|> добавится автоматически."
+                        : "OmniVoice: атрибуты через запятую — пол (male/female), возраст, высота (low/high pitch), акцент (british)."}
+                    </p>
                   </FieldGroup>
                   <div className="text-[10px] text-on-surface-variant/80 bg-black/20 p-3 rounded-lg border border-white/5 leading-relaxed">
                     💡 <b>Совет для Qwen/Moss 1.7b:</b> модели чувствительны к описанию. Добавляйте «русский язык, четкая дикция» в конец описания, чтобы избежать случайного акцента.
@@ -388,6 +490,35 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     <audio src={testAudioPath} autoPlay controls className="h-10 flex-1" />
                   )}
                 </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-secondary/5 to-surface-container-lowest p-6 rounded-2xl border border-secondary/20 flex flex-col gap-4 mt-2">
+                <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
+                  <Sparkles size={18} /> Замена голоса в аудиофайле (Voice Swap)
+                </h3>
+                <p className="text-xs text-on-surface-variant mb-2">
+                  Загрузите аудио с чужим голосом — ИИ распознает текст и переозвучит его текущим активным голосом.
+                </p>
+                <div className="flex gap-4 items-center">
+                  <input type="file" ref={swapInputRef} className="hidden" accept="audio/*" onChange={handleVoiceSwapUpload} />
+                  <Button variant="secondary" onClick={() => swapInputRef.current?.click()}>
+                    <Upload size={14} className="mr-1" /> Загрузить исходник
+                  </Button>
+                  {swapOriginalAudio && (
+                    <audio src={`${API}/api/v1/render/media?path=${encodeURIComponent(swapOriginalAudio)}`} controls className="h-8 flex-1" />
+                  )}
+                </div>
+
+                {swapOriginalAudio && (
+                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5">
+                    <Button variant="dashed" onClick={handleExecuteVoiceSwap} disabled={isSwapping} className="border-secondary/50 text-secondary hover:bg-secondary/10 px-6 py-2">
+                      {isSwapping ? <Spinner /> : <><Wand size={16} className="mr-2" /> Конвертировать голос</>}
+                    </Button>
+                    {swapNewAudio && (
+                      <audio src={swapNewAudio} controls className="h-10 flex-1" />
+                    )}
+                  </div>
+                )}
               </div>
 
             </div>

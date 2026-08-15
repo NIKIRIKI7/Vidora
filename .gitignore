@@ -88,3 +88,4 @@ stats.html
 
 # Playwright MCP output
 .playwright-mcp/
+backend/venv-cosyvoice/

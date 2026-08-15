@@ -323,6 +323,9 @@ export const PipelineInspector = ({
                   <button className={`text-[10px] px-2 py-1 rounded transition-colors ${processScope === 'project' ? 'bg-warning/20 text-warning' : 'text-on-surface-variant hover:text-white'}`} onClick={() => setProcessScope('project')}>Проект</button>
                 </div>
               </div>
+              <Button variant="dashed" onClick={() => onProcessAudio('lavasr', processScope)} disabled={isGeneratingAudio} className="text-xs border-primary/30 hover:border-primary/60 hover:bg-primary/10 hover:text-primary h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">
+                ✨ LavaSR 48kHz (AI BWE Апскейл)
+              </Button>
               <Button variant="dashed" onClick={() => onProcessAudio('mastering', processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-warning/50 hover:bg-warning/10 hover:text-warning h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">🎙️ Мастеринг (EQ + Normalize)</Button>
               <Button variant="dashed" onClick={() => onProcessAdvancedSilence?.(processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-accent/50 hover:bg-accent/10 hover:text-accent h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">✂️ Умная обрезка пауз (Pydub)</Button>
             </section>

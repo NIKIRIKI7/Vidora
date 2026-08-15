@@ -325,7 +325,7 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                       <Input list="loc-aud" value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} className="font-mono text-sm" />
                     )}
                     <datalist id="cloud-aud"><option value="minimax/speech-2.8-hd" /><option value="minimax/speech-2.8-turbo" /><option value="minimax/speech-2.6-hd" /><option value="openai/tts-1-hd" /></datalist>
-                    <datalist id="loc-aud"><option value="k2-fsa/OmniVoice" /><option value="qwen-tts/voice-design" /><option value="qwen-tts/clone" /><option value="qwen-tts/custom-voice" /><option value="moss-tts/local" /><option value="snakers4/silero-models" /><option value="F5-TTS" /></datalist>
+                    <datalist id="loc-aud"><option value="k2-fsa/OmniVoice" /><option value="fishaudio/s2-pro" /><option value="FunAudioLLM/Fun-CosyVoice3-0.5B" /><option value="qwen-tts/voice-design" /><option value="qwen-tts/clone" /><option value="qwen-tts/custom-voice" /><option value="moss-tts/local" /><option value="snakers4/silero-models" /></datalist>
                   </FieldGroup>
                 </div>
 

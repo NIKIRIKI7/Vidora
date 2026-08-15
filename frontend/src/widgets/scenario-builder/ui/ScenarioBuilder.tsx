@@ -1,8 +1,8 @@
 import { useState, useRef, useMemo } from 'react'
 import { Button, Input, Select, FieldGroup, Spinner } from '@shared/ui'
-import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy } from 'lucide-react'
+import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic } from 'lucide-react'
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
-import { THEME_PRESETS, type ThemePreset } from '@shared/config'
+import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { API, formatTimecode } from '@widgets/editor-workspace/lib/helpers'
 import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
 
@@ -36,6 +36,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   const [customTopic, setCustomTopic] = useState('')
   const [genFormat, setGenFormat] = useState<'long' | 'short'>('long')
   const [genDuration, setGenDuration] = useState('3')
+  const [voiceTagMode, setVoiceTagMode] = useState<'omnivoice' | 'cosyvoice'>('omnivoice')
 
   const estimatedDuration = useMemo(() => {
     if (!markdown) return 0
@@ -53,7 +54,13 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
     const formatText = genFormat === 'short' ? 'Вертикальный Shorts/Reels (сверхбыстрый темп, без воды)' : 'Горизонтальное длинное видео';
     const wordsCount = Math.round(Number(genDuration) * 150);
 
-    const template = getActivePrompt(globalPrompts.scenario) || `Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).\nНапиши подробный сценарий на тему: "{{TITLE}}".\n\nФормат видео: {{FORMAT_TEXT}}.\nОриентировочный хронометраж: {{DURATION}} мин. (напиши текст диктора объемом строго около {{WORDS_COUNT}} слов).\n\nОбязательные требования:\n1. Разбей сценарий на логические блоки: [Хук] (00:00:00), [Вступление], [Основная часть], [Кульминация], [Заключение]. Укажи примерные таймкоды.\n2. В начале каждого фрагмента укажи визуальную ремарку в скобках.\n3. Напиши текст для закадрового голоса.\n4. Все английские термины напиши русскими буквами.\n5. Верни сценарий строго в формате Markdown.`;
+    const voiceRules = voiceTagMode === 'omnivoice'
+      ? `- Эмоция сцены: \`[emotion: happy]\` (sad, angry, fearful, disgusted, surprised, calm). Ставится в начале фрагмента.\n- Паузы: \`<#1.0#>\` (секунды от 0.1 до 3.0).\n- Междометия: \`(breath)\`, \`(sighs)\`, \`(laughs)\`.`
+      : `- Instruct-режим: \`[instruct: Speak with excitement and moderately fast]\`. Ставится в начале фрагмента для управления стилем, интонацией, скоростью или акцентом на естественном языке.`;
+
+    const injectedRules = SCENARIO_PARSER_RULES.replace('{{VOICE_RULES}}', voiceRules);
+
+    const template = getActivePrompt(globalPrompts.scenario) || `Действуй как профессиональный сценарист YouTube для Tech/IT канала (Faceless).\nНапиши подробный сценарий на тему: "{{TITLE}}".\n\nФормат видео: {{FORMAT_TEXT}}.\nОриентировочный хронометраж: {{DURATION}} мин. (около {{WORDS_COUNT}} слов).\n\n{{SCENARIO_RULES}}\n\nВерни ТОЛЬКО валидный Markdown код сценария.`;
 
     return template
       .replace(/\{\{TITLE\}\}/g, topic)
@@ -61,6 +68,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
       .replace(/\{\{FORMAT_TEXT\}\}/g, formatText)
       .replace(/\{\{DURATION\}\}/g, genDuration)
       .replace(/\{\{WORDS_COUNT\}\}/g, wordsCount.toString())
+      .replace(/\{\{SCENARIO_RULES\}\}/g, injectedRules)
       + getSkillsForProcess('scenario');
   }
 
@@ -208,6 +216,13 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
               </FieldGroup>
             </div>
 
+            <FieldGroup label="Целевой движок голоса (для тегов ИИ)">
+              <Select value={voiceTagMode} onChange={e => setVoiceTagMode(e.target.value as 'omnivoice' | 'cosyvoice')} className="text-xs border-primary/30 bg-primary/5 text-primary font-medium">
+                <option value="omnivoice">OmniVoice / MiniMax (теги эмоций)</option>
+                <option value="cosyvoice">CosyVoice3 (instruct-инструкции)</option>
+              </Select>
+            </FieldGroup>
+
             <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
               <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
               <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
@@ -309,8 +324,13 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
 
       <div className="flex-1 p-6 bg-surface-container-lowest/60 flex flex-col items-center overflow-hidden gap-4">
         <div className="w-full max-w-5xl bg-primary/10 border border-primary/20 p-3 rounded-xl flex items-center justify-between shadow-sm shrink-0">
-          <div className="text-xs font-mono text-primary/80 leading-relaxed">
-            <span className="font-bold">Шпаргалка суфлера (MiniMax/OmniVoice):</span> Эмоция сцены: <code className="bg-black/30 px-1 rounded">[emotion: happy|sad|angry]</code> • Паузы: <code className="bg-black/30 px-1 rounded">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/30 px-1 rounded">(breath)</code>, <code className="bg-black/30 px-1 rounded">(sighs)</code>
+          <div className="text-xs font-mono text-primary/80 leading-relaxed flex items-center gap-2">
+            <Mic size={18} className="shrink-0" />
+            {voiceTagMode === 'omnivoice' ? (
+              <span><span className="font-bold">Шпаргалка (OmniVoice/MiniMax):</span> Эмоция: <code className="bg-black/30 px-1 rounded">[emotion: happy]</code> • Паузы: <code className="bg-black/30 px-1 rounded">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/30 px-1 rounded">(sighs)</code></span>
+            ) : (
+              <span><span className="font-bold">Instruct-режим (CosyVoice):</span> <code className="bg-black/30 px-1 rounded">[instruct: Speak softly and mysteriously]</code> — задаёт стиль и интонацию</span>
+            )}
           </div>
         </div>
         <textarea

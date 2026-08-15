@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 import wave
 import struct
@@ -12,7 +12,12 @@ from typing import Optional
 import numpy as np
 import httpx
 
-_EMOTION_TAG_RE = re.compile(r'\[emotion:\s*([a-z-]+)\]', re.IGNORECASE)
+# DOTALL + строгий ограничитель [^\]]+ — переносы строк и мусор в тегах не ломают парсер
+_EMOTION_TAG_RE = re.compile(r'\[emotion:\s*([^\]]+)\]', re.IGNORECASE | re.DOTALL)
+_INSTRUCT_TAG_RE = re.compile(r'\[instruct:\s*([^\]]+)\]', re.IGNORECASE | re.DOTALL)
+_PAUSE_TAG_RE = re.compile(r'<#([0-9.]+)#>')
+_SOUND_TAG_RE = re.compile(r'\((breath|inhale|exhale|sighs|chuckle|laughs|clear-throat|emm|coughs|groans|gasps|sniffs)\)', re.IGNORECASE | re.DOTALL)
+
 # ponytail: 2.8-hd не поддерживает whisper/fluent (это 2.6) — держим строгий набор для нашей модели
 _MINIMAX_EMOTIONS = frozenset({"happy", "sad", "angry", "fearful", "disgusted", "surprised", "calm"})
 _LOCAL_SPEAKERS = frozenset({"aria", "marcus", "nova", "kolya", "kseniya", "alloy", "clone"})
@@ -31,11 +36,98 @@ def split_emotion_tag(text: str):
 
 
 def clean_voice_tags(text: str) -> str:
-    """Убирает теги озвучки ([emotion: x], <#1.5#>, (sighs)) — для Whisper-синхронизации, где тегов быть не должно."""
+    """Убирает теги озвучки ([emotion: x], [instruct: ...], <#1.5#>, (sighs)) и случайно
+    попавшие визуальные ремарки *(...)* — для Whisper-синхронизации, где их быть не должно."""
+    # ponytail: защита от битых фрагментов — *(...)* это ремарка режиссёра, не текст для озвучки
+    text = re.sub(r'\*\([\s\S]*?\)\*', ' ', text or '')
     text = _EMOTION_TAG_RE.sub('', text)
+    text = _INSTRUCT_TAG_RE.sub('', text)
     text = re.sub(r'<#[\d.]+#>', '', text)
     text = re.sub(r'\([a-z][a-z-]*\)', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def extract_instruct_tag(text: str):
+    """Вытаскивает '[instruct: ...]' из текста: (текст_без_тега, инструкция | None)."""
+    match = _INSTRUCT_TAG_RE.search(text)
+    if not match:
+        return text, None
+    return _INSTRUCT_TAG_RE.sub('', text).strip(), match.group(1).strip()
+
+
+def to_s2_text(text: str, design_prompt: str | None = None) -> str:
+    """Конвертит текст под Fish Audio S2: нативный синтаксис S2 — инлайн-теги [tag].
+    <#1.5#> -> [pause]; (sighs)-скобки вырезаются (у S2 есть свои [sigh]/[laughing]);
+    [emotion: x]/[instruct: y] (на случай прямого вызова API) сворачиваются в [x]/[y];
+    design_prompt подставляется ведущим тегом (S2 поддерживает free-form теги)."""
+    text = text or ''
+    text = re.sub(r'\*\([\s\S]*?\)\*', ' ', text)
+    text = _INSTRUCT_TAG_RE.sub(lambda m: f"[{m.group(1).strip()}]", text)
+    text = _EMOTION_TAG_RE.sub(lambda m: f"[{m.group(1).strip()}]", text)
+    text = re.sub(r'<#[\d.]+#>', '[pause]', text)
+    text = re.sub(r'\([a-z][a-z-]*\)', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    if design_prompt and design_prompt.strip():
+        text = f"[{design_prompt.strip()}] {text}".strip()
     return text
+
+
+def trim_ref_audio_for_clone(ref_audio_path: str, max_seconds: float = 10.0) -> str:
+    """Обрезает аудио-референс для клонирования до ~10с по границе слова (Whisper),
+    чтобы фразы не обрывались на полуслове. Кэширует результат в temp; возвращает путь к WAV."""
+    if not ref_audio_path or not os.path.exists(ref_audio_path):
+        return ref_audio_path
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", ref_audio_path],
+            capture_output=True, text=True,
+        )
+        dur = float(out.stdout.strip())
+    except Exception:
+        return ref_audio_path
+    if dur <= max_seconds:
+        return ref_audio_path
+
+    import hashlib, tempfile
+    key = hashlib.md5((ref_audio_path + str(os.path.getmtime(ref_audio_path))).encode("utf-8")).hexdigest()[:12]
+    cache = os.path.join(tempfile.gettempdir(), f"cosy_ref_{key}.wav")
+    if os.path.exists(cache):
+        return cache
+
+    cut_at = max_seconds
+    try:
+        import torch
+        from faster_whisper import WhisperModel
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
+        model_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "ai-models"))
+        model = WhisperModel("Systran/faster-whisper-small", device=device, compute_type=compute_type, download_root=model_dir)
+        segments, _info = model.transcribe(ref_audio_path, word_timestamps=True, language="ru", vad_filter=True)
+        words = [w for seg in segments for w in seg.words]
+        for w in reversed(words):
+            if w.end and 3.0 <= w.end <= max_seconds:
+                cut_at = w.end
+                break
+        del model
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception as e:
+        print(f"[CosyVoice] trim: Whisper-таймкоды недоступны ({e}), режу на {max_seconds:.1f}s")
+
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", ref_audio_path, "-t", f"{cut_at:.2f}", "-ar", "16000", cache],
+            capture_output=True, check=False,
+        )
+        if os.path.exists(cache):
+            return cache
+    except Exception:
+        pass
+    return ref_audio_path
+
 
 class BaseTTSProvider(ABC):
     @abstractmethod
@@ -130,8 +222,14 @@ class OmniVoiceProvider(BaseTTSProvider):
             postprocess_output=postprocess_output,
         )
 
-        # ponytail: локальная модель не понимает теги MiniMax — вычищаем перед озвучкой
+        text, inline_instruct = extract_instruct_tag(text)
         text = clean_voice_tags(text)
+        if not text:
+            raise RuntimeError(
+                "Текст для озвучки пуст (возможно, он содержит только визуальную ремарку). "
+                "Перейдите во вкладку '📝 Raw Script' и сделайте пробел для перепарсинга."
+            )
+
         gen_kwargs = dict(
             text=text.strip(),
             generation_config=gen_config,
@@ -150,7 +248,7 @@ class OmniVoiceProvider(BaseTTSProvider):
                 ref_text=kwargs.get("ref_text") or None,
             )
         else:
-            gen_kwargs["instruct"] = self._VOICE_MAP.get(voice_model, f"{voice_model}")
+            gen_kwargs["instruct"] = inline_instruct or kwargs.get("design_prompt") or self._VOICE_MAP.get(voice_model, f"{voice_model}")
 
         loop = asyncio.get_event_loop()
         audio_list = await loop.run_in_executor(
@@ -260,11 +358,337 @@ class LocalLLMTTSProvider(BaseTTSProvider):
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, encoding="utf-8", errors="replace")
         if res.returncode != 0:
             raise RuntimeError(f"TTS worker ({self.engine}) failed: {res.stderr.strip()[-600:]}")
+    async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(self._thread_pool, self._generate_sync, text, voice_model, kwargs)
+class CosyVoiceProvider(BaseTTSProvider):
+    # ponytail: CosyVoice3 генерит чушь под transformers>=5 (ломается инкрементальный
+    # KV-cache декод Qwen2 — воспроизводимо: расхождение 2.5+ против полного прогона).
+    # Репозиторий пинит transformers==4.51.3, а OmniVoice требует >=5.3.0 — конфликт,
+    # поэтому CosyVoice гоняется в отдельном venv (venv-cosyvoice) как subprocess-worker.
+    _proc = None
+    _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    @classmethod
+    def _paths(cls):
+        base = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        code = os.path.join(base, "ai-models", "CosyVoice")              # git-клон репозитория
+        weights = os.path.join(base, "ai-models", "Fun-CosyVoice3-0.5B") # веса
+        worker = os.path.join(os.path.dirname(__file__), "cosyvoice_worker.py")
+        py = os.path.join(base, "venv-cosyvoice", "Scripts", "python.exe")
+        return base, code, weights, worker, py
+
+    @classmethod
+    def unload_model(cls):
+        proc = cls._proc
+        cls._proc = None
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.write('{"shutdown": true}\n')
+                proc.stdin.flush()
+                proc.wait(timeout=10)
+            except Exception:
+                proc.kill()
+        print("[VRAM] CosyVoice worker остановлен")
+
+    @classmethod
+    def _get_worker(cls):
+        # ponytail: worker держит модель и переживает запросы; перезапускается при падении
+        if cls._proc is not None and cls._proc.poll() is None:
+            return cls._proc
+        _, code, weights, worker, py = cls._paths()
+        if not os.path.isfile(py):
+            raise RuntimeError(
+                f"Нет venv-cosyvoice: {py}. Создайте его: python -m venv backend/venv-cosyvoice, "
+                "затем pip install transformers==4.51.3 и добавьте .pth на site-packages "
+                "основного venv (см. tts_readme.md)."
+            )
+        if not os.path.isdir(weights):
+            raise RuntimeError(
+                f"Веса CosyVoice3 не найдены: {weights}. Скачайте модель "
+                "FunAudioLLM/Fun-CosyVoice3-0.5B-2512 в backend/ai-models/Fun-CosyVoice3-0.5B."
+            )
+        import subprocess
+        print(f"[CosyVoice] Старт worker ({py})...")
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        cls._proc = subprocess.Popen(
+            [py, worker],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=None,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+            env=env,
+        )
+        # Ждём READY — модель загружена, можно слать джобы; пре-логи инициализации просто эхоим в консоль
+        while True:
+            line = cls._proc.stdout.readline().strip()
+            if line == "READY":
+                break
+            if not line:
+                raise RuntimeError("[CosyVoice] worker умер при старте — смотрите логи процесса")
+            if line:
+                print(f"[CosyVoice Worker Init] {line}")
+        print("[CosyVoice] worker: модель готова")
+        return cls._proc
+
+    async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
+        loop = asyncio.get_event_loop()
+        ref_audio = kwargs.get("ref_audio_path")
+        # ponytail: режем референс ДО старта CosyVoice, чтобы Whisper не подрался с ним за VRAM
+        if voice_model == "clone" and ref_audio:
+            ref_audio = await loop.run_in_executor(self._thread_pool, trim_ref_audio_for_clone, ref_audio)
+
+        text, inline_instruct = extract_instruct_tag(text)
+        text = clean_voice_tags(text)
+        instruct = inline_instruct or kwargs.get("design_prompt")
+        speed = kwargs.get("speed", 1.0)
+        if not text:
+            raise RuntimeError(
+                "Текст для озвучки пуст (возможно, он содержит только визуальную ремарку). "
+                "Перейдите во вкладку '📝 Raw Script' и сделайте пробел для перепарсинга."
+            )
+        await loop.run_in_executor(
+            self._thread_pool,
+            self._generate_sync,
+            text,
+            voice_model,
+            ref_audio,
+            instruct,
+            speed,
+            kwargs.get("guidance_scale", 3.0),
+            kwargs.get("num_steps", 32),
+            kwargs.get("output_path", ""),
+        )
+
+    def _generate_sync(self, text, voice_model, ref_audio_path, design_prompt, speed, guidance_scale, num_steps, output_path):
+        import json
+        # ponytail: CosyVoice3 поддерживает ТОЛЬКО inference_instruct2 — inference_zero_shot падает
+        # на assert <|endofprompt|> (LLM требует токен в prompt_text). Голос берётся из prompt_wav,
+        # ref_text (транскрипт) для CosyVoice3 не нужен.
+        if voice_model == "clone" and (not ref_audio_path or not os.path.exists(ref_audio_path)):
+            raise ValueError("Для клонирования CosyVoice требуется аудио-референс (ref_audio_path).")
+        if not output_path:
+            raise ValueError("CosyVoice требует output_path")
+
+        job = {
+            "text": text,
+            "design_prompt": design_prompt,
+            "ref_audio_path": ref_audio_path,
+            "speed": speed,
+            "guidance_scale": guidance_scale,
+            "num_steps": num_steps,
+            "output_path": output_path,
+        }
+        proc = self._get_worker()
+        proc.stdin.write(json.dumps(job, ensure_ascii=False) + "\n")
+        proc.stdin.flush()
+        line = proc.stdout.readline().strip()
+        if not line:
+            # worker упал — сбросим и скажем понятно
+            self._proc = None
+            raise RuntimeError("[CosyVoice] worker прекратил отвечать — проверьте логи процесса")
+        result = json.loads(line)
+        if not result.get("ok"):
+            raise RuntimeError(f"[CosyVoice] worker: {result.get('error')}")
+
+class FishAudioS2Provider(BaseTTSProvider):
+    # ponytail: Fish Audio S2 Pro в Vidora загружен как GGUF формата audio.cpp
+    # (general.architecture=audiocpp, family=fish_audio) — его не умеет ни llama-cpp-python,
+    # ни transformers. Движок audio.cpp (0xShug0/audio.cpp) — «llama.cpp для аудио» на том же
+    # ggml: запускаем его сервер (audiocpp_server.exe) с backend=cuda и шлём OpenAI-совместимый
+    # POST /v1/audio/speech. Сервер держит модель в памяти; thread_pool из 1 воркера сериализует.
+    MODEL_ID = "fish-s2"
+    _proc = None
+    _base_url = None
+    _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    @classmethod
+    def _find_gguf(cls):
+        explicit = os.environ.get("VIDORA_S2_MODEL")
+        if explicit:
+            return explicit
+        # ponytail: audio.cpp (узкий fopen) не открывает пути с кириллицей — ищем сначала
+        # ASCII-папку ~/ai-models, потом backend/ai-models как fallback.
+        home = os.path.join(Path.home(), "ai-models")
+        for directory in (home, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "ai-models"))):
+            if not os.path.isdir(directory):
+                continue
+            for p in sorted(Path(directory).glob("*.gguf")):
+                n = p.stem.lower()
+                if "s2" in n or "fish" in n:
+                    return str(p)
+        return None
+
+    @classmethod
+    def _prep_ref(cls, path, max_seconds: float = 8.0):
+        # ponytail: audio.cpp принимает voice_ref только как WAV (и не читает кириллические пути).
+        # Декодируем референс ffmpeg'ом в моно 16-бит WAV во временную ASCII-папку и режем до
+        # ~8с: длинный референс даёт «sampling logits produced zero probability mass».
+        if not path or not os.path.exists(path):
+            return path
+        import subprocess, tempfile
+        dst = os.path.join(tempfile.gettempdir(), "vidora_s2_ref_" + os.path.splitext(os.path.basename(path))[0] + ".wav")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", path, "-t", str(max_seconds), "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", dst],
+            capture_output=True, check=False,
+        )
+        return dst if os.path.exists(dst) and os.path.getsize(dst) > 0 else path
+
+    @staticmethod
+    def _trim_ref_text(text, max_chars: int = 120):
+        # ponytail: reference_text обязан быть коротким и соответствовать короткому референсу —
+        # длинный текст при коротком аудио ломает семплинг. Оставляем только первое предложение.
+        if not text:
+            return text
+        text = text.strip()
+        m = re.match(r'[^.!?…]*[.!?…]?', text)
+        first = (m.group(0) if m else "").strip()
+        return (first or text)[:max_chars].rstrip()
+
+    @classmethod
+    def _paths(cls):
+        base = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        exe = os.environ.get("VIDORA_S2_BIN")
+        if not exe:
+            for d in (os.path.join(Path.home(), "ai-models", "audiocpp"),
+                      os.path.join(base, "ai-models", "audiocpp")):
+                candidate = os.path.join(d, "audiocpp_server.exe")
+                if os.path.isfile(candidate):
+                    exe = candidate
+                    break
+        return cls._find_gguf(), exe
+
+    @classmethod
+    def _backend(cls):
+        backend = os.environ.get("VIDORA_S2_BACKEND")
+        if backend:
+            return backend
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+        except Exception:
+            pass
+        print("[FishAudioS2] CUDA не найдена — переключаюсь на CPU backend")
+        return "cpu"
+
+    @classmethod
+    def _get_server(cls):
+        if cls._proc is not None and cls._proc.poll() is None:
+            return cls._base_url
+        import subprocess, socket, time, json, tempfile
+        gguf, exe = cls._paths()
+        if not gguf or not os.path.isfile(gguf):
+            raise RuntimeError(
+                "Модель Fish Audio S2 Pro (.gguf) не найдена. Положи её в ~/ai-models или "
+                "backend/ai-models, либо укажи VIDORA_S2_MODEL."
+            )
+        if os.name == "nt" and any(ord(c) > 127 for c in gguf):
+            raise RuntimeError(
+                f"Модель S2 лежит по кириллическому пути ({gguf}) — audio.cpp не открывает такие "
+                "пути. Перенеси .gguf в ASCII-папку (например ~/ai-models) и укажи VIDORA_S2_MODEL."
+            )
+        if not os.path.isfile(exe):
+            raise RuntimeError(
+                f"Движок audio.cpp не найден ({exe}). Скачай audiocpp-windows-cuda-runtime.zip и "
+                "audiocpp-windows-cuda-balance.zip с https://github.com/0xShug0/audio.cpp/releases "
+                "и распакуй оба в backend/ai-models/audiocpp/, либо укажи путь в VIDORA_S2_BIN."
+            )
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        cfg = {
+            "host": "127.0.0.1",
+            "port": port,
+            "backend": cls._backend(),
+            "device": 0,
+            "threads": 4,
+            "lazy_load": True,
+            "models": [{
+                "id": cls.MODEL_ID,
+                "family": "fish_audio",
+                "path": gguf,
+                "task": "tts",
+                "mode": "offline",
+            }],
+        }
+        cfg_path = os.path.join(tempfile.gettempdir(), "vidora_fish_s2_server.json")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False)
+        print(f"[FishAudioS2] Старт audiocpp_server (backend={cfg['backend']})...")
+        cls._proc = subprocess.Popen([exe, "--config", cfg_path])
+        cls._base_url = f"http://127.0.0.1:{port}"
+        deadline = time.time() + 600
+        while time.time() < deadline:
+            if cls._proc.poll() is not None:
+                cls._proc = None
+                raise RuntimeError("[FishAudioS2] audiocpp_server упал при старте — смотрите логи процесса")
+            try:
+                if httpx.get(f"{cls._base_url}/health", timeout=3.0).status_code == 200:
+                    print("[FishAudioS2] сервер готов (модель поднимется лениво при первом запросе)")
+                    return cls._base_url
+            except httpx.HTTPError:
+                pass
+            time.sleep(1.0)
+        raise RuntimeError("[FishAudioS2] audiocpp_server не поднялся за 10 минут")
+
+    @classmethod
+    def unload_model(cls):
+        proc = cls._proc
+        cls._proc = None
+        cls._base_url = None
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception:
+                proc.kill()
+        print("[FishAudioS2] audiocpp_server остановлен")
 
     async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(self._thread_pool, self._generate_sync, text, voice_model, kwargs)
 
+    def _generate_sync(self, text, voice_model, kwargs):
+        output_path = kwargs.get("output_path", "")
+        text = to_s2_text(text, kwargs.get("design_prompt"))
+        if not text:
+            raise RuntimeError(
+                "Текст для озвучки пуст (возможно, он содержит только визуальную ремарку). "
+                "Перейдите во вкладку '📝 Raw Script' и сделайте пробел для перепарсинга."
+            )
+
+        ref_audio = kwargs.get("ref_audio_path")
+        if voice_model == "clone" and (not ref_audio or not os.path.exists(ref_audio)):
+            raise ValueError("Для клонирования S2 нужен аудио-референс (ref_audio_path).")
+
+        # ponytail: S2 не имеет guidance_scale/num_steps/speed/duration — управление стилем
+        # идёт инлайн-тегами [tag]. voice_ref — путь к референсу (сервер на той же машине).
+        # max_tokens масштабируем по длине текста (~21 семантич. токена/сек речи): короткий текст
+        # даёт низкий потолок, иначе модель иногда зацикливается и генерит десятки секунд мусора.
+        max_tokens = min(1024, max(200, int(len(text) * 2.0)))
+        payload = {
+            "model": self.MODEL_ID,
+            "input": text,
+            "response_format": "wav",
+            "max_tokens": max_tokens,
+        }
+        if voice_model == "clone":
+            payload["voice_ref"] = self._prep_ref(ref_audio)
+            if kwargs.get("ref_text"):
+                payload["reference_text"] = self._trim_ref_text(kwargs["ref_text"])
+
+        base = self._get_server()
+        with httpx.Client(timeout=300.0) as client:
+            res = client.post(f"{base}/v1/audio/speech", json=payload)
+        if res.status_code != 200:
+            raise RuntimeError(f"[FishAudioS2] сервер: HTTP {res.status_code} — {res.text[:200]}")
+        if output_path:
+            with open(output_path, "wb") as f:
+                f.write(res.content)
 
 class SileroProvider(BaseTTSProvider):
     _model = None
@@ -322,6 +746,8 @@ def _gateway_prep(text: str, voice: str, is_minimax: bool, kwargs: dict):
     Локальные спикеры маплятся на голос провайдера; для minimax выкусывается [emotion: x]
     и уезжает в voice_setting, который шлюз прокидывает в MiniMax нативно."""
     raw_voice = voice
+    text, inline_instruct = extract_instruct_tag(text)
+    text = clean_voice_tags(text)
     if voice in _LOCAL_SPEAKERS:
         voice = MINIMAX_DEFAULT_VOICE if is_minimax else "nova"
     extra = {}
@@ -335,6 +761,8 @@ def _gateway_prep(text: str, voice: str, is_minimax: bool, kwargs: dict):
         }
         if emotion:
             extra["voice_setting"]["emotion"] = emotion
+        if inline_instruct:
+            extra["voice_setting"]["design_prompt"] = inline_instruct
     # Дизайн голоса по промпту (MiniMax voice_design) и клонирование по референсу — уходят в voice_setting
     if raw_voice == 'design' and kwargs.get('design_prompt'):
         extra.setdefault("voice_setting", {})["design_prompt"] = kwargs.get('design_prompt')
@@ -360,6 +788,11 @@ class GatewayTTSProvider(BaseTTSProvider):
             raise RuntimeError("Для дизайна голоса нужен промпт (design_prompt)")
         is_minimax = self.model.lower().startswith("minimax/")
         text, voice, extra_body = _gateway_prep(text, voice_model or 'nova', is_minimax, kwargs)
+        if not text:
+            raise RuntimeError(
+                "Текст для озвучки пуст (возможно, он содержит только визуальную ремарку). "
+                "Перейдите во вкладку '📝 Raw Script' и сделайте пробел для перепарсинга."
+            )
 
         from openai import AsyncOpenAI
         routes = [
@@ -394,22 +827,53 @@ class GatewayTTSProvider(BaseTTSProvider):
         raise RuntimeError(f"Gateway TTS недоступен: {last_error or 'ключи не заданы'}")
 
 class TTSProviderFactory:
-    @staticmethod
-    def get_provider(engine: Optional[str]) -> BaseTTSProvider:
+    _active_provider_class = None
+
+    @classmethod
+    def get_provider(cls, engine: Optional[str]) -> BaseTTSProvider:
         if engine in ("silero", "snakers4/silero-models"):
-            return SileroProvider()
+            provider_cls = SileroProvider
         elif engine == "elevenlabs":
-            return ElevenLabsProvider()
+            provider_cls = ElevenLabsProvider
         elif engine == "openai":
-            return OpenAIProvider()
+            provider_cls = OpenAIProvider
         elif engine == "k2-fsa/OmniVoice":
-            return OmniVoiceProvider()
+            provider_cls = OmniVoiceProvider
         elif engine in _LOCAL_TTS_ENGINES:
             cfg = _LOCAL_TTS_ENGINES[engine]
             return LocalLLMTTSProvider(cfg["engine"], cfg["python"], cfg["model"], cfg["mode"], cfg.get("codec"))
+        elif engine and "cosyvoice" in engine.lower():
+            provider_cls = CosyVoiceProvider
+        elif engine and ("s2" in engine.lower() or "fish" in engine.lower()):
+            provider_cls = FishAudioS2Provider
         elif engine and "/" in engine:
+            provider_cls = GatewayTTSProvider
+        else:
+            provider_cls = OmniVoiceProvider
+
+        # ponytail: единая точка выгрузки — при смене движка старая модель уходит из VRAM сама
+        if cls._active_provider_class and cls._active_provider_class != provider_cls:
+            if hasattr(cls._active_provider_class, 'unload_model'):
+                print(f"[VRAM] Авто-выгрузка {cls._active_provider_class.__name__} из памяти...")
+                cls._active_provider_class.unload_model()
+        cls._active_provider_class = provider_cls
+
+        if provider_cls == GatewayTTSProvider:
             return GatewayTTSProvider(engine)
-        return OmniVoiceProvider()
+        return provider_cls()
+
+    @classmethod
+    def unload_all(cls):
+        """Принудительная выгрузка ЛЮБОЙ активной TTS-модели из VRAM (абстрактно)."""
+        print("[VRAM] Абстрактная очистка памяти TTS...")
+        if cls._active_provider_class and hasattr(cls._active_provider_class, 'unload_model'):
+            cls._active_provider_class.unload_model()
+            cls._active_provider_class = None
+        try:
+            from app.services.lavasr_enhancer import LavaSREnhancer
+            LavaSREnhancer.unload_model()
+        except Exception:
+            pass
 
 try:
     import torch
@@ -425,7 +889,9 @@ if __name__ == "__main__":
     async def _check():
         factory = TTSProviderFactory
         assert isinstance(factory.get_provider("k2-fsa/OmniVoice"), OmniVoiceProvider)
+        assert isinstance(factory.get_provider("FunAudioLLM/Fun-CosyVoice3-0.5B"), CosyVoiceProvider)
         assert isinstance(factory.get_provider("snakers4/silero-models"), SileroProvider)
+        assert isinstance(factory.get_provider("fishaudio/s2-pro"), FishAudioS2Provider)
         assert isinstance(factory.get_provider("openai/tts-1-hd"), GatewayTTSProvider)
         assert isinstance(factory.get_provider("minimax/speech-2.8-hd"), GatewayTTSProvider)
         mm = factory.get_provider("minimax/speech-2.8-hd")
@@ -455,6 +921,15 @@ if __name__ == "__main__":
         t, e = split_emotion_tag("Стало страшно? <#1.5#> (sighs) [emotion: whisper] скорее нет")
         assert e is None and "[emotion" not in t
         assert clean_voice_tags("[emotion: calm] Я жду <#1.5#> (sighs) ответа.").lower().split() == ["я", "жду", "ответа."]
+        # instruct-тег: инструкция вынимается, текст очищается
+        t, ins = extract_instruct_tag("[instruct: Speak slowly and softly] Сегодня поговорим.")
+        assert ins == "Speak slowly and softly" and "[instruct" not in t
+        # S2: инлайн-теги [tag], <#пауза#> -> [pause], скобки вырезаются, design_prompt ведущим тегом
+        assert to_s2_text("Привет <#1.5#> (sighs) [emotion: calm] друг") == "Привет [pause] [calm] друг"
+        assert to_s2_text("Привет.", "говори тихо") == "[говори тихо] Привет."
+        assert to_s2_text("*ремарка* Привет.") == "Привет."
+        t, v, extra = _gateway_prep("[instruct: грубый голос] Привет.", "aria", True, {})
+        assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["design_prompt"] == "грубый голос" and "[instruct" not in t
         # шлюз: minimax получает очищенный текст + voice_setting.emotion в extra_body
         t, v, extra = _gateway_prep("[emotion: sad] База исчезла.", "aria", True, {})
         assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["emotion"] == "sad" and "[emotion" not in t

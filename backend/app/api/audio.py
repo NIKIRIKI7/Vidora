@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import difflib
+import re
 import warnings
 from pathlib import Path
 
@@ -11,9 +12,12 @@ warnings.filterwarnings("ignore", message=".*Audio is shorter than 30s.*")
 warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from app.schemas import AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest, AudioConcatRequest, AdvancedSilenceRequest, TranscribeRequest
+from app.schemas import (
+    AudioGenerationRequest, AudioProcessRequest, AudioSyncRequest,
+    AudioConcatRequest, AdvancedSilenceRequest, TranscribeRequest
+)
 from app.services.audio_service import AudioService
-from app.services.audio_provider import OmniVoiceProvider, LocalLLMTTSProvider, clean_voice_tags
+from app.services.audio_provider import OmniVoiceProvider, LocalLLMTTSProvider, TTSProviderFactory, clean_voice_tags
 
 # ponytail: avoid Cyrillic in cache path — torch.jit.load uses fopen() which
 # garbles non-ASCII on Windows. Keep models under ~/.cache (always ASCII).
@@ -32,14 +36,12 @@ def _resolve_path(path: str, project_path: str = "") -> str:
     norm_path = os.path.normpath(path)
     if os.path.isabs(norm_path):
         return norm_path
-    
     base_dir = os.getcwd()
     if project_path:
         norm_proj = os.path.normpath(project_path)
         if norm_path == norm_proj or norm_path.startswith(norm_proj + os.sep) or norm_path.startswith(norm_proj + "/"):
             return os.path.normpath(os.path.join(base_dir, norm_path))
         base_dir = os.path.join(base_dir, norm_proj)
-        
     return os.path.normpath(os.path.join(base_dir, norm_path))
 
 def _run_ffmpeg(cmd: list, desc: str = "ffmpeg") -> str:
@@ -60,14 +62,14 @@ def _free_vram():
         torch.cuda.empty_cache()
 
 def _get_audio_duration(path: str) -> float:
-    if not os.path.exists(path): return 0.0
+    if not os.path.exists(path):
+        return 0.0
     try:
         import wave
         with wave.open(path, 'r') as wav:
             return wav.getnframes() / float(wav.getframerate())
     except Exception:
         pass
-    # Не-WAV (например, mp3 от MiniMax) — длительность через ffprobe
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", path],
@@ -78,19 +80,33 @@ def _get_audio_duration(path: str) -> float:
     except Exception:
         return 0.0
 
+def _normalize_words(text: str) -> list:
+    """Извлекает чистые слова без пунктуации в нижнем регистре."""
+    clean = clean_voice_tags(text)
+    return [w.lower() for w in re.findall(r'[\w\u0400-\u04FF]+', clean) if w.strip()]
+
 def _make_fallback_response(fragments, reason: str = "", audio_dur: float = 0.0):
     results, cur_time = [], 0.0
+    total_words = sum(max(1, len(_normalize_words(f.text))) for f in fragments)
+
     for idx, frag in enumerate(fragments):
-        dur = max(len(frag.text.split()) / 2.5, 1.0)
+        words_count = max(1, len(_normalize_words(frag.text)))
+        if audio_dur > 0 and total_words > 0:
+            dur = audio_dur * (words_count / total_words)
+        else:
+            dur = max(words_count * 0.4, 1.0)
+
         end_time = cur_time + dur
         if idx == len(fragments) - 1 and audio_dur > 0:
             end_time = max(end_time, audio_dur)
+
         results.append({
             "id": frag.id,
             "startTime": round(cur_time, 3),
             "endTime": round(end_time, 3),
         })
-        cur_time = end_time + 0.1
+        cur_time = end_time
+
     return {
         "status": "ok",
         "fragments_timings": results,
@@ -98,34 +114,128 @@ def _make_fallback_response(fragments, reason: str = "", audio_dur: float = 0.0)
         "reason": reason
     }
 
+def _align_fragments_globally(fragments, recognized_words, audio_dur: float):
+    """
+    Глобальное выравнивание списка фрагментов по массиву распознанных слов Whisper.
+    Гарантирует точные тайминги для каждого фрагмента без пропусков.
+    """
+    if not recognized_words:
+        return _make_fallback_response(fragments, reason="Слова не распознаны в аудио", audio_dur=audio_dur)["fragments_timings"]
+
+    frag_word_lists = [_normalize_words(f.text) for f in fragments]
+    script_words = []
+    frag_ranges = []
+
+    for wlist in frag_word_lists:
+        start_idx = len(script_words)
+        script_words.extend(wlist)
+        frag_ranges.append((start_idx, len(script_words)))
+
+    if not script_words:
+        return _make_fallback_response(fragments, reason="Пустой текст фрагментов", audio_dur=audio_dur)["fragments_timings"]
+
+    reco_texts = []
+    for w in recognized_words:
+        nw = _normalize_words(w.get("word", ""))
+        reco_texts.append(nw[0] if nw else w.get("word", "").lower().strip())
+
+    # Глобальное сопоставление последовательностей
+    sm = difflib.SequenceMatcher(None, script_words, reco_texts)
+    matching_blocks = sm.get_matching_blocks()
+
+    script_to_reco = {}
+    for i_block, j_block, size in matching_blocks:
+        for offset in range(size):
+            script_to_reco[i_block + offset] = recognized_words[j_block + offset]
+
+    raw_timings = []
+    for k, (s_start, s_end) in enumerate(frag_ranges):
+        matched = [script_to_reco[i] for i in range(s_start, s_end) if i in script_to_reco]
+        if matched:
+            st = matched[0]["start"]
+            et = matched[-1]["end"]
+        else:
+            st = None
+            et = None
+        raw_timings.append({"id": fragments[k].id, "st": st, "et": et, "word_count": max(1, s_end - s_start)})
+
+    # Интерполяция для нераспознанных фрагментов
+    n = len(raw_timings)
+    for i in range(n):
+        if raw_timings[i]["st"] is None:
+            prev_t = 0.0
+            for prev_i in range(i - 1, -1, -1):
+                if raw_timings[prev_i]["et"] is not None:
+                    prev_t = raw_timings[prev_i]["et"]
+                    break
+
+            next_t = audio_dur if audio_dur > 0 else (prev_t + sum(raw_timings[x]["word_count"] * 0.4 for x in range(i, n)))
+            next_idx = n
+            for next_i in range(i + 1, n):
+                if raw_timings[next_i]["st"] is not None:
+                    next_t = raw_timings[next_i]["st"]
+                    next_idx = next_i
+                    break
+
+            missing_words = sum(raw_timings[x]["word_count"] for x in range(i, next_idx))
+            avail_dur = max(0.5 * (next_idx - i), next_t - prev_t)
+            curr_pos = prev_t
+            for x in range(i, next_idx):
+                frac = raw_timings[x]["word_count"] / float(max(1, missing_words))
+                dur = avail_dur * frac
+                raw_timings[x]["st"] = curr_pos
+                raw_timings[x]["et"] = curr_pos + dur
+                curr_pos += dur
+
+    # Формирование строго монотонных таймингов без наложений
+    final_results = []
+    cur_end = 0.0
+    for idx, item in enumerate(raw_timings):
+        st = max(cur_end, item["st"] if item["st"] is not None else cur_end)
+        et = item["et"] if item["et"] is not None else (st + item["word_count"] * 0.4)
+        if et <= st:
+            et = st + max(0.5, item["word_count"] * 0.35)
+
+        if idx == 0 and st < 0.4:
+            st = 0.0
+
+        if idx == n - 1 and audio_dur > 0:
+            et = max(et, audio_dur)
+
+        final_results.append({
+            "id": item["id"],
+            "startTime": round(st, 3),
+            "endTime": round(et, 3),
+        })
+        cur_end = et
+
+    return final_results
+
+
 @router.post("/vram/unload")
 async def unload_vram_endpoint():
-    print("[VRAM] Запрос на ручную очистку памяти GPU...")
+    print("[VRAM] Запрос на полную очистку памяти GPU...")
     OmniVoiceProvider.unload_model()
-    # ponytail: LLM-TTS живёт в subprocess — VRAM освобождается при его завершении; вызов no-op для надёжности
     LocalLLMTTSProvider.unload_model()
+    TTSProviderFactory.unload_all()
     _free_vram()
     return {"status": "ok", "detail": "VRAM полностью очищена"}
 
-
-
 @router.post("/generate")
 async def generate_audio(request: AudioGenerationRequest):
-    print(f"\n[AUDIO API] \u0417\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u044e \u0434\u043b\u044f \u0444\u0440\u0430\u0433\u043c\u0435\u043d\u0442\u0430: {request.fragment_id}")
-
+    print(f"\n[AUDIO API] Запрос на генерацию для фрагмента: {request.fragment_id}")
     if not request.project_path:
         request.project_path = "vidora_projects"
-
     try:
         os.makedirs(request.project_path, exist_ok=True)
     except Exception as e:
-        print(f"[AUDIO API] \u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u044f \u0434\u0438\u0440\u0435\u043a\u0442\u043e\u0440\u0438\u0438: {e}")
+        print(f"[AUDIO API] Ошибка создания директории: {e}")
 
     try:
         result = await audio_service.generate(request)
         return result
     except Exception as e:
-        print(f"[AUDIO API] \u041e\u0448\u0438\u0431\u043a\u0430 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438: {e}")
+        print(f"[AUDIO API] Ошибка генерации: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload-ref")
@@ -133,19 +243,15 @@ async def upload_ref(project_path: str = Form(default="vidora_projects"), file: 
     os.makedirs(project_path, exist_ok=True)
     refs_dir = os.path.join(project_path, "assets", "refs")
     os.makedirs(refs_dir, exist_ok=True)
-
     file_path = os.path.join(refs_dir, file.filename)
     file_path = os.path.normpath(os.path.abspath(file_path))
-
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-
     return {"status": "ok", "ref_audio_path": file_path}
 
 @router.post("/process")
 async def process_audio(request: AudioProcessRequest):
     audio_path = _resolve_path(request.audio_path, request.project_path)
-
     if not os.path.exists(audio_path):
         return {"status": "error", "detail": f"Файл не найден: {audio_path}"}
 
@@ -154,7 +260,6 @@ async def process_audio(request: AudioProcessRequest):
         shutil.copy2(audio_path, backup_path)
 
     temp_out = audio_path + ".tmp.wav"
-
     cmds = {
         "normalize": ["ffmpeg", "-y", "-i", audio_path, "-af", "loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
         # ponytail: agate срезает тихое шипение/потрескивание LLM-TTS (<-40dB) перед шумодавом/компрессией
@@ -163,45 +268,48 @@ async def process_audio(request: AudioProcessRequest):
         "mastering": ["ffmpeg", "-y", "-i", audio_path, "-af", "highpass=f=80,agate=threshold=-40dB:ratio=10:attack=10:release=250,afftdn,acompressor=ratio=4:makeup=2,loudnorm=I=-14:LRA=11:TP=-1.5", temp_out],
     }
 
-    if request.action == "silero_vad":
+    if request.action in ["lavasr", "lavasr_enhance"]:
+        try:
+            from app.services.lavasr_enhancer import LavaSREnhancer
+            LavaSREnhancer.enhance_file(audio_path, output_path=audio_path, enhance=True, denoise=False)
+            return {"status": "ok", "processed_audio_path": audio_path, "action_applied": "lavasr"}
+        except Exception as e:
+            return {"status": "error", "detail": f"LavaSR error: {e}"}
+
+    elif request.action == "lavasr_denoise":
+        try:
+            from app.services.lavasr_enhancer import LavaSREnhancer
+            LavaSREnhancer.enhance_file(audio_path, output_path=audio_path, enhance=True, denoise=True)
+            return {"status": "ok", "processed_audio_path": audio_path, "action_applied": "lavasr_denoise"}
+        except Exception as e:
+            return {"status": "error", "detail": f"LavaSR error: {e}"}
+
+    elif request.action == "silero_vad":
         try:
             import torch
             import torchaudio
             print(f"[AUDIO API] Запуск Silero VAD для: {audio_path}")
-            
-            # Загружаем модель VAD
             model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True, force_reload=False)
             (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
-            
-            # Модель ожидает частоту 16000 Гц для распознавания
             wav_16k = read_audio(audio_path, sampling_rate=16000)
             speech_timestamps = get_speech_timestamps(wav_16k, model, sampling_rate=16000)
-            
             if not speech_timestamps:
                 print(f"[AUDIO API] Silero VAD: Речь не найдена, копируем оригинал.")
                 shutil.copy2(audio_path, temp_out)
             else:
-                # Читаем исходный файл (с его родной частотой дискретизации), чтобы сохранить качество
                 wav_orig, sr = torchaudio.load(audio_path)
                 chunks = []
                 for chunk in speech_timestamps:
-                    # Добавляем 0.1s padding (100 мс) до и после найденной речи для плавности
                     start_idx = max(0, int((chunk['start'] / 16000.0 - 0.1) * sr))
                     end_idx = min(wav_orig.shape[1], int((chunk['end'] / 16000.0 + 0.1) * sr))
                     chunks.append(wav_orig[:, start_idx:end_idx])
-                
                 if chunks:
                     concatenated = torch.cat(chunks, dim=1)
                     torchaudio.save(temp_out, concatenated, sr)
                 else:
                     shutil.copy2(audio_path, temp_out)
-
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"[AUDIO API] Silero VAD Error: {e}")
             return {"status": "error", "detail": f"Silero VAD error: {str(e)}"}
-            
     elif request.action in cmds:
         try:
             _run_ffmpeg(cmds[request.action], desc=f"process/{request.action}")
@@ -212,7 +320,6 @@ async def process_audio(request: AudioProcessRequest):
 
     if not os.path.exists(temp_out):
         return {"status": "error", "detail": "Выходной файл не создан"}
-
     shutil.move(temp_out, audio_path)
     return {"status": "ok", "processed_audio_path": audio_path, "action_applied": request.action}
 
@@ -223,29 +330,24 @@ async def undo_audio(request: AudioProcessRequest):
 
     if os.path.exists(backup_path):
         shutil.copy2(backup_path, audio_path)
-        return {"status": "ok", "processed_audio_path": audio_path, "detail": "\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u044b"}
-    return {"status": "error", "detail": "\u041d\u0435\u0442 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u0434\u043b\u044f \u043e\u0442\u043a\u0430\u0442\u0430"}
+        return {"status": "ok", "processed_audio_path": audio_path, "detail": "Изменения отменены"}
+    return {"status": "error", "detail": "Нет истории изменений для отката"}
 
 @router.post("/transcribe")
 async def transcribe_audio(req: TranscribeRequest):
     audio_path = _resolve_path(req.audio_path)
     if not os.path.exists(audio_path):
         return {"status": "error", "detail": "Файл не найден"}
-
     try:
         import whisperx
         import torch
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
-
-        print(f"[AUDIO API] Загрузка WhisperX ({req.whisper_model}) для авто-транскрибации...")
         model = whisperx.load_model(req.whisper_model, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
         audio = whisperx.load_audio(audio_path)
-
-        print(f"[AUDIO API] Распознавание речи...")
         result = model.transcribe(audio, batch_size=8, language="ru")
-
         text = " ".join([seg["text"].strip() for seg in result["segments"]]).strip()
+        del model
         _free_vram()
         return {"status": "ok", "text": text}
     except Exception as e:
@@ -257,16 +359,12 @@ async def process_advanced_silence(req: AdvancedSilenceRequest):
     audio_path = _resolve_path(req.audio_path, req.project_path)
     if not os.path.exists(audio_path):
         return {"status": "error", "detail": "Файл не найден"}
-
     from pydub import AudioSegment
     from pydub.silence import detect_silence
-
     audio = AudioSegment.from_file(audio_path)
     silences = detect_silence(audio, min_silence_len=req.min_silence_ms, silence_thresh=req.threshold_db)
-
     if not silences:
         return {"status": "ok", "processed_audio_path": audio_path, "new_duration_sec": len(audio) / 1000.0}
-
     chunks, last_end = [], 0
     for i, (start, end) in enumerate(silences):
         if start > last_end:
@@ -279,14 +377,11 @@ async def process_advanced_silence(req: AdvancedSilenceRequest):
             kept_silence = min(silence_dur, req.max_silence_ms)
             chunks.append(audio[start:start + kept_silence])
         last_end = end
-
     if last_end < len(audio):
         chunks.append(audio[last_end:])
-
     result = chunks[0]
     for chunk in chunks[1:]:
         result += chunk
-
     result.export(audio_path, format="wav")
     return {"status": "ok", "processed_audio_path": audio_path, "new_duration_sec": len(result) / 1000.0}
 
@@ -330,7 +425,6 @@ async def sync_audio(request: AudioSyncRequest):
     if not request.use_whisper:
         print("[AUDIO SYNC] [CONFIG] Whisper отключен в UI. Применение FALLBACK.")
         return _make_fallback_response(request.fragments, reason="Whisper отключен в настройках UI", audio_dur=audio_dur)
-
     if not os.path.exists(audio_path):
         print(f"[AUDIO SYNC] [WARN] Аудиофайл НЕ НАЙДЕН: '{audio_path}'. Применение FALLBACK.")
         return _make_fallback_response(request.fragments, reason="Файл аудио не найден", audio_dur=audio_dur)
@@ -339,114 +433,56 @@ async def sync_audio(request: AudioSyncRequest):
         print("[AUDIO SYNC] [VRAM] Выгрузка локальных TTS из памяти GPU...")
         OmniVoiceProvider.unload_model()
         LocalLLMTTSProvider.unload_model()
+        TTSProviderFactory.unload_all()
 
     try:
         import whisperx
         import torch
-
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
         print(f"[AUDIO SYNC] [INFO] Загрузка WhisperX ({request.whisper_model}, device={device}, compute_type={compute_type})...")
-
         model = whisperx.load_model(request.whisper_model, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
         audio = whisperx.load_audio(audio_path)
-
         print("[AUDIO SYNC] [INFO] Транскрибация речи (форсирован русский язык)...")
-        # ponytail: tiny/base путают русский с украинским/болгарским — форсируем ru жёстко
         result = model.transcribe(audio, batch_size=8, language="ru")
         lang = result.get("language", "ru")
 
         recognized_words = []
         try:
             print(f"[AUDIO SYNC] [INFO] Выравнивание (Alignment) для языка '{lang}'...")
-            model_a, metadata = whisperx.load_align_model(
-                language_code=lang, device=device, model_dir=WHISPER_MODEL_DIR
-            )
-            aligned_res = whisperx.align(
-                result["segments"], model_a, metadata, audio, device, return_char_alignments=False
-            )
+            model_a, metadata = whisperx.load_align_model(language_code=lang, device=device, model_dir=WHISPER_MODEL_DIR)
+            aligned_res = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
             for segment in aligned_res.get("segments", []):
                 for w in segment.get("words", []):
                     if "start" in w and "end" in w:
                         recognized_words.append(w)
+            del model_a
         except Exception as align_err:
-            print(f"[AUDIO SYNC] [WARN] Модель выравнивания не загрузилась ({align_err}). Используем слова Whisper.")
+            print(f"[AUDIO SYNC] [WARN] Модель выравнивания не загрузилась ({align_err}). Используем сегменты транскрибации.")
             for segment in result.get("segments", []):
                 for w in segment.get("words", []):
                     if "start" in w and "end" in w:
                         recognized_words.append(w)
+                if not segment.get("words"):
+                    seg_words = _normalize_words(segment.get("text", ""))
+                    if seg_words:
+                        w_dur = max(0.1, (segment["end"] - segment["start"])) / len(seg_words)
+                        for wi, sw in enumerate(seg_words):
+                            recognized_words.append({
+                                "word": sw,
+                                "start": segment["start"] + wi * w_dur,
+                                "end": segment["start"] + (wi + 1) * w_dur
+                            })
 
-        all_reco_texts = [w["word"].strip().lower() for w in recognized_words]
+        del model
+        _free_vram()
 
-        if not recognized_words:
-            print("[AUDIO SYNC] [WARN] Слова не распознаны. Переход на FALLBACK.")
-            return _make_fallback_response(request.fragments, reason="Слова не распознаны в аудио")
-        results = []
-        reco_cursor = 0
-
-        for idx, frag in enumerate(request.fragments):
-            # ponytail: теги озвучки ([emotion: x], <#1.5#>, (sighs)) не произносятся — не должны попадать в матчинг
-            frag_words = clean_voice_tags(frag.text).lower().split()
-            if not frag_words:
-                continue
-
-            best_start = None
-            best_ratio = 0.0
-            search_end = len(all_reco_texts) - len(frag_words) + 1
-            for i in range(reco_cursor, search_end):
-                chunk = all_reco_texts[i:i + len(frag_words)]
-                ratio = difflib.SequenceMatcher(None, frag_words, chunk).ratio()
-                if ratio > best_ratio:
-                    best_ratio = ratio
-                    best_start = i
-                if ratio == 1.0:
-                    break
-
-            if best_start is not None and best_ratio > 0.3:
-                chunk_words = recognized_words[best_start:best_start + len(frag_words)]
-                start_time = chunk_words[0]["start"]
-                # ponytail: Whisper cuts trailing breath/echo. Add 0.3s padding.
-                end_time = chunk_words[-1]["end"] + 0.3
-
-                # ponytail: Final fragment stretches to the exact end of the audio file to prevent FFmpeg truncation
-                if idx == len(request.fragments) - 1 and audio_dur > 0:
-                    end_time = max(end_time, audio_dur)
-
-                reco_cursor = best_start + len(frag_words)
-            else:
-                prev_end = results[-1]["endTime"] if results else 0.0
-
-                if best_start is not None and best_ratio > 0.3:
-                    chunk_words = recognized_words[best_start:best_start + len(frag_words)]
-                    start_time = chunk_words[0]["start"]
-                    end_time = chunk_words[-1]["end"] + 0.3
-
-                    if start_time < prev_end:
-                        start_time = prev_end
-                    if end_time <= start_time:
-                        end_time = start_time + 0.5
-
-                    if idx == len(request.fragments) - 1 and audio_dur > 0:
-                        end_time = max(end_time, audio_dur)
-                    reco_cursor = best_start + len(frag_words)
-                else:
-                    dur = max(len(frag_words) * 0.4, 1.0)
-                    start_time = prev_end
-                    end_time = prev_end + dur
-
-                    if idx == len(request.fragments) - 1 and audio_dur > 0:
-                        end_time = max(end_time, audio_dur)
-
-                results.append({
-                    "id": frag.id,
-                    "startTime": round(start_time, 3),
-                    "endTime": round(end_time, 3),
-                })
-
-        print(f"[AUDIO SYNC] [OK] WHISPERX УСПЕШНО сработал!")
-        return {"status": "ok", "fragments_timings": results, "fallback": False}
+        # Глобальное выравнивание фрагментов по словам
+        timings = _align_fragments_globally(request.fragments, recognized_words, audio_dur)
+        print(f"[AUDIO SYNC] [OK] WHISPERX УСПЕШНО выровнял {len(timings)} фрагментов!")
+        return {"status": "ok", "fragments_timings": timings, "fallback": False}
 
     except Exception as e:
         print(f"[AUDIO SYNC] [ERROR] Ошибка WhisperX ({type(e).__name__}: {e}). Переход на FALLBACK.")
         _free_vram()
-        return _make_fallback_response(request.fragments, reason=str(e))
+        return _make_fallback_response(request.fragments, reason=str(e), audio_dur=audio_dur)
