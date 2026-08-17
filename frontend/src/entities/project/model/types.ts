@@ -5,6 +5,7 @@ export type Resolution = '1080p' | '1440p' | '2160p'
 export type VideoFormat = '16:9' | '9:16'
 export type FPS = '24' | '30' | '60'
 export type AudioGenerationMode = 'fragment' | 'scene' | 'project'
+export type TaskType = 'scenario' | 'visual' | 'audio' | 'broll'
 
 export interface GlobalVoice {
   id: string
@@ -19,6 +20,34 @@ export interface GlobalVoice {
     guidanceScale: number
     numSteps: number
   }
+}
+
+export interface IdeaFormat {
+  titles: string[]
+  description: string
+  thumbnail_concept: string
+}
+
+export interface VideoResult {
+  video_id: string
+  title: string
+  channel: string
+  views: number
+  subs: number
+  ratio: number
+  vph: number
+  url: string
+  published_at: string
+  transcript_sample?: string
+  duration_sec?: number
+  is_short?: boolean
+  keyword_found?: string
+}
+
+export interface HookAnalysisData {
+  original_hook?: string
+  psychology?: string
+  stolen_hooks?: string[]
 }
 
 export interface AudioProcessingSettings {
@@ -85,6 +114,7 @@ export interface ApiKeys {
   routerai?: string
   aitunnel?: string
   youtube?: string
+  pexels?: string
 }
 
 export interface PromptVersion {
@@ -114,7 +144,7 @@ export interface PromptTemplates {
   scenario: string
 }
 
-export type ProcessType = 'scenario' | 'project' | 'scene' | 'fragment' | 'audio' | 'analysis'
+export type ProcessType = 'scenario' | 'project' | 'scene' | 'fragment' | 'audio' | 'analysis' | 'broll'
 
 export interface Skill {
   id: string
@@ -139,4 +169,5 @@ export interface ProjectSettings {
   activeGlobalVoiceId?: string
   audioProcessing: AudioProcessingSettings
   use3D?: boolean
+  autoBRollEnabled?: boolean
 }

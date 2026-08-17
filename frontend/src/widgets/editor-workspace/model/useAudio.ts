@@ -21,6 +21,15 @@ export interface AudioOptions {
   designPrompt?: string
 }
 
+export interface CustomAudioUploadParams {
+  scope: 'fragment' | 'scene' | 'project'
+  file: File
+  targetSceneId?: string
+  targetFragmentId?: string
+  transcribeWithWhisper?: boolean
+  manualRefText?: string
+}
+
 const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSettings, opts: AudioOptions) => {
   // ponytail: наследуем эмоцию первой фразы сцены во все фрагменты без своего [emotion: x] — единый тон всего блока
   const sceneEmotion = scene.fragments[0]?.text.match(/\[emotion:\s*[a-z-]+\]/i)?.[0] || ''
@@ -509,5 +518,119 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
     }
   }
 
-  return { isGeneratingAudio, isSyncing, audioLoaded, setAudioLoaded, handleProcessAudio, handleProcessAdvancedSilence, runVoiceGenFragment, runVoiceGenAllScenes, runSyncAllScenes, handleUnloadVram, handleResetAudio, handleResetAllSync, handleReplaceSceneAudio }
+  const handleUploadCustomAudioAdvanced = async ({
+    scope,
+    file,
+    targetSceneId,
+    targetFragmentId,
+    transcribeWithWhisper = false,
+    manualRefText = '',
+  }: CustomAudioUploadParams) => {
+    setIsGeneratingAudio(true)
+    showNotification('Загрузка аудиофайла...', 'info')
+    const projectPath = getProjectPath(project)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('project_path', projectPath)
+    fd.append('target_id', scope === 'fragment' ? targetFragmentId || 'frag' : targetSceneId || 'scene')
+
+    try {
+      const uploadRes = await fetch(`${API}/api/v1/media/upload-audio`, { method: 'POST', body: fd })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok || uploadData.status !== 'ok') {
+        throw new Error(uploadData.detail || 'Ошибка загрузки аудио')
+      }
+
+      const savedAudioPath = uploadData.path
+      const audioDuration = uploadData.duration || 0
+      let spokenText = manualRefText.trim()
+
+      if (transcribeWithWhisper && !spokenText) {
+        showNotification('Распознавание речи через Whisper...', 'info')
+        const transRes = await fetch(`${API}/api/v1/audio/transcribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio_path: savedAudioPath, whisper_model: 'small' }),
+        })
+        const transData = await transRes.json()
+        if (transRes.ok && transData.status === 'ok') {
+          spokenText = transData.text
+        } else {
+          showNotification('Не удалось распознать речь, используем текущий сценарий', 'info')
+        }
+      }
+
+      if (scope === 'fragment' && targetSceneId && targetFragmentId) {
+        const scene = project.scenes.find(s => s.id === targetSceneId)
+        if (!scene) return
+        const updatedFragments = scene.fragments.map(f => {
+          if (f.id !== targetFragmentId) return f
+          const start = f.startTime ?? 0
+          return {
+            ...f,
+            text: spokenText || f.text,
+            audioFileName: savedAudioPath,
+            startTime: start,
+            endTime: Number((start + (audioDuration || 3.0)).toFixed(3)),
+            lastAudioHash: hashCode(spokenText || f.text),
+            lastAudioTextNormalized: normalizeText(spokenText || f.text),
+          }
+        })
+        onUpdateProject({
+          ...project,
+          scenes: project.scenes.map(s => (s.id === targetSceneId ? { ...s, fragments: updatedFragments } : s)),
+        })
+        showNotification('Аудио фрагмента успешно обновлено!', 'success')
+      } else if (scope === 'scene' && targetSceneId) {
+        const scene = project.scenes.find(s => s.id === targetSceneId)
+        if (!scene) return
+        const updatedFragments = recalculateTimingsProportionally(scene.fragments, audioDuration)
+        updatedFragments.forEach(f => {
+          f.audioFileName = savedAudioPath
+          f.lastAudioHash = hashCode(f.text)
+          f.lastAudioTextNormalized = normalizeText(f.text)
+        })
+        const targetScene = { ...scene, fragments: updatedFragments, audioOffset: 0 }
+        showNotification('Синхронизация таймингов сцены (WhisperX)...', 'info')
+        await runSyncAllScenes([targetScene])
+        showNotification(`Сцена "${scene.title}" озвучена и синхронизирована!`, 'success')
+      } else if (scope === 'project') {
+        const allFragments = project.scenes.flatMap(s => s.fragments)
+        const recalculated = recalculateTimingsProportionally(allFragments, audioDuration)
+        let fragIdx = 0
+        const processedScenes = project.scenes.map(scene => {
+          const sceneFrags = recalculated.slice(fragIdx, fragIdx + scene.fragments.length)
+          const sceneStart = sceneFrags[0]?.startTime || 0
+          fragIdx += scene.fragments.length
+          return {
+            ...scene,
+            audioOffset: sceneStart,
+            fragments: sceneFrags.map(f => ({
+              ...f,
+              startTime: Math.max(0, (f.startTime || 0) - sceneStart),
+              endTime: Math.max(0, (f.endTime || 0) - sceneStart),
+              audioFileName: savedAudioPath,
+              lastAudioHash: hashCode(f.text),
+              lastAudioTextNormalized: normalizeText(f.text),
+            })),
+          }
+        })
+        onUpdateProject({
+          ...project,
+          audioMode: 'project',
+          scenes: processedScenes,
+        })
+        showNotification('Синхронизация проекта с аудио (WhisperX)...', 'info')
+        await runSyncAllScenes(processedScenes)
+        showNotification('Полный аудиофайл проекта успешно синхронизирован!', 'success')
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка: ${msg}`, 'error')
+    } finally {
+      setIsGeneratingAudio(false)
+    }
+  }
+
+  return { isGeneratingAudio, isSyncing, audioLoaded, setAudioLoaded, handleProcessAudio, handleProcessAdvancedSilence, runVoiceGenFragment, runVoiceGenAllScenes, runSyncAllScenes, handleUnloadVram, handleResetAudio, handleResetAllSync, handleReplaceSceneAudio, handleUploadCustomAudioAdvanced }
 }

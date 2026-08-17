@@ -2,38 +2,16 @@ import { useState, useRef, useEffect } from 'react'
 import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal } from '@shared/ui'
 import { Bot, X, Plus, Sparkles, CirclePlay, List, LayoutGrid, Clapperboard, Paintbrush, BrainCircuit, Flame, FishingHook, Copy, Download, ArrowLeft } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
-import { useSettingsStore, useNotificationStore, getSkillsForProcess } from '@entities/project'
+import { useSettingsStore, useNotificationStore, getSkillsForProcess, type IdeaFormat, type VideoResult, type HookAnalysisData } from '@entities/project'
 
 interface Props {
-  onSelectIdea: (idea: any, videos: any[]) => void
+  onSelectIdea: (idea: IdeaFormat, videos: VideoResult[]) => void
   onBack: () => void
-}
-
-interface VideoResult {
-  video_id: string
-  title: string
-  channel: string
-  views: number
-  subs: number
-  ratio: number
-  vph: number
-  url: string
-  published_at: string
-  transcript_sample?: string
-  duration_sec?: number
-  is_short?: boolean
-  keyword_found?: string
 }
 
 interface AgentLog {
   message: string
   status: 'info' | 'success' | 'error' | 'warning'
-}
-
-interface IdeaFormat {
-  titles: string[]
-  description: string
-  thumbnail_concept: string
 }
 
 interface AnalysisData {
@@ -100,7 +78,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const logsEndRef = useRef<HTMLDivElement>(null)
   const [hookModalOpen, setHookModalOpen] = useState(false)
   const [isHookAnalyzing, setIsHookAnalyzing] = useState(false)
-  const [hookData, setHookData] = useState<any>(null)
+  const [hookData, setHookData] = useState<HookAnalysisData | null>(null)
   const [isAnalyzingChannel, setIsAnalyzingChannel] = useState(false)
 
   useEffect(() => {

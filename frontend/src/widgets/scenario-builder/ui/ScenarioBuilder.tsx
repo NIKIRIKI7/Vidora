@@ -1,14 +1,14 @@
 import { useState, useRef, useMemo } from 'react'
-import { Button, Input, Select, FieldGroup, Spinner } from '@shared/ui'
+import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
 import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic } from 'lucide-react'
-import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution } from '@entities/project'
+import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution, type IdeaFormat, type VideoResult } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
-import { API, formatTimecode } from '@widgets/editor-workspace/lib/helpers'
+import { API, formatTimecode } from '@shared/lib'
 import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
 
 interface Props {
-  idea?: any
-  videos?: any[]
+  idea?: IdeaFormat
+  videos?: VideoResult[]
   onBack: () => void
   onCreate: (project: ProjectSettings) => void
 }
@@ -31,6 +31,8 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   const [isGenerating, setIsGenerating] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const markdownRef = useRef<HTMLTextAreaElement>(null)
+  const { insertTag, toggleCaps, hasSelection } = useVoiceTagInserter(markdownRef)
 
   const agentEngine = taskModes.scenario === 'cloud' ? cloudEngines.scenario : localEngines.scenario
   const [customTopic, setCustomTopic] = useState('')
@@ -145,7 +147,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
     }
   }
 
-  const handleCopyOriginal = async (video: any) => {
+  const handleCopyOriginal = async (video: VideoResult) => {
     setIsGenerating(true)
     try {
       const res = await fetch(`${API}/api/v1/youtube/download-meta`, {
@@ -333,7 +335,15 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
             )}
           </div>
         </div>
+        <VoiceTagToolbar
+          onInsertTag={insertTag}
+          onToggleCaps={toggleCaps}
+          hasSelection={hasSelection}
+          voiceEngineMode={voiceTagMode}
+          className="w-full max-w-5xl shrink-0"
+        />
         <textarea
+          ref={markdownRef}
           className="w-full h-full max-w-5xl bg-surface-container/50 border border-white/10 rounded-2xl p-6 font-mono text-sm leading-relaxed text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar shadow-2xl"
           value={markdown}
           onChange={e => setMarkdown(e.target.value)}

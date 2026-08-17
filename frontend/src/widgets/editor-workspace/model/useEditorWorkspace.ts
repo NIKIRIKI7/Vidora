@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, type ChangeEvent } from 'react'
+import { useState, useRef, useCallback, type ChangeEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment, CustomVoice, VideoFormat } from '@entities/project'
 import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeSceneToMarkdown, parseSceneMarkdown, serializeProjectToMarkdown, getActivePrompt } from '@entities/project'
 import { generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
@@ -16,6 +16,7 @@ interface Props {
 
 export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
+  const [selectedFragmentId, setSelectedFragmentId] = useState<string | null>(null)
   const [centerView, setCenterView] = useState<CenterViewMode>('player')
   const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
   
@@ -28,20 +29,27 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [preprocessPrompt, setPreprocessPrompt] = useState(true)
   const [postprocessOutput, setPostprocessOutput] = useState(true)
 
-  useEffect(() => {
-    if (project.activeGlobalVoiceId) {
-      const gv = useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)
-      if (gv) {
-        setSpeed(gv.settings.speed)
-        setNumSteps(gv.settings.numSteps)
-        setGuidanceScale(gv.settings.guidanceScale)
-      }
+  // Активный глобальный голос сменился — применяем его настройки к слайдерам.
+  // Render-phase update вместо useEffect: синхронный setState в эффекте запрещён правилом react-hooks.
+  const [appliedVoiceId, setAppliedVoiceId] = useState(project.activeGlobalVoiceId)
+  if (project.activeGlobalVoiceId !== appliedVoiceId) {
+    setAppliedVoiceId(project.activeGlobalVoiceId)
+    const gv = project.activeGlobalVoiceId
+      ? useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)
+      : undefined
+    if (gv) {
+      setSpeed(gv.settings.speed)
+      setNumSteps(gv.settings.numSteps)
+      setGuidanceScale(gv.settings.guidanceScale)
     }
-  }, [project.activeGlobalVoiceId])
-  
+  }
+
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false)
   const [playWithAudio, setPlayWithAudio] = useState(true)
   const [isVoiceboxOpen, setIsVoiceboxOpen] = useState(false)
+  const [isCustomAudioModalOpen, setIsCustomAudioModalOpen] = useState(false)
+  const [customAudioScope, setCustomAudioScope] = useState<'fragment' | 'scene' | 'project'>('scene')
+  const [customAudioTargetFragId, setCustomAudioTargetFragId] = useState<string | null>(null)
   const [newVoiceName, setNewVoiceName] = useState('')
   const [newVoiceText, setNewVoiceText] = useState('')
   const [newVoiceTags, setNewVoiceTags] = useState('')
@@ -80,6 +88,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const ttsEngine = taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio
   const llmEngine = taskModes.visual === 'cloud' ? cloudEngines.visual : localEngines.visual
+  const brollEngine = taskModes.broll === 'cloud' ? cloudEngines.broll : localEngines.broll
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 
@@ -96,7 +105,97 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const audio = useAudio({ project, onUpdateProject: handleUpdateProjectSync, activeScene, activeSceneId, voiceOpts, useWhisper, autoOffloadVram, showNotification, abortControllerRef })
   const render = useRender({ project, onUpdateProject: handleUpdateProjectSync, activeScene, llmEngine, apiKeys: activeApiKeys, audioLoaded: audio.audioLoaded, showNotification, abortControllerRef, currentTaskIdRef })
 
-  const handleSelectScene = (id: string) => { setActiveSceneId(id); render.setPlayingTargetId(id) }
+  const handleSelectScene = (id: string) => { setActiveSceneId(id); render.setPlayingTargetId(id); setSelectedFragmentId(null) }
+
+  const handleOpenCustomAudio = (scope: 'fragment' | 'scene' | 'project', fragId?: string) => {
+    setCustomAudioScope(scope)
+    setCustomAudioTargetFragId(fragId || null)
+    setIsCustomAudioModalOpen(true)
+  }
+
+  const handleAutoMatchBRoll = async (scope: 'fragment' | 'scene' | 'project', targetFragId?: string, scenesToProcess?: Scene[]) => {
+    if (project.autoBRollEnabled === false) {
+      showNotification('Автоподбор B-Roll выключен в настройках проекта', 'info')
+      return
+    }
+
+    let fragmentsToProcess: SceneFragment[] = []
+    if (scope === 'fragment' && activeScene && targetFragId) {
+      const f = activeScene.fragments.find(frag => frag.id === targetFragId)
+      if (f) fragmentsToProcess = [f]
+    } else if (scope === 'scene' && activeScene) {
+      fragmentsToProcess = activeScene.fragments
+    } else if (scope === 'project') {
+      const scenes = scenesToProcess ?? project.scenes
+      fragmentsToProcess = scenes.flatMap(s => s.fragments)
+    }
+
+    if (fragmentsToProcess.length === 0) return
+
+    showNotification(`Поиск B-Roll (${brollEngine.split('/').pop()})...`, 'info')
+
+    try {
+      const payload = {
+        project_path: getProjectPath(project),
+        format: project.format,
+        engine: brollEngine,
+        api_keys: activeApiKeys,
+        fragments: fragmentsToProcess.map(f => {
+          const start = f.startTime ?? 0
+          const end = f.endTime ?? (start + Math.max(f.text.split(' ').length / 2.5, 3.0))
+          return {
+            id: f.id,
+            visual_note: f.visualNote,
+            text: f.text,
+            start_time: start,
+            end_time: end,
+            duration: Math.max(0.5, end - start),
+          }
+        }),
+      }
+
+      const res = await fetch(`${API}/api/v1/media/auto-broll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+      if (!res.ok || data.status !== 'ok') {
+        throw new Error(data.detail || 'Ошибка подбора B-Roll')
+      }
+
+      const matchedMap = new Map<string, string>()
+      let matchCount = 0
+      data.results.forEach((r: { fragment_id: string; matched: boolean; filename: string }) => {
+        if (r.matched && r.filename) {
+          matchedMap.set(r.fragment_id, r.filename)
+          matchCount++
+        }
+      })
+
+      if (matchCount === 0) {
+        showNotification('Не найдено B-Roll футажей по ремаркам', 'info')
+        return
+      }
+
+      const updatedScenes = project.scenes.map(s => ({
+        ...s,
+        fragments: s.fragments.map(f => {
+          if (matchedMap.has(f.id)) {
+            return { ...f, bRollFileName: matchedMap.get(f.id) }
+          }
+          return f
+        }),
+      }))
+
+      handleUpdateProjectSync({ ...project, scenes: updatedScenes })
+      showNotification(`Обрезано и привязано ${matchCount} B-Roll футажей!`, 'success')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка Auto B-Roll: ${msg}`, 'error')
+    }
+  }
 
   const handleUpdateMarkdown = (newMd: string) => {
     const parsed = parseMarkdownFull(newMd)
@@ -188,7 +287,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
   }
 
-  const handleUpdateFragmentBounds = (fragId: string, edge: 'start' | 'end', newTime: number) => {
+  const handleUpdateFragmentBounds = (fragId: string, edge: 'start' | 'end', newTime: number, ripple = true) => {
     if (!activeScene) return
     const updatedFragments = [...activeScene.fragments]
     const idx = updatedFragments.findIndex(f => f.id === fragId)
@@ -200,19 +299,104 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       const maxStart = (updatedFragments[idx].endTime || 1) - 0.1
       const finalStart = Math.min(safeTime, maxStart)
       updatedFragments[idx] = { ...updatedFragments[idx], startTime: finalStart }
-      if (idx > 0) {
+      if (idx > 0 && ripple) {
         updatedFragments[idx - 1] = { ...updatedFragments[idx - 1], endTime: finalStart }
       }
     } else {
       const minEnd = (updatedFragments[idx].startTime || 0) + 0.1
       const finalEnd = Math.max(safeTime, minEnd)
       updatedFragments[idx] = { ...updatedFragments[idx], endTime: finalEnd }
-      if (idx < updatedFragments.length - 1) {
+      if (idx < updatedFragments.length - 1 && ripple) {
         updatedFragments[idx + 1] = { ...updatedFragments[idx + 1], startTime: finalEnd }
       }
     }
 
     handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s) })
+  }
+
+  const handleSelectFragment = (fragId: string) => setSelectedFragmentId(fragId)
+
+  const handleSplitFragment = (fragId: string, splitTime: number) => {
+    if (!activeScene) return
+    const fragIdx = activeScene.fragments.findIndex(f => f.id === fragId)
+    if (fragIdx === -1) return
+
+    const target = activeScene.fragments[fragIdx]
+    const start = target.startTime ?? 0
+    const end = target.endTime ?? start + Math.max(target.text.split(' ').length / 2.5, 1)
+    if (splitTime <= start + 0.05 || splitTime >= end - 0.05) return
+
+    const ratio = Math.max(0.05, Math.min(0.95, (splitTime - start) / (end - start)))
+
+    // Тег эмоции в начале фразы сохраняется на ОБЕИХ половинках
+    const emotionMatch = target.text.match(/^\[emotion:\s*[^\]]+\]\s*/i)
+    const emotionTag = emotionMatch ? emotionMatch[0] : ''
+    const rawText = emotionMatch ? target.text.slice(emotionMatch[0].length) : target.text
+
+    const words = rawText.trim().split(/\s+/).filter(Boolean)
+    const splitWordIdx = Math.max(1, Math.min(words.length - 1, Math.round(words.length * ratio)))
+
+    // Общий аудиофайл сцены, чтобы волна не исчезала после разреза
+    const fallbackAudio = target.audioFileName || activeScene.fragments.find(f => f.audioFileName)?.audioFileName
+
+    const frag1: SceneFragment = {
+      ...target,
+      text: (emotionTag + words.slice(0, splitWordIdx).join(' ')).trim(),
+      startTime: Number(start.toFixed(3)),
+      endTime: Number(splitTime.toFixed(3)),
+      audioFileName: fallbackAudio,
+      lastAudioHash: undefined,
+    }
+    const frag2: SceneFragment = {
+      id: crypto.randomUUID(),
+      visualNote: target.visualNote,
+      text: (emotionTag + words.slice(splitWordIdx).join(' ')).trim(),
+      startTime: Number(splitTime.toFixed(3)),
+      endTime: Number(end.toFixed(3)),
+      audioFileName: fallbackAudio,
+      bRollFileName: target.bRollFileName,
+    }
+
+    const updatedFrags = [...activeScene.fragments]
+    updatedFrags.splice(fragIdx, 1, frag1, frag2)
+
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFrags } : s) })
+    setSelectedFragmentId(frag2.id)
+    showNotification('Фрагмент разрезан!', 'success')
+  }
+
+  const handleDuplicateFragment = (fragId: string) => {
+    if (!activeScene) return
+    const fragIdx = activeScene.fragments.findIndex(f => f.id === fragId)
+    if (fragIdx === -1) return
+
+    const source = activeScene.fragments[fragIdx]
+    const dur = Math.max((source.endTime ?? (source.startTime ?? 0) + 3) - (source.startTime ?? 0), 0.5)
+    const newStart = source.endTime ?? (source.startTime ?? 0) + dur
+    const copy: SceneFragment = {
+      ...source,
+      id: crypto.randomUUID(),
+      startTime: Number(newStart.toFixed(3)),
+      endTime: Number((newStart + dur).toFixed(3)),
+      audioFileName: undefined,
+      lastAudioHash: undefined,
+    }
+
+    const updatedFrags = [...activeScene.fragments]
+    updatedFrags.splice(fragIdx + 1, 0, copy)
+    // Сдвигаем хвост, чтобы копия не перекрыла следующие фрагменты
+    for (let i = fragIdx + 2; i < updatedFrags.length; i++) {
+      const f = updatedFrags[i]
+      updatedFrags[i] = {
+        ...f,
+        startTime: f.startTime != null ? f.startTime + dur : f.startTime,
+        endTime: f.endTime != null ? f.endTime + dur : f.endTime,
+      }
+    }
+
+    handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: updatedFrags } : s) })
+    setSelectedFragmentId(copy.id)
+    showNotification('Фрагмент продублирован', 'success')
   }
 
   const handleCancelAll = async () => {
@@ -294,7 +478,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     if (!activeScene) return
     if (activeScene.fragments.length <= 1) { showNotification('Сцена должна содержать хотя бы один фрагмент', 'error'); return }
     handleUpdateProjectSync({ ...project, scenes: project.scenes.map(s => s.id === activeScene.id ? { ...s, fragments: s.fragments.filter(f => f.id !== fragId) } : s) })
-    showNotification('Фрагмент удален', 'info')
+    if (selectedFragmentId === fragId) setSelectedFragmentId(null)
   }
 
   const handleFragmentTextChange = (fragId: string, newText: string, newVisualNote?: string) => {
@@ -400,21 +584,27 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     if (!activeScene) return
     setIsAutoPipelineRunning(true)
 
-    setPipelineStep('1/4 Озвучка всех сцен...')
+    setPipelineStep('1/5 Озвучка всех сцен...')
     const { scenes: voiceScenes } = await audio.runVoiceGenAllScenes(project.scenes)
     if (!isAutoPipelineRunning || abortControllerRef.current?.signal.aborted) return
 
-    setPipelineStep('2/4 Whisper Alignment...')
+    setPipelineStep('2/5 Whisper Alignment...')
     const syncedScenes = await audio.runSyncAllScenes(voiceScenes)
     if (!isAutoPipelineRunning || abortControllerRef.current?.signal.aborted) return
 
+    if (project.autoBRollEnabled !== false) {
+      setPipelineStep('3/5 Автоподбор и нарезка B-Roll...')
+      await handleAutoMatchBRoll('project', undefined, syncedScenes)
+      if (!isAutoPipelineRunning || abortControllerRef.current?.signal.aborted) return
+    }
+
     const currentActiveScene = syncedScenes.find(s => s.id === activeSceneId) || activeScene
 
-    setPipelineStep('3/4 Remotion TSX...')
+    setPipelineStep('4/5 Remotion TSX...')
     await render.runCodeGen(currentActiveScene)
     if (!isAutoPipelineRunning || abortControllerRef.current?.signal.aborted) return
 
-    setPipelineStep('4/4 Рендер MP4...')
+    setPipelineStep('5/5 Рендер MP4...')
     await render.runProjectRender()
 
     setIsAutoPipelineRunning(false)
@@ -535,12 +725,15 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     ...audio, ...render,
     activeSceneId, activeScene, centerView, previewFormat, voiceModel, speed, numSteps, guidanceScale, duration,
     denoise, preprocessPrompt, postprocessOutput, isAiSettingsOpen, playWithAudio, isVoiceboxOpen,
+    isCustomAudioModalOpen, customAudioScope, customAudioTargetFragId,
     newVoiceName, newVoiceText, newVoiceTags, newVoiceAudioPath, isAutoPipelineRunning, pipelineStep,
-    isSettingsOpen, useWhisper, autoOffloadVram, videoRef, audioRef, refVoiceInputRef, ttsEngine, llmEngine, apiKeys: activeApiKeys,
+    isSettingsOpen, useWhisper, autoOffloadVram, videoRef, audioRef, refVoiceInputRef,     ttsEngine, llmEngine, brollEngine,
+    apiKeys: activeApiKeys,
 
     setActiveSceneId: handleSelectScene, setCenterView, setPreviewFormat, setVoiceModel, setSpeed, setNumSteps,
     setGuidanceScale, setDuration, setDenoise, setPreprocessPrompt, setPostprocessOutput, setIsAiSettingsOpen,
-    setPlayWithAudio, setIsVoiceboxOpen, setNewVoiceName, setNewVoiceText, setNewVoiceTags, setIsSettingsOpen,
+    setPlayWithAudio, setIsVoiceboxOpen, setIsCustomAudioModalOpen, handleOpenCustomAudio,
+    setNewVoiceName, setNewVoiceText, setNewVoiceTags, setIsSettingsOpen,
     setUseWhisper, setAutoOffloadVram, handleSceneDragStart, handleSceneDrop, handleFragDragStart, handleFragDrop,
     toggleIgnoreTsx, handleAddScene, handleDeleteScene, handleUpdateSceneTitle, handleAddFragment, handleDeleteFragment,
     handleFragmentTextChange, handleUpdateCode, handleCodeHistory, handleFixAudioPacing, handleUploadRefVoiceAudio, 
@@ -549,5 +742,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       handleUpdateMarkdown, handleUpdateFragmentBRoll, handleUnlinkFragmentBRoll, handleNudgeTiming, handleCaptureFrame, handleReplaceFragmentAudio,
       handleExportScene, handleReplaceScene, handleCopyFixPacingPrompt,
       handleUpdateFragmentBounds,
+      handleAutoMatchBRoll,
+      handleSplitFragment, handleDuplicateFragment, handleSelectFragment, selectedFragmentId,
   }
 }

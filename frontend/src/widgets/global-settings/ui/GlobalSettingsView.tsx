@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2, Plus, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2, Plus, ChevronDown, Video } from 'lucide-react'
 import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory, type ProcessType, type Skill } from '@entities/project'
-import { API } from '@widgets/editor-workspace/lib/helpers'
+import { API } from '@shared/lib'
 
 const PROCESS_TYPES: { id: ProcessType, label: string }[] = [
   { id: 'scenario', label: 'Сценарий' },
@@ -264,6 +264,23 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                       <p className="text-[10px] text-on-surface-variant mt-1">Необходим для работы агента-аналитика и поиска вирусных видео.</p>
                     </FieldGroup>
                   </div>
+                  <div className="grid grid-cols-1 gap-6 bg-surface-container-lowest/40 p-5 rounded-xl border border-secondary/20 shadow-inner mt-4">
+                    <FieldGroup label="Pexels API Key (Для Auto B-Roll Matcher)">
+                      <div className="relative">
+                        <Input
+                          type={showKey ? 'text' : 'password'}
+                          value={apiKeys.pexels || ''}
+                          onChange={e => setApiKey('pexels', e.target.value)}
+                          placeholder="563492ad6f91700001000001..."
+                          className="font-mono text-xs pr-10"
+                        />
+                        <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-white transition-colors">
+                          {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-on-surface-variant mt-1">Бесплатный ключ Pexels (api.pexels.com) для поиска и скачивания стоковых B-Roll футажей.</p>
+                    </FieldGroup>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-white/5 rounded-2xl">
@@ -305,6 +322,30 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                     )}
                     <datalist id="cloud-vis"><option value="anthropic/claude-sonnet-5" /><option value="google/gemini-2.5-flash" /><option value="openai/gpt-4o" /><option value="deepseek/deepseek-v4-pro" /></datalist>
                     <datalist id="loc-vis"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="deepseek-coder-v2" /></datalist>
+                  </FieldGroup>
+                </div>
+
+                <div className="flex flex-col gap-6 p-6 bg-surface-container/30 border border-secondary/20 rounded-2xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Video size={20} className="text-secondary" />
+                    <h3 className="text-lg font-bold text-white">🎞️ Подбор B-Roll Футажей (LLM Мозг)</h3>
+                  </div>
+                  <div className="flex p-1 bg-surface-container-lowest/50 rounded-xl border border-white/10 shrink-0">
+                    <button onClick={() => setTaskMode('broll', 'cloud')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.broll === 'cloud' ? 'bg-primary/20 text-primary shadow-md border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Cloud size={16} className="inline mr-2" /> Облако
+                    </button>
+                    <button onClick={() => setTaskMode('broll', 'local')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${taskModes.broll === 'local' ? 'bg-success/20 text-success shadow-md border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>
+                      <Server size={16} className="inline mr-2" /> Локально
+                    </button>
+                  </div>
+                  <FieldGroup label={`Модель для парсинга и подбора B-Roll (${taskModes.broll === 'cloud' ? 'Облако' : 'Локально'})`}>
+                    {taskModes.broll === 'cloud' ? (
+                      <Input list="cloud-broll" value={cloudEngines.broll} onChange={e => setCloudEngine('broll', e.target.value)} className="font-mono text-sm" />
+                    ) : (
+                      <Input list="loc-broll" value={localEngines.broll} onChange={e => setLocalEngine('broll', e.target.value)} className="font-mono text-sm" />
+                    )}
+                    <datalist id="cloud-broll"><option value="anthropic/claude-sonnet-5" /><option value="anthropic/claude-3.5-sonnet" /><option value="openai/gpt-4o-mini" /><option value="deepseek/deepseek-chat" /></datalist>
+                    <datalist id="loc-broll"><option value="qwen2.5-coder" /><option value="gemma3:4b" /><option value="llama3.1-8b" /></datalist>
                   </FieldGroup>
                 </div>
 

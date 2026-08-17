@@ -2,34 +2,10 @@ import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { generateRemotionPrompt } from './generateRemotionPrompt'
 import { normalizeText } from './timingAlgorithms'
 
-export const pad = (num: number) => num.toString().padStart(2, '0')
-export const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
+import { API, formatTimecode, formatShortTimecode, hashCode, pad, parseTcString, sanitizeFilename } from '@shared/lib'
+export { API, formatTimecode, formatShortTimecode, hashCode, pad, parseTcString, sanitizeFilename }
 
-export const sanitizeFilename = (str: string) => str.trim().replace(/[^a-zA-Z0-9а-яА-Я_\- ]/g, '_')
 export const getProjectPath = (p: ProjectSettings) => sanitizeFilename(p.name || 'vidora_projects')
-
-export const formatTimecode = (totalSeconds: number): string => {
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = Math.floor(totalSeconds % 60)
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
-}
-
-export const formatShortTimecode = (sec: number): string => {
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  return `${m}:${pad(s)}`
-}
-
-export const parseTcString = (str: string): number | null => {
-  if (!str) return null
-  const parts = str.trim().split(':').map(Number)
-  if (parts.some(isNaN)) return null
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  if (parts.length === 2) return parts[0] * 60 + parts[1]
-  if (parts.length === 1) return parts[0]
-  return null
-}
 
 export const getWhisperSyncedDuration = (fragments: SceneFragment[]): number | null => {
   const syncedEnds = fragments.map(f => f.endTime).filter((e): e is number => typeof e === 'number' && e > 0)
@@ -69,16 +45,6 @@ export const getAudioPathForScene = (project: ProjectSettings, scene: Scene): st
   return `${projectPath}/assets/voice/Scene_${sanitizeFilename(scene.title)}_${scene.id.slice(0, 6)}.wav`
 }
 
-export const hashCode = (str: string) => {
-  let hash = 0
-  for (let i = 0, len = str.length; i < len; i++) {
-    const chr = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + chr
-    hash |= 0
-  }
-  return hash.toString()
-}
-
 export const isAudioDirty = (frag: SceneFragment) => {
   if (!frag.audioFileName) return true
   if (frag.lastAudioTextNormalized !== undefined) {
@@ -106,4 +72,57 @@ export const concatSceneAudio = async (projectPath: string, title: string, id: s
   })
   if (!res.ok) throw new Error('Concat failed')
   return sceneAudioPath
+}
+
+export interface TeleprompterOptions {
+  keepEmotionTags?: boolean
+  keepPauseSoundTags?: boolean
+}
+
+/**
+ * Очищает текст для суфлера/TTS:
+ * - Всегда удаляет *(визуальные ремарки)* и [instruct: ...]
+ * - Если keepEmotionTags = true, оставляет [emotion: ...]
+ * - Если keepPauseSoundTags = true, оставляет паузы <#1.0#> и междометия (breath)
+ */
+export const extractCleanVoiceText = (rawText: string, options: boolean | TeleprompterOptions = false): string => {
+  if (!rawText) return ''
+  const opts: TeleprompterOptions =
+    typeof options === 'boolean'
+      ? { keepEmotionTags: options, keepPauseSoundTags: options }
+      : { keepEmotionTags: false, keepPauseSoundTags: false, ...options }
+
+  let text = rawText.replace(/\*\([\s\S]*?\)\*/g, ' ')
+  text = text.replace(/\[instruct:\s*[^\]]+\]/gi, ' ')
+  if (!opts.keepEmotionTags) {
+    text = text.replace(/\[emotion:\s*[^\]]+\]/gi, ' ')
+  }
+  if (!opts.keepPauseSoundTags) {
+    text = text.replace(/<#[\d.]+#>/g, ' ')
+    text = text.replace(/\((?:breath|inhale|exhale|sighs|chuckle|laughs|clear-throat|emm|coughs|groans|gasps|sniffs)\)/gi, ' ')
+  }
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Единый суфлерский текст всей сцены (все фрагменты по порядку)
+ */
+export const getSceneTeleprompterScript = (scene: Scene, options: boolean | TeleprompterOptions = false): string => {
+  return scene.fragments
+    .map(f => extractCleanVoiceText(f.text, options))
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/**
+ * Полный суфлерский сценарий проекта без ремарок, разбитый по сценам
+ */
+export const getProjectTeleprompterScript = (project: ProjectSettings, options: boolean | TeleprompterOptions = false): string => {
+  return project.scenes
+    .map((scene, i) => {
+      const text = getSceneTeleprompterScript(scene, options)
+      return text ? `=== Сцена ${i + 1}: ${scene.title} ===\n${text}` : null
+    })
+    .filter(Boolean)
+    .join('\n\n\n')
 }

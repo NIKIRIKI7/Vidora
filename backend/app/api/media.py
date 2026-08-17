@@ -1,9 +1,14 @@
 import os
 import shutil
 import wave
+import json
+import re
+import subprocess
+import uuid
 import httpx
 from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
+from app.schemas import AutoBRollRequest
 
 router = APIRouter(prefix="/api/v1/media", tags=["media"])
 
@@ -95,3 +100,162 @@ async def download_stock(req: DownloadRequest):
         "filename": req.filename,
         "url": f"assets/{req.folder}/{req.filename}"
     }
+
+@router.post("/auto-broll")
+async def match_and_trim_broll(req: AutoBRollRequest):
+    pexels_key = req.api_keys.get("pexels") or os.environ.get("PEXELS_API_KEY", "")
+    if not pexels_key:
+        return {"status": "error", "detail": "PEXELS_API_KEY не задан в настройках Vidora или .env бэкенда"}
+
+    project_root = os.path.realpath(req.project_path)
+    dest_dir = os.path.realpath(os.path.join(project_root, "assets", "b-roll"))
+    if not dest_dir.startswith(project_root):
+        return {"status": "error", "detail": "invalid path"}
+    os.makedirs(dest_dir, exist_ok=True)
+    orientation = "portrait" if req.format == "9:16" else "landscape"
+
+    fragments_payload = []
+    for f in req.fragments:
+        dur = 3.0
+        if f.start_time is not None and f.end_time is not None and f.end_time > f.start_time:
+            dur = f.end_time - f.start_time
+        elif f.duration and f.duration > 0:
+            dur = f.duration
+        fragments_payload.append({
+            "id": f.id,
+            "visual_note": f.visual_note,
+            "text": f.text,
+            "target_duration": round(dur, 2),
+        })
+
+    system_prompt = (
+        "You are an expert video editor AI. Given a list of scene fragments with visual notes and voiceover text, "
+        "extract concise English search keywords (2-4 words) for Pexels video search for each B-Roll/footage fragment. "
+        "Ignore fragments that are explicitly pure code screencasts, terminal displays, or 2D diagrams without real footage. "
+        "Return STRICT JSON format: {\"results\": [{\"id\": \"...\", \"is_broll\": true, \"query\": \"...\"}]}"
+    )
+    user_prompt = f"Analyze these scene fragments:\n{json.dumps(fragments_payload, ensure_ascii=False)}"
+
+    llm_queries = {}
+    try:
+        if "/" in req.engine:
+            from app.services.llm_client import MultiProviderClient
+            ai = MultiProviderClient(
+                router_key=req.api_keys.get("routerai", ""),
+                aitunnel_key=req.api_keys.get("aitunnel", ""),
+            )
+            raw_llm = await ai.chat(
+                model=req.engine,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
+        else:
+            from app.services.llama_local import local_generate
+            raw_llm = await local_generate(req.engine, system_prompt, user_prompt)
+
+        match = re.search(r"\{.*\}", raw_llm or "", re.DOTALL)
+        parsed_llm = json.loads(match.group(0)) if match else {"results": []}
+        llm_queries = {item["id"]: item for item in parsed_llm.get("results", [])}
+    except Exception as e:
+        print(f"[AUTO B-ROLL] Ошибка LLM ({req.engine}): {e}")
+        llm_queries = {}
+
+    results = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for frag in fragments_payload:
+            frag_id = frag["id"]
+            target_dur = frag["target_duration"]
+            query_info = llm_queries.get(frag_id, {})
+
+            if query_info.get("is_broll") is False:
+                results.append({"fragment_id": frag_id, "matched": False, "reason": "LLM classified as non-broll"})
+                continue
+
+            query = query_info.get("query")
+            if not query:
+                clean_note = re.sub(r"[\*\(\)]", "", frag["visual_note"])
+                clean_note = re.sub(r"^(B-roll|Экран|Фон|Визуал):\s*", "", clean_note, flags=re.IGNORECASE)
+                query = clean_note[:40].strip()
+
+            if not query:
+                results.append({"fragment_id": frag_id, "matched": False, "reason": "Empty search query"})
+                continue
+
+            try:
+                search_res = await client.get(
+                    f"https://api.pexels.com/videos/search?query={query}&per_page=5&orientation={orientation}",
+                    headers={"Authorization": pexels_key},
+                )
+                if search_res.status_code != 200:
+                    results.append({"fragment_id": frag_id, "matched": False, "reason": f"Pexels error {search_res.status_code}"})
+                    continue
+
+                videos = search_res.json().get("videos", [])
+                if not videos:
+                    results.append({"fragment_id": frag_id, "matched": False, "reason": f"No stock videos for '{query}'"})
+                    continue
+
+                best_video = videos[0]
+                video_files = best_video.get("video_files", [])
+                chosen_link = None
+                for vf in video_files:
+                    if vf.get("width") == 1920 or vf.get("height") == 1920:
+                        chosen_link = vf.get("link")
+                        break
+                if not chosen_link and video_files:
+                    chosen_link = video_files[0].get("link")
+
+                if not chosen_link:
+                    results.append({"fragment_id": frag_id, "matched": False, "reason": "No direct video link"})
+                    continue
+
+                clean_slug = re.sub(r"[^a-zA-Z0-9]", "_", query)[:20]
+                final_filename = f"broll_{clean_slug}_{uuid.uuid4().hex[:6]}.mp4"
+                final_filepath = os.path.join(dest_dir, final_filename)
+                temp_filepath = final_filepath + ".tmp.mp4"
+
+                async with client.stream("GET", chosen_link) as dl_resp:
+                    if dl_resp.status_code != 200:
+                        results.append({"fragment_id": frag_id, "matched": False, "reason": "Download failed"})
+                        continue
+                    with open(temp_filepath, "wb") as f_out:
+                        async for chunk in dl_resp.aiter_bytes():
+                            f_out.write(chunk)
+
+                trim_cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", "0.0",
+                    "-t", str(target_dur),
+                    "-i", temp_filepath,
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "18",
+                    "-an",
+                    final_filepath,
+                ]
+                subprocess.run(trim_cmd, capture_output=True, check=False)
+
+                if os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
+
+                if os.path.exists(final_filepath) and os.path.getsize(final_filepath) > 1000:
+                    results.append({
+                        "fragment_id": frag_id,
+                        "matched": True,
+                        "query_used": query,
+                        "filename": final_filename,
+                        "file_path": final_filepath,
+                        "trimmed_duration": target_dur,
+                        "preview_image": best_video.get("image"),
+                    })
+                else:
+                    results.append({"fragment_id": frag_id, "matched": False, "reason": "FFmpeg trimming failed"})
+
+            except Exception as frag_err:
+                results.append({"fragment_id": frag_id, "matched": False, "reason": str(frag_err)})
+
+    return {"status": "ok", "results": results}
+

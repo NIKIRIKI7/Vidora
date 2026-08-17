@@ -9,6 +9,7 @@ import { EditorHeader } from './EditorHeader'
 import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
 import { VoiceboxModal } from './VoiceboxModal'
+import { CustomAudioModal } from './CustomAudioModal'
 
 interface Props {
   project: ProjectSettings
@@ -141,6 +142,11 @@ export const EditorWorkspace = ({
             onUpdateMarkdown={model.handleUpdateMarkdown}
             onCaptureFrame={model.handleCaptureFrame}
             onUpdateFragmentBounds={model.handleUpdateFragmentBounds}
+            onSplitFragment={model.handleSplitFragment}
+            onDeleteFragment={model.handleDeleteFragment}
+            onDuplicateFragment={model.handleDuplicateFragment}
+            onSelectFragment={model.handleSelectFragment}
+            selectedFragmentId={model.selectedFragmentId}
             showTimeline={uiPreferences.showTimeline}
           />
 
@@ -171,6 +177,8 @@ export const EditorWorkspace = ({
                 onFragDrop={model.handleFragDrop}
                 onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
                 onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
+                onOpenCustomAudioModal={model.handleOpenCustomAudio}
+                onAutoMatchBRoll={model.handleAutoMatchBRoll}
                 onRunVoiceGen={() => model.runVoiceGenAllScenes()}
                 onRunVoiceGenFragment={model.runVoiceGenFragment}
                 onResetAllSync={model.handleResetAllSync}
@@ -190,6 +198,7 @@ export const EditorWorkspace = ({
                 onNudgeTiming={model.handleNudgeTiming}
                 onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
                 onUpdateActiveGlobalVoice={(id) => onUpdateProject({ ...project, activeGlobalVoiceId: id })}
+                onUpdateProjectSettings={onUpdateProject}
               />
             </div>
           )}
@@ -211,6 +220,16 @@ export const EditorWorkspace = ({
         onUploadRefVoiceAudio={model.handleUploadRefVoiceAudio}
         onSaveCustomVoice={model.handleSaveCustomVoice}
         onDeleteCustomVoice={model.handleDeleteCustomVoice}
+      />
+
+      <CustomAudioModal
+        isOpen={model.isCustomAudioModalOpen}
+        onClose={() => model.setIsCustomAudioModalOpen(false)}
+        project={project}
+        activeScene={model.activeScene}
+        activeFragmentId={model.customAudioTargetFragId}
+        initialScope={model.customAudioScope}
+        onUpload={model.handleUploadCustomAudioAdvanced}
       />
 
       <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки Проекта">
@@ -256,6 +275,17 @@ export const EditorWorkspace = ({
                     <option value="fragment">По фрагментам (С паузами)</option>
                   </Select>
                 </FieldGroup>
+              </div>
+
+              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-3 mb-4">
+                <Switch
+                  label="Автоподбор B-Roll (Auto B-Roll Matcher)"
+                  checked={project.autoBRollEnabled !== false}
+                  onChange={val => onUpdateProject({ ...project, autoBRollEnabled: val })}
+                />
+                <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                  Если включено, ИИ автоматически найдет и обрежет стоковые видео под тайминги фрагментов при сборке проекта.
+                </p>
               </div>
 
               <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 mb-4">

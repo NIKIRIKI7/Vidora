@@ -68,16 +68,6 @@
   --text-xxs: 0.625rem;
   --text-xxs--line-height: 0.75rem;
 
-  --spacing-base: 4px;
-  --spacing-xs: 8px;
-  --spacing-sm: 16px;
-  --spacing-md: 24px;
-  --spacing-lg: 40px;
-  --spacing-xl: 64px;
-  --spacing-gutter: 16px;
-  --spacing-margin-mobile: 20px;
-  --spacing-margin-desktop: 32px;
-
   --radius-sm: 0.25rem;
   --radius-default: 0.5rem;
   --radius-md: 0.75rem;

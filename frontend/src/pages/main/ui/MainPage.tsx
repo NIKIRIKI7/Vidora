@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
 import { ProjectCreator } from '@widgets/project-creator'
-import { EditorWorkspace } from '@widgets/editor-workspace'
-import { YoutubeIdeasView } from '@widgets/editor-workspace/ui/YoutubeIdeasView'
-import { ScenarioBuilder } from '@widgets/scenario-builder/ui/ScenarioBuilder'
+import { EditorWorkspace, YoutubeIdeasView } from '@widgets/editor-workspace'
+import { ScenarioBuilder } from '@widgets/scenario-builder'
 import { GlobalSettingsView } from '@widgets/global-settings'
 import { AudioHubView } from '@widgets/audio-hub'
-import { useProjectStore, useNotificationStore } from '@entities/project'
+import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { Spinner } from '@shared/ui'
+import { API } from '@shared/lib'
 import { CircleCheckBig, TriangleAlert, Info } from 'lucide-react'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
 
 type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
 
@@ -17,8 +15,8 @@ export const MainPage = () => {
   const [isBooting, setIsBooting] = useState(true)
   const [view, setView] = useState<ViewState>('hub')
 
-  const [selectedIdea, setSelectedIdea] = useState<any>(null)
-  const [selectedVideos, setSelectedVideos] = useState<any[]>([])
+  const [selectedIdea, setSelectedIdea] = useState<IdeaFormat | null>(null)
+  const [selectedVideos, setSelectedVideos] = useState<VideoResult[]>([])
 
   const projects = useProjectStore(s => s.projects)
   const activeProjectId = useProjectStore(s => s.activeProjectId)
@@ -98,7 +96,7 @@ export const MainPage = () => {
         />
       ) : view === 'scenario' ? (
         <ScenarioBuilder
-          idea={selectedIdea}
+          idea={selectedIdea ?? undefined}
           videos={selectedVideos}
           onBack={() => setView(selectedIdea ? 'ideas' : 'hub')}
           onCreate={(p) => {

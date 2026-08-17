@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
-import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
+import { Button, Input, Select, FieldGroup, Slider, Spinner, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
 import { ArrowLeft, Mic, Plus, Trash2, Upload, Play, AudioLines, BrainCircuit, Wand2, Save, Dices, Sparkles, Wand } from 'lucide-react'
 import { useSettingsStore, useNotificationStore, type GlobalVoice } from '@entities/project'
-import { API } from '@widgets/editor-workspace/lib/helpers'
+import { API } from '@shared/lib'
 
 const RANDOM_DESIGN_PROMPTS = [
   'Глубокий мужской голос, спокойный, с легкой хрипотцой, рассказывает документальный фильм, русский язык',
@@ -33,6 +33,9 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  const testTextRef = useRef<HTMLTextAreaElement>(null)
+  const { insertTag, toggleCaps, hasSelection } = useVoiceTagInserter(testTextRef)
 
   const isCosyVoice = activeVoice?.ttsEngine.toLowerCase().includes('cosyvoice')
 
@@ -475,7 +478,15 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                   • Паузы: <code className="bg-black/40 px-1 rounded">&lt;#1.5#&gt;</code> (от 0.1 до 3.0 сек) между словами.<br/>
                   • Звуки: <code className="bg-black/40 px-1 rounded">(breath)</code>, <code className="bg-black/40 px-1 rounded">(sighs)</code>, <code className="bg-black/40 px-1 rounded">(chuckle)</code>, <code className="bg-black/40 px-1 rounded">(laughs)</code>.
                 </div>
+                <VoiceTagToolbar
+                  onInsertTag={insertTag}
+                  onToggleCaps={toggleCaps}
+                  hasSelection={hasSelection}
+                  voiceEngineMode={isCosyVoice ? 'cosyvoice' : 'omnivoice'}
+                  className="w-full"
+                />
                 <textarea
+                  ref={testTextRef}
                   className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-3 px-4 text-sm text-on-surface resize-none focus:border-primary/50 shadow-inner"
                   rows={2}
                   value={testText}

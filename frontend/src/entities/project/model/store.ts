@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
-import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory, Skill, ProcessType } from './types'
-import { REMOTION_SKILLS } from '@shared/config/remotionSkills'
+import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory, Skill, ProcessType, TaskType } from './types'
+import { REMOTION_SKILLS } from '@shared/config'
 
 const DEFAULT_SKILLS: Skill[] = REMOTION_SKILLS.map(s => ({
   ...s,
@@ -516,17 +516,18 @@ interface SettingsStore {
     scenario: 'cloud' | 'local'
     visual: 'cloud' | 'local'
     audio: 'cloud' | 'local'
+    broll: 'cloud' | 'local'
   }
-  setTaskMode: (task: 'scenario' | 'visual' | 'audio', mode: 'cloud' | 'local') => void
+  setTaskMode: (task: TaskType, mode: 'cloud' | 'local') => void
 
   cloudProvider: 'routerai' | 'aitunnel'
   setCloudProvider: (provider: 'routerai' | 'aitunnel') => void
 
-  cloudEngines: { scenario: string; visual: string; audio: string }
-  setCloudEngine: (task: 'scenario' | 'visual' | 'audio', model: string) => void
+  cloudEngines: { scenario: string; visual: string; audio: string; broll: string }
+  setCloudEngine: (task: TaskType, model: string) => void
 
-  localEngines: { scenario: string; visual: string; audio: string }
-  setLocalEngine: (task: 'scenario' | 'visual' | 'audio', model: string) => void
+  localEngines: { scenario: string; visual: string; audio: string; broll: string }
+  setLocalEngine: (task: TaskType, model: string) => void
   // ---------------------------------------------
 
   apiKeys: ApiKeys
@@ -569,6 +570,7 @@ export const useSettingsStore = create<SettingsStore>()(
         scenario: 'cloud',
         visual: 'cloud',
         audio: 'cloud',
+        broll: 'cloud',
       },
       setTaskMode: (task, mode) => set((s) => ({ taskModes: { ...s.taskModes, [task]: mode } })),
 
@@ -579,6 +581,7 @@ export const useSettingsStore = create<SettingsStore>()(
         scenario: 'anthropic/claude-sonnet-5',
         visual: 'anthropic/claude-sonnet-5',
         audio: 'minimax/speech-2.8-hd',
+        broll: 'anthropic/claude-sonnet-5',
       },
       setCloudEngine: (task, model) => set((s) => ({ cloudEngines: { ...s.cloudEngines, [task]: model } })),
 
@@ -586,6 +589,7 @@ export const useSettingsStore = create<SettingsStore>()(
         scenario: 'gemma3:4b',
         visual: 'gemma3:4b',
         audio: 'k2-fsa/OmniVoice',
+        broll: 'qwen2.5-coder',
       },
       setLocalEngine: (task, model) => set((s) => ({ localEngines: { ...s.localEngines, [task]: model } })),
 
@@ -656,14 +660,22 @@ export const useSettingsStore = create<SettingsStore>()(
         if (persistedObj?.taskModes) {
           migratedTaskModes = { ...current.taskModes, ...persistedObj.taskModes }
         } else if (persistedObj?.aiMode) {
-          migratedTaskModes = { scenario: persistedObj.aiMode, visual: persistedObj.aiMode, audio: persistedObj.aiMode }
+          migratedTaskModes = { ...current.taskModes, scenario: persistedObj.aiMode, visual: persistedObj.aiMode, audio: persistedObj.aiMode }
         }
+
+        // Миграция: добавляем broll в движки из старых персистед-состояний (3 ключа)
+        const migratedCloudEngines = { ...current.cloudEngines, ...(persistedObj?.cloudEngines || {}) }
+        if (!migratedCloudEngines.broll) migratedCloudEngines.broll = 'anthropic/claude-sonnet-5'
+        const migratedLocalEngines = { ...current.localEngines, ...(persistedObj?.localEngines || {}) }
+        if (!migratedLocalEngines.broll) migratedLocalEngines.broll = 'qwen2.5-coder'
 
         return {
           ...current,
           ...persistedState,
           globalPrompts: migratedPrompts,
           taskModes: migratedTaskModes,
+          cloudEngines: migratedCloudEngines,
+          localEngines: migratedLocalEngines,
           globalVoices: persistedObj?.globalVoices || [],
           skills: mergedSkills,
           uiPreferences: { ...DEFAULT_UI_PREFS, ...persistedObj?.uiPreferences },

@@ -26,7 +26,12 @@ interface Props {
   onCancelAll: () => void
   onUpdateMarkdown: (md: string) => void
   onCaptureFrame: () => void
-  onUpdateFragmentBounds: (fragId: string, edge: 'start' | 'end', newTime: number) => void
+  onUpdateFragmentBounds: (fragId: string, edge: 'start' | 'end', newTime: number, ripple?: boolean) => void
+  onSplitFragment?: (fragId: string, splitTime: number) => void
+  onDeleteFragment?: (fragId: string) => void
+  onDuplicateFragment?: (fragId: string) => void
+  onSelectFragment?: (fragId: string) => void
+  selectedFragmentId?: string | null
   showTimeline: boolean
 }
 
@@ -35,6 +40,7 @@ export const CenterCanvas = ({
   playingTargetId, renderedVideos, audioLoaded, activeScene, project, videoRef, audioRef, onUpdateCode,
   onCodeHistory, isRendering, isAutoPipelineRunning, pipelineStep, renderProgress, onCancelAll,
   onUpdateMarkdown, onCaptureFrame, onUpdateFragmentBounds, showTimeline,
+  onSplitFragment, onDeleteFragment, onDuplicateFragment, onSelectFragment, selectedFragmentId,
 }: Props) => {
   const isBusy = isRendering || isAutoPipelineRunning
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
@@ -212,7 +218,13 @@ export const CenterCanvas = ({
           <Timeline
             fragments={activeScene?.fragments || []}
             videoRef={videoRef}
+            audioRef={audioRef}
             onUpdateBounds={onUpdateFragmentBounds}
+            onSplitFragment={onSplitFragment}
+            onDeleteFragment={onDeleteFragment}
+            onDuplicateFragment={onDuplicateFragment}
+            onSelectFragment={onSelectFragment}
+            selectedFragmentId={selectedFragmentId}
           />
         </div>
       )}

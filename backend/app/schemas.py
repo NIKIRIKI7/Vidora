@@ -117,4 +117,19 @@ class TranscribeRequest(BaseModel):
     audio_path: str
     whisper_model: str = "small"
 
+class AutoBRollFragment(BaseModel):
+    id: str
+    visual_note: str
+    text: str
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    duration: Optional[float] = None
+
+class AutoBRollRequest(BaseModel):
+    project_path: str
+    format: str = "16:9"
+    engine: str = "anthropic/claude-sonnet-5"
+    api_keys: dict = {}
+    fragments: List[AutoBRollFragment]
+
 
