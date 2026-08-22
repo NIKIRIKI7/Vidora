@@ -1,4 +1,4 @@
-﻿import type { AppColors } from '@shared/config'
+﻿import type { AppColors, BackgroundMusicSettings } from '@shared/config'
 
 export type { AppColors }
 export type Resolution = '1080p' | '1440p' | '2160p'
@@ -168,6 +168,9 @@ export interface ProjectSettings {
   audioMode: AudioGenerationMode
   activeGlobalVoiceId?: string
   audioProcessing: AudioProcessingSettings
+  backgroundMusic?: BackgroundMusicSettings
   use3D?: boolean
   autoBRollEnabled?: boolean
 }
+
+export type { DuckingPreset, MusicEqSettings, BackgroundMusicSettings, MusicTrackItem, MusicCategory } from '@shared/config'

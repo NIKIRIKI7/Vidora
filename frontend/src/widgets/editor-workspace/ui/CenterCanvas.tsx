@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
+import type { ProjectSettings, Scene, VideoFormat, BackgroundMusicSettings } from '@entities/project'
 import { Button, Spinner, ProgressBar } from '@shared/ui'
 import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
@@ -32,6 +32,9 @@ interface Props {
   onDuplicateFragment?: (fragId: string) => void
   onSelectFragment?: (fragId: string) => void
   selectedFragmentId?: string | null
+  backgroundMusic?: BackgroundMusicSettings | null
+  onUpdateBackgroundMusic?: (settings: BackgroundMusicSettings) => void
+  onOpenMusicSettings?: () => void
   showTimeline: boolean
 }
 
@@ -41,6 +44,7 @@ export const CenterCanvas = ({
   onCodeHistory, isRendering, isAutoPipelineRunning, pipelineStep, renderProgress, onCancelAll,
   onUpdateMarkdown, onCaptureFrame, onUpdateFragmentBounds, showTimeline,
   onSplitFragment, onDeleteFragment, onDuplicateFragment, onSelectFragment, selectedFragmentId,
+  backgroundMusic, onUpdateBackgroundMusic, onOpenMusicSettings,
 }: Props) => {
   const isBusy = isRendering || isAutoPipelineRunning
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
@@ -225,6 +229,9 @@ export const CenterCanvas = ({
             onDuplicateFragment={onDuplicateFragment}
             onSelectFragment={onSelectFragment}
             selectedFragmentId={selectedFragmentId}
+            backgroundMusic={backgroundMusic}
+            onUpdateBackgroundMusic={onUpdateBackgroundMusic}
+            onOpenMusicSettings={onOpenMusicSettings}
           />
         </div>
       )}

@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react'
-import type { ProjectSettings, Resolution, VideoFormat } from '@entities/project'
-import { useSettingsStore } from '@entities/project'
+import type { ProjectSettings, Resolution, VideoFormat, BackgroundMusicSettings, MusicTrackItem } from '@entities/project'
+import { useSettingsStore, useNotificationStore } from '@entities/project'
 import { Button, Modal, FieldGroup, Switch, Input, Select, Slider } from '@shared/ui'
-import { THEME_PRESETS, type ThemePreset } from '@shared/config'
+import { THEME_PRESETS, DEFAULT_BACKGROUND_MUSIC, type ThemePreset } from '@shared/config'
 import { useEditorWorkspace } from '@widgets/editor-workspace/model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -10,6 +10,8 @@ import { PipelineInspector } from './PipelineInspector'
 import { SceneSidebar } from './SceneSidebar'
 import { VoiceboxModal } from './VoiceboxModal'
 import { CustomAudioModal } from './CustomAudioModal'
+import { MusicSettingsModal } from './MusicSettingsModal'
+import { MusicLibraryModal } from './MusicLibraryModal'
 
 interface Props {
   project: ProjectSettings
@@ -32,6 +34,28 @@ export const EditorWorkspace = ({
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
   const [settingsTab, setSettingsTab] = useState<'project' | 'ui'>('project')
+  const showNotification = useNotificationStore(s => s.showNotification)
+  const [isMusicSettingsOpen, setIsMusicSettingsOpen] = useState(false)
+  const [isMusicLibraryOpen, setIsMusicLibraryOpen] = useState(false)
+
+  const handleUpdateBackgroundMusic = useCallback((bgMusic: BackgroundMusicSettings) => {
+    onUpdateProject({ ...project, backgroundMusic: bgMusic })
+  }, [project, onUpdateProject])
+
+  const handleSelectMusicTrack = useCallback((track: MusicTrackItem) => {
+    onUpdateProject({
+      ...project,
+      backgroundMusic: {
+        ...(project.backgroundMusic || DEFAULT_BACKGROUND_MUSIC),
+        enabled: true,
+        trackId: track.id,
+        trackName: track.name,
+        customTrackPath: track.path,
+      },
+    })
+    setIsMusicLibraryOpen(false)
+    showNotification(`Выбран трек: ${track.name}`, 'success')
+  }, [project, onUpdateProject, showNotification])
 
   const { uiPreferences, setUiPreferences, setGlobalVoices } = useSettingsStore()
 
@@ -147,6 +171,9 @@ export const EditorWorkspace = ({
             onDuplicateFragment={model.handleDuplicateFragment}
             onSelectFragment={model.handleSelectFragment}
             selectedFragmentId={model.selectedFragmentId}
+            backgroundMusic={project.backgroundMusic}
+            onUpdateBackgroundMusic={handleUpdateBackgroundMusic}
+            onOpenMusicSettings={() => setIsMusicSettingsOpen(true)}
             showTimeline={uiPreferences.showTimeline}
           />
 
@@ -199,6 +226,8 @@ export const EditorWorkspace = ({
                 onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
                 onUpdateActiveGlobalVoice={(id) => onUpdateProject({ ...project, activeGlobalVoiceId: id })}
                 onUpdateProjectSettings={onUpdateProject}
+                onOpenMusicSettings={() => setIsMusicSettingsOpen(true)}
+                onOpenMusicLibrary={() => setIsMusicLibraryOpen(true)}
               />
             </div>
           )}
@@ -433,6 +462,22 @@ export const EditorWorkspace = ({
           </div>
         </div>
       </Modal>
+
+      <MusicSettingsModal
+        isOpen={isMusicSettingsOpen}
+        onClose={() => setIsMusicSettingsOpen(false)}
+        project={project}
+        onUpdateSettings={handleUpdateBackgroundMusic}
+        onOpenLibrary={() => { setIsMusicSettingsOpen(false); setIsMusicLibraryOpen(true) }}
+      />
+
+      <MusicLibraryModal
+        isOpen={isMusicLibraryOpen}
+        onClose={() => setIsMusicLibraryOpen(false)}
+        project={project}
+        activeTrackId={project.backgroundMusic?.trackId}
+        onSelectTrack={handleSelectMusicTrack}
+      />
     </div>
   )
 }

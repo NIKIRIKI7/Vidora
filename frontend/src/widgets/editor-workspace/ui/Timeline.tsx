@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import type { SceneFragment } from '@entities/project'
+import type { SceneFragment, BackgroundMusicSettings } from '@entities/project'
 import { Button } from '@shared/ui'
-import { Play, Pause, ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split } from 'lucide-react'
+import { Play, Pause, ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split, Volume2, VolumeX } from 'lucide-react'
 
 export type TimelineTool = 'select' | 'razor'
 
@@ -15,6 +15,9 @@ interface TimelineProps {
   onDuplicateFragment?: (fragId: string) => void
   onSelectFragment?: (fragId: string) => void
   selectedFragmentId?: string | null
+  backgroundMusic?: BackgroundMusicSettings | null
+  onUpdateBackgroundMusic?: (settings: BackgroundMusicSettings) => void
+  onOpenMusicSettings?: () => void
 }
 
 // ponytail: fake waveform, seed-based heights, no audio decode needed
@@ -60,6 +63,9 @@ export const Timeline = ({
   onDuplicateFragment,
   onSelectFragment,
   selectedFragmentId,
+  backgroundMusic,
+  onUpdateBackgroundMusic,
+  onOpenMusicSettings,
 }: TimelineProps) => {
   const [zoom, setZoom] = useState(100)
   const [currentTime, setCurrentTime] = useState(0)
@@ -391,6 +397,12 @@ export const Timeline = ({
           <div className="h-12 flex items-center px-3 text-[10px] uppercase font-bold text-on-surface border-b border-white/5">Сценарий</div>
           <div className="h-12 flex items-center px-3 text-[10px] uppercase font-bold text-secondary border-b border-white/5">B-Roll</div>
           <div className="h-12 flex items-center px-3 text-[10px] uppercase font-bold text-primary border-b border-white/5">Аудио</div>
+          <div className="h-12 flex items-center justify-between px-3 text-[10px] uppercase font-bold text-accent border-b border-white/5">
+            <span className="flex items-center gap-1"><Volume2 size={11} /> Музыка</span>
+            {onOpenMusicSettings && (
+              <button onClick={onOpenMusicSettings} className="text-on-surface-variant hover:text-accent p-0.5" title="Настройки музыки и дакинга">⚙️</button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar relative bg-[#070b14]" ref={scrollRef}>
@@ -489,6 +501,51 @@ export const Timeline = ({
                 })}
               </div>
             ))}
+
+            {/* Дорожка «Музыка»: фон на всю длину проекта */}
+            <div key="music" className="h-12 border-b border-white/5 relative">
+              {backgroundMusic?.enabled ? (
+                <div
+                  onClick={onOpenMusicSettings}
+                  className="absolute top-1 bottom-1 left-0 rounded-md border border-accent/40 bg-accent/15 text-accent flex items-center px-3 gap-2 cursor-pointer hover:bg-accent/25 transition-all"
+                  style={{ width: duration * zoom }}
+                  title="Настройки музыки и авто-дакинга"
+                >
+                  <span className="text-[10px] font-mono font-bold shrink-0 truncate max-w-[180px]">🎵 {backgroundMusic.trackName || 'Фоновая музыка'}</span>
+                  <div className="flex-1 h-3 opacity-50 overflow-hidden">
+                    <WaveformMock width={duration * zoom} seed="bg_music_track" />
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={backgroundMusic.baseVolume}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => onUpdateBackgroundMusic?.({ ...backgroundMusic, baseVolume: Number(e.target.value) })}
+                      className="w-16 h-1 accent-accent"
+                      title={`Громкость музыки: ${Math.round(backgroundMusic.baseVolume * 100)}%`}
+                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onUpdateBackgroundMusic?.({ ...backgroundMusic, enabled: false }) }}
+                      className="p-1 hover:text-white rounded"
+                      title="Выключить музыку"
+                    >
+                      <VolumeX size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={onOpenMusicSettings}
+                  className="absolute top-1 bottom-1 left-0 rounded-md border border-dashed border-white/10 flex items-center justify-center text-[10px] text-on-surface-variant/40 hover:text-white hover:border-white/30 cursor-pointer"
+                  style={{ width: duration * zoom }}
+                >
+                  + Нажмите, чтобы добавить фоновую музыку
+                </div>
+              )}
+            </div>
 
             <div
               className="absolute top-0 bottom-0 w-[2px] bg-error z-40 pointer-events-none shadow-[0_0_12px_rgba(255,80,80,0.9)] transition-all duration-75"

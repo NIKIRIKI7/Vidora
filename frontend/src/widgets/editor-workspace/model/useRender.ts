@@ -66,7 +66,7 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     return new Promise((resolve, reject) => {
       fetch(`${API}/api/v1/render/start`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath }),
+        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, background_music: project.backgroundMusic }),
         signal,
       }).then(res => res.json()).then(data => {
         if (!data.task_id) return reject(new Error('Нет task_id'))

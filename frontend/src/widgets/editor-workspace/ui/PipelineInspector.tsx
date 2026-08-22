@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, type DragEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, FieldGroup, Select, Spinner, Switch, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
-import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, SlidersHorizontal, MicVocal, Play, AlignStartVertical, RotateCcw, Cpu, AudioLines, Code, Copy, Film, FileOutput, FileAudio, Sparkles, Video } from 'lucide-react'
+import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, SlidersHorizontal, MicVocal, Play, AlignStartVertical, RotateCcw, Cpu, AudioLines, Code, Copy, Film, FileOutput, FileAudio, Sparkles, Video, Volume2 } from 'lucide-react'
+import { DEFAULT_BACKGROUND_MUSIC } from '@shared/config'
 import { generateProjectPrompt, generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty, extractCleanVoiceText, getSceneTeleprompterScript, getProjectTeleprompterScript } from '@widgets/editor-workspace/lib/helpers'
 
@@ -190,6 +191,8 @@ interface Props {
   onReplaceFragmentAudio: (fragId: string, path: string) => void
   onUpdateActiveGlobalVoice: (id: string | undefined) => void
   onUpdateProjectSettings: (project: ProjectSettings) => void
+  onOpenMusicSettings?: () => void
+  onOpenMusicLibrary?: () => void
 }
 
 type TabKey = 'content' | 'audio' | 'visual' | 'export';
@@ -199,7 +202,8 @@ export const PipelineInspector = ({
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onAddFragment, onDeleteFragment, onFragmentTextChange,
   onFragDragStart, onFragDrop, onOpenVoicebox, onOpenAiSettings, onOpenCustomAudioModal, onAutoMatchBRoll, onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync,
   onResetAudio, onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx, onRunCodeGen, onRunProjectRender, onRunRender, onExportProject, onShowNotification,
-  onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio, onUpdateActiveGlobalVoice, onUpdateProjectSettings
+  onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio, onUpdateActiveGlobalVoice, onUpdateProjectSettings,
+  onOpenMusicSettings, onOpenMusicLibrary
 }: Props) => {
   const { globalVoices } = useSettingsStore()
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('project')
@@ -459,6 +463,33 @@ export const PipelineInspector = ({
                 }} title="Скачать все аудио проекта одним файлом"><Download size={18} /></button>
                 <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors w-9 h-9 rounded hover:bg-white/5 border border-white/10" onClick={onResetAudio} title="Сбросить все аудио"><Trash2 size={18} /></button>
                 </div>
+              </div>
+            </section>
+
+            <div className="h-px bg-white/5" />
+
+            {/* Секция: Фоновая музыка & Auto-Ducking */}
+            <section className="flex flex-col gap-3">
+              <div className="flex justify-between items-center bg-accent/10 p-2 rounded-lg border border-accent/20 gap-2">
+                <span className="font-label text-xs uppercase tracking-wide text-accent flex items-center gap-1.5 truncate">
+                  <Volume2 size={16} /> Фоновая музыка & Ducking
+                </span>
+                <Switch
+                  checked={Boolean(project.backgroundMusic?.enabled)}
+                  onChange={(val) => onUpdateProjectSettings({
+                    ...project,
+                    backgroundMusic: { ...(project.backgroundMusic || DEFAULT_BACKGROUND_MUSIC), enabled: val },
+                  })}
+                />
+              </div>
+              <div className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl flex flex-col gap-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-on-surface-variant truncate max-w-[170px]">{project.backgroundMusic?.trackName || 'Не выбран'}</span>
+                  <button onClick={() => onOpenMusicLibrary?.()} className="text-[11px] text-secondary hover:underline shrink-0">Изменить</button>
+                </div>
+                <Button variant="secondary" onClick={() => onOpenMusicSettings?.()} className="w-full text-xs py-1.5 font-medium">
+                  <SlidersHorizontal size={14} className="mr-1.5" /> Настроить Ducking & EQ
+                </Button>
               </div>
             </section>
 

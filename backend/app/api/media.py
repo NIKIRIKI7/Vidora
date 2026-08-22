@@ -5,12 +5,32 @@ import json
 import re
 import subprocess
 import uuid
+import asyncio
 import httpx
+from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
 from app.schemas import AutoBRollRequest
 
 router = APIRouter(prefix="/api/v1/media", tags=["media"])
+
+MUSIC_DIR = Path(__file__).resolve().parents[2] / "assets" / "music"
+_AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac")
+
+def _sync_audio_duration(path: str) -> float:
+    try:
+        with wave.open(path, 'r') as wav:
+            return round(wav.getnframes() / float(wav.getframerate()), 2)
+    except Exception:
+        try:
+            out = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                capture_output=True, text=True,
+            )
+            dur = out.stdout.strip()
+            return round(float(dur), 2) if dur else 0.0
+        except Exception:
+            return 0.0
 
 class DownloadRequest(BaseModel):
     project_path: str
@@ -20,20 +40,22 @@ class DownloadRequest(BaseModel):
 
 @router.post("/upload")
 async def upload_media(project_path: str = Form(...), folder: str = Form("b-roll"), file: UploadFile = File(...)):
-    # ponytail: path traversal guard via os.path.realpath and prefix check
     dest_dir = os.path.realpath(os.path.join(project_path, "assets", folder))
     if not dest_dir.startswith(os.path.realpath(project_path)):
         return {"status": "error", "detail": "invalid path"}
+    
     os.makedirs(dest_dir, exist_ok=True)
     file_path = os.path.normpath(os.path.join(dest_dir, file.filename))
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
+    def _write():
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+    await asyncio.to_thread(_write)
     return {
-        "status": "ok", 
-        "path": file_path, 
-        "filename": file.filename, 
+        "status": "ok",
+        "path": file_path,
+        "filename": file.filename,
         "url": f"assets/{folder}/{file.filename}"
     }
 
@@ -42,26 +64,16 @@ async def upload_audio(project_path: str = Form(...), target_id: str = Form(...)
     dest_dir = os.path.realpath(os.path.join(project_path, "assets", "voice"))
     if not dest_dir.startswith(os.path.realpath(project_path)):
         return {"status": "error", "detail": "invalid path"}
+    
     os.makedirs(dest_dir, exist_ok=True)
     file_path = os.path.normpath(os.path.join(dest_dir, f"Custom_{target_id}_{file.filename}"))
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    duration = 0.0
-    try:
-        with wave.open(file_path, 'r') as wav:
-            duration = wav.getnframes() / float(wav.getframerate())
-    except Exception:
-        # mp3-референс — длительность через ffprobe
-        try:
-            import subprocess
-            out = subprocess.run(
-                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", file_path],
-                capture_output=True, text=True,
-            )
-            dur = out.stdout.strip()
-            duration = float(dur) if dur else 0.0
-        except Exception:
-            duration = 0.0
+    
+    def _write():
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+    await asyncio.to_thread(_write)
+    duration = await asyncio.to_thread(_sync_audio_duration, file_path)
     return {"status": "ok", "path": file_path, "duration": duration}
 
 @router.get("/search-stock")
@@ -69,7 +81,7 @@ async def search_stock(query: str, per_page: int = 15, orientation: str = "portr
     api_key = os.environ.get("PEXELS_API_KEY", "")
     if not api_key:
         return {"status": "error", "detail": "PEXELS_API_KEY не задан в файле .env на бэкенде"}
-
+    
     async with httpx.AsyncClient() as client:
         res = await client.get(
             f"https://api.pexels.com/videos/search?query={query}&per_page={per_page}&orientation={orientation}",
@@ -85,7 +97,7 @@ async def download_stock(req: DownloadRequest):
     dest_dir = os.path.join(req.project_path, "assets", req.folder)
     os.makedirs(dest_dir, exist_ok=True)
     file_path = os.path.normpath(os.path.join(dest_dir, req.filename))
-    
+
     async with httpx.AsyncClient() as client:
         async with client.stream("GET", req.url) as response:
             if response.status_code != 200:
@@ -93,13 +105,29 @@ async def download_stock(req: DownloadRequest):
             with open(file_path, "wb") as f:
                 async for chunk in response.aiter_bytes():
                     f.write(chunk)
-                    
+
     return {
         "status": "ok",
         "path": file_path,
         "filename": req.filename,
         "url": f"assets/{req.folder}/{req.filename}"
     }
+
+def _sync_trim_video(temp_filepath: str, final_filepath: str, target_dur: float):
+    trim_cmd = [
+        "ffmpeg", "-y",
+        "-ss", "0.0",
+        "-t", str(target_dur),
+        "-i", temp_filepath,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-an",
+        final_filepath,
+    ]
+    subprocess.run(trim_cmd, capture_output=True, check=False)
+    if os.path.exists(temp_filepath):
+        os.remove(temp_filepath)
 
 @router.post("/auto-broll")
 async def match_and_trim_broll(req: AutoBRollRequest):
@@ -112,8 +140,8 @@ async def match_and_trim_broll(req: AutoBRollRequest):
     if not dest_dir.startswith(project_root):
         return {"status": "error", "detail": "invalid path"}
     os.makedirs(dest_dir, exist_ok=True)
-    orientation = "portrait" if req.format == "9:16" else "landscape"
 
+    orientation = "portrait" if req.format == "9:16" else "landscape"
     fragments_payload = []
     for f in req.fragments:
         dur = 3.0
@@ -169,7 +197,6 @@ async def match_and_trim_broll(req: AutoBRollRequest):
             frag_id = frag["id"]
             target_dur = frag["target_duration"]
             query_info = llm_queries.get(frag_id, {})
-
             if query_info.get("is_broll") is False:
                 results.append({"fragment_id": frag_id, "matched": False, "reason": "LLM classified as non-broll"})
                 continue
@@ -225,21 +252,7 @@ async def match_and_trim_broll(req: AutoBRollRequest):
                         async for chunk in dl_resp.aiter_bytes():
                             f_out.write(chunk)
 
-                trim_cmd = [
-                    "ffmpeg", "-y",
-                    "-ss", "0.0",
-                    "-t", str(target_dur),
-                    "-i", temp_filepath,
-                    "-c:v", "libx264",
-                    "-preset", "fast",
-                    "-crf", "18",
-                    "-an",
-                    final_filepath,
-                ]
-                subprocess.run(trim_cmd, capture_output=True, check=False)
-
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
+                await asyncio.to_thread(_sync_trim_video, temp_filepath, final_filepath, target_dur)
 
                 if os.path.exists(final_filepath) and os.path.getsize(final_filepath) > 1000:
                     results.append({
@@ -253,9 +266,67 @@ async def match_and_trim_broll(req: AutoBRollRequest):
                     })
                 else:
                     results.append({"fragment_id": frag_id, "matched": False, "reason": "FFmpeg trimming failed"})
-
             except Exception as frag_err:
                 results.append({"fragment_id": frag_id, "matched": False, "reason": str(frag_err)})
 
     return {"status": "ok", "results": results}
 
+def _sync_get_music_library(project_path: str):
+    categories = []
+    if MUSIC_DIR.exists():
+        for sub in sorted(MUSIC_DIR.iterdir()):
+            if not sub.is_dir():
+                continue
+            tracks = []
+            for f in sorted(sub.iterdir()):
+                if f.is_file() and f.suffix.lower() in _AUDIO_EXTS:
+                    tracks.append({
+                        "id": f.stem,
+                        "name": f.stem.replace("_", " ").title(),
+                        "duration": _sync_audio_duration(str(f)),
+                        "path": f"assets/music/{sub.name}/{f.name}",
+                        "is_custom": False,
+                    })
+            if tracks:
+                categories.append({
+                    "category": sub.name,
+                    "category_title": sub.name.replace("_", " ").title(),
+                    "tracks": tracks,
+                })
+
+    custom_tracks = []
+    if project_path:
+        music_dir = os.path.realpath(os.path.join(project_path, "assets", "music"))
+        if os.path.isdir(music_dir) and music_dir.startswith(os.path.realpath(project_path)):
+            for f in sorted(os.listdir(music_dir)):
+                if f.lower().endswith(_AUDIO_EXTS):
+                    p = os.path.join(music_dir, f)
+                    custom_tracks.append({
+                        "id": f"custom_{f}",
+                        "name": f,
+                        "duration": _sync_audio_duration(p),
+                        "path": p,
+                        "is_custom": True,
+                    })
+    return categories, custom_tracks
+
+@router.get("/music-library")
+async def get_music_library(project_path: str = ""):
+    categories, custom_tracks = await asyncio.to_thread(_sync_get_music_library, project_path)
+    return {"status": "ok", "categories": categories, "custom_tracks": custom_tracks}
+
+@router.post("/upload-music")
+async def upload_music(project_path: str = Form(...), file: UploadFile = File(...)):
+    dest_dir = os.path.realpath(os.path.join(project_path, "assets", "music"))
+    if not dest_dir.startswith(os.path.realpath(project_path)):
+        return {"status": "error", "detail": "invalid path"}
+    
+    os.makedirs(dest_dir, exist_ok=True)
+    file_path = os.path.normpath(os.path.join(dest_dir, file.filename))
+    
+    def _write():
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+    await asyncio.to_thread(_write)
+    return {"status": "ok", "path": file_path, "filename": file.filename, "url": f"assets/music/{file.filename}"}
