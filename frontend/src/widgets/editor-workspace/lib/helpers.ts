@@ -1,8 +1,8 @@
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { generateRemotionPrompt } from './generateRemotionPrompt'
 import { normalizeText } from './timingAlgorithms'
-
 import { API, formatTimecode, formatShortTimecode, hashCode, pad, parseTcString, sanitizeFilename } from '@shared/lib'
+
 export { API, formatTimecode, formatShortTimecode, hashCode, pad, parseTcString, sanitizeFilename }
 
 export const getProjectPath = (p: ProjectSettings) => sanitizeFilename(p.name || 'vidora_projects')
@@ -79,19 +79,12 @@ export interface TeleprompterOptions {
   keepPauseSoundTags?: boolean
 }
 
-/**
- * Очищает текст для суфлера/TTS:
- * - Всегда удаляет *(визуальные ремарки)* и [instruct: ...]
- * - Если keepEmotionTags = true, оставляет [emotion: ...]
- * - Если keepPauseSoundTags = true, оставляет паузы <#1.0#> и междометия (breath)
- */
 export const extractCleanVoiceText = (rawText: string, options: boolean | TeleprompterOptions = false): string => {
   if (!rawText) return ''
   const opts: TeleprompterOptions =
     typeof options === 'boolean'
       ? { keepEmotionTags: options, keepPauseSoundTags: options }
       : { keepEmotionTags: false, keepPauseSoundTags: false, ...options }
-
   let text = rawText.replace(/\*\([\s\S]*?\)\*/g, ' ')
   text = text.replace(/\[instruct:\s*[^\]]+\]/gi, ' ')
   if (!opts.keepEmotionTags) {
@@ -104,9 +97,6 @@ export const extractCleanVoiceText = (rawText: string, options: boolean | Telepr
   return text.replace(/\s+/g, ' ').trim()
 }
 
-/**
- * Единый суфлерский текст всей сцены (все фрагменты по порядку)
- */
 export const getSceneTeleprompterScript = (scene: Scene, options: boolean | TeleprompterOptions = false): string => {
   return scene.fragments
     .map(f => extractCleanVoiceText(f.text, options))
@@ -114,9 +104,6 @@ export const getSceneTeleprompterScript = (scene: Scene, options: boolean | Tele
     .join('\n\n')
 }
 
-/**
- * Полный суфлерский сценарий проекта без ремарок, разбитый по сценам
- */
 export const getProjectTeleprompterScript = (project: ProjectSettings, options: boolean | TeleprompterOptions = false): string => {
   return project.scenes
     .map((scene, i) => {

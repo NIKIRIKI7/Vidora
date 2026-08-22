@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import type { ProjectSettings, Scene, VideoFormat, BackgroundMusicSettings } from '@entities/project'
 import { Button, Spinner, ProgressBar } from '@shared/ui'
 import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -51,15 +51,25 @@ export const CenterCanvas = ({
   const shouldRenderAudio = Boolean(audioLoaded && !hasRenderedVideo)
 
   const [localMd, setLocalMd] = useState(project.rawMarkdown)
+  const lastProjectMdRef = useRef(project.rawMarkdown)
   const currentFormat = previewFormat || project.format
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('app:split-ratio')) || 50)
 
+  // Прямая синхронизация при изменении проекта извне без Promise.resolve()
   useEffect(() => {
-    Promise.resolve().then(() => setLocalMd(project.rawMarkdown))
+    if (project.rawMarkdown !== lastProjectMdRef.current) {
+      lastProjectMdRef.current = project.rawMarkdown
+      setLocalMd(project.rawMarkdown)
+    }
   }, [project.rawMarkdown])
 
+  // Дебаунс сохранения ручных правок в Raw Script
   useEffect(() => {
-    const t = setTimeout(() => { if (localMd !== project.rawMarkdown) onUpdateMarkdown(localMd) }, 1000)
+    if (localMd === project.rawMarkdown) return
+    const t = setTimeout(() => {
+      lastProjectMdRef.current = localMd
+      onUpdateMarkdown(localMd)
+    }, 600)
     return () => clearTimeout(t)
   }, [localMd, project.rawMarkdown, onUpdateMarkdown])
 
