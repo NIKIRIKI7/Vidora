@@ -143,6 +143,7 @@ class RenderRequest(BaseModel):
     project_path: str
     tsx_code: str = ""
     audio_path: Optional[str] = ""
+    broll_sources: List[str] = []
     background_music: Optional[BackgroundMusicSchema] = None
 
 class DuckingPreviewRequest(BaseModel):

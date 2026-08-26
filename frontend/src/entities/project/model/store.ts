@@ -124,15 +124,17 @@ export const useProjectStore = create<ProjectStore>()(
 )
 
 interface NotificationState {
-  notification: { message: string; type: 'success' | 'error' | 'info' } | null
-  showNotification: (message: string, type?: 'success' | 'error' | 'info') => void
+  notification: { message: string; type: 'success' | 'error' | 'info'; details?: string; timestamp: number } | null
+  showNotification: (message: string, type?: 'success' | 'error' | 'info', details?: string) => void
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
   notification: null,
-  showNotification: (message, type = 'info') => {
-    set({ notification: { message, type } })
-    setTimeout(() => set({ notification: null }), 3500)
+  showNotification: (message, type = 'info', details) => {
+    set({ notification: { message, type, details, timestamp: Date.now() } })
+    // Ошибки с деталями держим дольше, чтобы пользователь успел раскрыть стек
+    const duration = type === 'error' && details ? 20000 : 3500
+    setTimeout(() => set({ notification: null }), duration)
   }
 }))
 

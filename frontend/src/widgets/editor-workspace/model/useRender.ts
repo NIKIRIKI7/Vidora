@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { API, getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, generateDefaultSceneTsx } from '@widgets/editor-workspace/lib/helpers'
 import { generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { serializeProjectToMarkdown } from '@entities/project'
-import type { ProjectSettings, Scene, ApiKeys } from '@entities/project'
+import type { ProjectSettings, Scene, SceneFragment, ApiKeys } from '@entities/project'
 import { useRenderWebSocket } from './useRenderWebSocket'
 import type { RenderPayload } from './types'
 
@@ -18,8 +18,25 @@ export const pushCodeHistory = (scene: Scene, code: string, project: ProjectSett
   }
 }
 
+// ponytail: бэкенд при сбое генерации возвращает текст ошибки в tsx_code (комментарий // Ошибка: ...).
+// Такой "код" нельзя сохранять/рендерить — иначе Remotion падает с React #130 (пустой компонент).
+const isUsableCode = (code?: string | null): boolean => {
+  const c = (code || '').trim()
+  return c.length > 0 && !c.startsWith('//')
+}
+
+// Внешние абсолютные пути B-Roll (вне папки проекта) — бэкенд скопирует их в public/assets/b-roll.
+const collectBRollSources = (fragments: SceneFragment[]): string[] => {
+  const sources: string[] = []
+  for (const f of fragments) {
+    const p = (f.bRollFileName || '').trim()
+    if (/^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('/')) sources.push(p)
+  }
+  return sources
+}
+
 export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, apiKeys, audioLoaded, showNotification, abortControllerRef, currentTaskIdRef }: {
-  project: ProjectSettings, onUpdateProject: (p: ProjectSettings) => void, activeScene?: Scene, llmEngine: string, apiKeys: ApiKeys, audioLoaded: string | null, showNotification: (msg: string, type?: 'success'|'error'|'info') => void, abortControllerRef: React.MutableRefObject<AbortController | null>, currentTaskIdRef: React.MutableRefObject<string | null>
+  project: ProjectSettings, onUpdateProject: (p: ProjectSettings) => void, activeScene?: Scene, llmEngine: string, apiKeys: ApiKeys, audioLoaded: string | null, showNotification: (msg: string, type?: 'success'|'error'|'info', details?: string) => void, abortControllerRef: React.MutableRefObject<AbortController | null>, currentTaskIdRef: React.MutableRefObject<string | null>
 }) => {
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
@@ -46,13 +63,17 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       })
       const data = await res.json()
 
-      if (data.tsx_code) {
+      if (data.tsx_code && data.status === 'ok') {
         onUpdateProject({
           ...project,
           scenes: project.scenes.map(s => (s.id === sceneToUse.id ? { ...s, ...pushCodeHistory(sceneToUse, data.tsx_code, project) } : s)),
         })
         if (!abortControllerRef.current?.signal.aborted) showNotification('TSX код сгенерирован', 'success')
         return data.tsx_code
+      }
+      if (data.tsx_code && data.status !== 'ok' && !abortControllerRef.current?.signal.aborted) {
+        const msg = data.tsx_code.replace(/^\/\/\s*/, '').trim()
+        if (msg) showNotification(msg, 'error')
       }
     } catch (error: unknown) {
       if (error instanceof Error && error.name !== 'AbortError') showNotification('Сбой генерации кода', 'error')
@@ -64,9 +85,11 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
 
   const renderSingleScenePromise = (sceneId: string, code: string, audioPath: string, projectPath: string, signal: AbortSignal): Promise<string | null> => {
     return new Promise((resolve, reject) => {
+      const scene = project.scenes.find(s => s.id === sceneId)
+      const brollSources = scene ? collectBRollSources(scene.fragments) : []
       fetch(`${API}/api/v1/render/start`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, background_music: project.backgroundMusic }),
+        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, broll_sources: brollSources, background_music: project.backgroundMusic }),
         signal,
       }).then(res => res.json()).then(data => {
         if (!data.task_id) return reject(new Error('Нет task_id'))
@@ -79,11 +102,13 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
           } else if (payload.status === 'error') {
             renderListenerRef.current = null
             currentTaskIdRef.current = null
-            reject(new Error(payload.error || 'Неизвестная ошибка рендера'))
+            const err = new Error(payload.error || 'Неизвестная ошибка рендера')
+            if (payload.error_details) (err as Error & { details?: string }).details = payload.error_details
+            reject(err)
           }
         }
       }).catch(error => {
-        if ((error as Error).name !== 'AbortError') reject(error)
+        reject(error)
       })
     })
   }
@@ -108,13 +133,27 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
               signal,
             })
             const data = await res.json()
-            if (data.tsx_code) {
+            if (data.tsx_code && data.status === 'ok' && isUsableCode(data.tsx_code)) {
               currentCode = data.tsx_code
               onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === scene.id ? { ...s, ...pushCodeHistory(scene, currentCode, project) } : s) })
             }
           } catch (fixErr) { console.error('Ошибка автоисправления', fixErr) } finally { setIsGeneratingCode(false) }
         } else {
-          showNotification(`Ошибка: ${(err as Error).message}. Требуется ручное исправление.`, 'error')
+          // Последний рубеж: LLM-код (и его "исправления") не собрался — рендерим детерминированный
+          // фоллбэк с B-Roll, чтобы пользователь хотя бы получил видео, а не пустоту.
+          if (!scene.ignoreTsx) {
+            const fallbackCode = generateDefaultSceneTsx(project, scene)
+            if (fallbackCode !== currentCode) {
+              showNotification('Код сцены не собрался — рендерю базовый шаблон с B-Roll.', 'info')
+              try {
+                const fallbackResult = await renderSingleScenePromise(scene.id, fallbackCode, audioPath, projectPath, signal)
+                if (fallbackResult) return fallbackResult
+              } catch {
+                if (signal.aborted) return null
+              }
+            }
+          }
+          showNotification(`Ошибка: ${(err as Error).message}. Требуется ручное исправление.`, 'error', (err as Error & { details?: string }).details)
           return null
         }
       }
@@ -130,10 +169,10 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     setRenderProgress(0)
     abortControllerRef.current = new AbortController()
 
-    const codeToUse = typeof code === 'string' && code.trim()
+    const codeToUse = typeof code === 'string' && isUsableCode(code)
       ? code
-      : activeScene.remotionCode && activeScene.remotionCode.trim()
-      ? activeScene.remotionCode
+      : isUsableCode(activeScene.remotionCode)
+      ? activeScene.remotionCode!
       : generateDefaultSceneTsx(project, activeScene)
     const audioToUse = typeof audioPath === 'string' ? audioPath : audioLoaded || getAudioPathForScene(project, activeScene)
 
@@ -198,8 +237,8 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
         if (abortControllerRef.current.signal.aborted) break
         const scene = project.scenes[i]
 
-        const codeToRender = scene.remotionCode && scene.remotionCode.trim()
-          ? scene.remotionCode
+        const codeToRender = isUsableCode(scene.remotionCode)
+          ? scene.remotionCode!
           : generateDefaultSceneTsx(project, scene)
 
         const audioPathToUse = getAudioPathForScene(project, scene)

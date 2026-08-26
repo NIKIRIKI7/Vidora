@@ -3,12 +3,48 @@ import sys
 import psutil
 import torch
 import subprocess
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.services.remotion_skills import sync_remotion_skills
+from app.services.history_logger import (
+    add_log,
+    get_all_logs,
+    save_code_revision,
+    get_code_revisions,
+    get_code_by_revision,
+)
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
+
+class SaveRevisionRequest(BaseModel):
+    project_id: str = ""
+    scene_id: str = ""
+    tsx_code: str = ""
+    prompt: str = ""
+
+@router.get("/logs")
+def get_logs(limit: int = Query(200, ge=1, le=1000)):
+    return {"logs": get_all_logs(limit)}
+
+@router.get("/history/{project_id}/{scene_id}")
+def list_revisions(project_id: str, scene_id: str):
+    return {"revisions": get_code_revisions(project_id, scene_id)}
+
+@router.get("/history/{project_id}/{scene_id}/{revision_id}")
+def load_revision(project_id: str, scene_id: str, revision_id: str):
+    code = get_code_by_revision(project_id, scene_id, revision_id)
+    if not code:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    return {"revision_id": revision_id, "tsx_code": code}
+
+@router.post("/history")
+def save_revision(req: SaveRevisionRequest):
+    if not req.tsx_code or not req.tsx_code.strip():
+        raise HTTPException(status_code=400, detail="tsx_code обязателен")
+    meta = save_code_revision(req.project_id, req.scene_id, req.tsx_code, req.prompt)
+    add_log("INFO", "CODE_SAVE", f"Ручное сохранение версии {meta['revision_id']} для {req.scene_id}")
+    return {"ok": True, "meta": meta}
 
 @router.get("/hardware")
 def get_hardware():

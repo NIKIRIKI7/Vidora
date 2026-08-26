@@ -1,5 +1,6 @@
 import { useSettingsStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
 import type { ProjectSettings, Scene, SceneFragment, VideoFormat, Resolution } from '@entities/project'
+import { resolveBRollVideoSrc } from './bRollSrc'
 
 const getDims = (res: Resolution, fmt: VideoFormat) => {
   const map = { '1080p': 1920, '1440p': 2560, '2160p': 3840 }
@@ -66,13 +67,13 @@ const formatFragmentsForPrompt = (fragments: SceneFragment[], fps: number): stri
     const durationFrames = Math.max(1, Math.round((endSec - startSec) * fps))
 
     if (frag.bRollFileName) {
-      const cleanFileName = frag.bRollFileName.replace(/^assets\/b-roll\//, '')
+      const bRollSrc = resolveBRollVideoSrc(frag.bRollFileName)
       return `- Фрагмент ${i + 1} [ТИП: B-ROLL ВИДЕОРЯД]:
   Тайминг: ${startSec.toFixed(2)}с - ${endSec.toFixed(2)}с (Sequence from={${startFrame}} durationInFrames={${durationFrames}})
-  Видеофайл: staticFile("assets/b-roll/${cleanFileName}")
+  Видеофайл: <OffthreadVideo src={${bRollSrc}} />
   Ремарка: ${frag.visualNote || 'Фоновое видео'}
   Суфлер: "${frag.text || ''}"
-  Правило: в этом интервале рендерите <OffthreadVideo src={staticFile("assets/b-roll/${cleanFileName}")} /> на весь кадр (object-cover), поверх - легкое затемнение и аккуратный субтитр. Сложную фоновую графику не добавлять.`
+  Правило: в этом интервале рендерите <OffthreadVideo src={${bRollSrc}} /> на весь кадр (object-cover), поверх - легкое затемнение и аккуратный субтитр. Сложную фоновую графику не добавлять.`
     }
 
     return `- Фрагмент ${i + 1} [ТИП: АНИМАЦИЯ / МОУШН-ДИЗАЙН]:
@@ -131,9 +132,9 @@ export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, f
   const durationSec = Math.max((fragment.endTime || 5) - (fragment.startTime || 0), 1)
 
   const isBRoll = Boolean(fragment.bRollFileName)
-  const cleanFileName = fragment.bRollFileName ? fragment.bRollFileName.replace(/^assets\/b-roll\//, '') : ''
+  const bRollSrc = fragment.bRollFileName ? resolveBRollVideoSrc(fragment.bRollFileName) : ''
   const visualPrompt = isBRoll
-    ? `[B-ROLL ВИДЕОРЯД] Вставьте <OffthreadVideo src={staticFile("assets/b-roll/${cleanFileName}")} className="w-full h-full object-cover" /> на весь кадр, поверх - легкое затемнение и субтитры. Ремарка: ${fragment.visualNote}`
+    ? `[B-ROLL ВИДЕОРЯД] Вставьте <OffthreadVideo src={${bRollSrc}} className="w-full h-full object-cover" /> на весь кадр, поверх - легкое затемнение и субтитры. Ремарка: ${fragment.visualNote}`
     : `[ГРАФИКА] ${fragment.visualNote}`
 
   return replaceVars(project.promptOverrides?.fragment || getActivePrompt(globalPrompts.fragment), {

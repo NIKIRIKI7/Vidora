@@ -4,6 +4,7 @@ import { Button, Spinner, ProgressBar } from '@shared/ui'
 import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
 import { Timeline } from './Timeline'
+import { CodeHistorySelector } from './CodeHistorySelector'
 
 interface Props {
   centerView: 'player' | 'code' | 'split' | 'markdown'
@@ -55,6 +56,15 @@ export const CenterCanvas = ({
   const lastProjectMdRef = useRef(project.rawMarkdown)
   const currentFormat = previewFormat || project.format
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('app:split-ratio')) || 50)
+
+  // Ручные правки кода тоже уходят в историю версий на бэкенде
+  const saveCodeRevision = () => {
+    if (!activeScene?.remotionCode?.trim()) return
+    fetch(`${API}/api/v1/system/history`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: project.name, scene_id: activeScene.id, tsx_code: activeScene.remotionCode, prompt: 'Ручная правка' }),
+    }).catch(() => {})
+  }
 
   // Прямая синхронизация при изменении проекта извне без Promise.resolve()
   useEffect(() => {
@@ -157,14 +167,15 @@ export const CenterCanvas = ({
         <>
           <div className="flex justify-between items-center bg-surface-container-lowest border border-white/10 rounded-lg p-2 shrink-0">
             <span className="text-xs text-on-surface-variant ml-2">Версия: {(activeScene?.historyIndex ?? 0) + 1} / {Math.max(1, (activeScene?.remotionCodeHistory?.length || 0))}</span>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
+              {activeScene && <CodeHistorySelector projectId={project.name} sceneId={activeScene.id} onRestoreCode={onUpdateCode} />}
               <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(-1)} disabled={(activeScene?.historyIndex ?? 0) <= 0}><ChevronLeft size={16} /> Пред</Button>
               <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(1)} disabled={(activeScene?.historyIndex ?? 0) >= (activeScene?.remotionCodeHistory?.length || 1) - 1}>След <ChevronRight size={16} /></Button>
             </div>
           </div>
           <textarea
             className="w-full h-full font-mono text-xs bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
-            value={activeScene?.remotionCode || ''} onChange={e => onUpdateCode(e.target.value)} spellCheck={false}
+            value={activeScene?.remotionCode || ''} onChange={e => onUpdateCode(e.target.value)} onBlur={saveCodeRevision} spellCheck={false}
           />
         </>
       )}

@@ -12,6 +12,7 @@ export interface RenderPayload {
   target?: string
   output_path?: string
   error?: string
+  error_details?: string
 }
 
 export type CenterViewMode = 'player' | 'code' | 'split' | 'markdown'

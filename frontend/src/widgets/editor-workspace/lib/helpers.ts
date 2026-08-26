@@ -1,4 +1,5 @@
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
+import { resolveBRollVideoSrc } from './bRollSrc'
 import { generateRemotionPrompt } from './generateRemotionPrompt'
 import { normalizeText } from './timingAlgorithms'
 import { API, formatTimecode, formatShortTimecode, hashCode, pad, parseTcString, sanitizeFilename } from '@shared/lib'
@@ -137,10 +138,10 @@ export const generateDefaultSceneTsx = (project: ProjectSettings, scene: Scene):
     const text = frag.text ? JSON.stringify(frag.text) : ''
 
     if (frag.bRollFileName) {
-      const cleanFile = frag.bRollFileName.replace(/^assets\/b-roll\//, '')
+      const bRollSrc = resolveBRollVideoSrc(frag.bRollFileName)
       return `      <Sequence from={${startFrame}} durationInFrames={${durFrames}}>
         <AbsoluteFill className="bg-black">
-          <OffthreadVideo src={staticFile("assets/b-roll/${cleanFile}")} className="w-full h-full object-cover" />
+          <OffthreadVideo src={${bRollSrc}} className="w-full h-full object-cover" />
           ${text ? `          <AbsoluteFill className="flex items-end justify-center p-12 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
             <p className="text-3xl font-bold text-white text-center drop-shadow-xl max-w-4xl">{${text}}</p>
           </AbsoluteFill>` : ''}

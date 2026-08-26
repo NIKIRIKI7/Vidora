@@ -52,6 +52,11 @@ def _is_safe_path(target_path: Path) -> bool:
     except Exception:
         return False
 
+MEDIA_EXTENSIONS = {'.mp4', '.webm', '.mov', '.mkv', '.avi', '.m4v', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.wav', '.mp3'}
+
+def _is_media_file(p: Path) -> bool:
+    return p.is_file() and p.suffix.lower() in MEDIA_EXTENSIONS
+
 def _sanitize(s: str) -> str:
     return re.sub(r'[^a-zA-Z0-9а-яА-ЯёЁ \-_]', '_', s).strip()
 
@@ -111,32 +116,49 @@ def _sync_create_export_zip(proj_dir: Path, markdown: str) -> io.BytesIO:
     zip_buffer.seek(0)
     return zip_buffer
 
-def _prepare_remotion_public_assets(proj_assets: Path):
-    """Прокидывает папку assets проекта в public Remotion, чтобы staticFile() находил b-roll."""
+def _prepare_remotion_public_assets(proj_assets: Path, extra_sources: list = None):
+    """Прокидывает папку assets проекта в public Remotion, чтобы staticFile() находил b-roll.
+    extra_sources — внешние абсолютные пути b-roll (вне проекта): копируются в public/assets/b-roll/."""
     remo_public_assets = REMO_DIR / "public" / "assets"
     remo_public_assets.parent.mkdir(parents=True, exist_ok=True)
 
     if remo_public_assets.is_symlink():
         if remo_public_assets.resolve() == proj_assets.resolve():
-            return
-        remo_public_assets.unlink()
+            pass
+        else:
+            remo_public_assets.unlink()
 
-    if not proj_assets.exists():
-        return
+    if proj_assets.exists():
+        if not remo_public_assets.is_symlink() or remo_public_assets.resolve() != proj_assets.resolve():
+            try:
+                if remo_public_assets.exists() and not remo_public_assets.is_symlink():
+                    shutil.rmtree(remo_public_assets, ignore_errors=True)
+                os.symlink(str(proj_assets.resolve()), str(remo_public_assets), target_is_directory=True)
+            except OSError:
+                # ponytail: Windows без Developer Mode не даёт создавать симлинки — копируем только недостающие файлы.
+                remo_public_assets.mkdir(parents=True, exist_ok=True)
+                for root, _, files in os.walk(str(proj_assets)):
+                    for f in files:
+                        src = Path(root) / f
+                        dst = remo_public_assets / src.relative_to(proj_assets)
+                        if not dst.exists():
+                            dst.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(str(src), str(dst))
 
-    try:
-        os.symlink(str(proj_assets.resolve()), str(remo_public_assets), target_is_directory=True)
-    except OSError:
-        # ponytail: Windows без Developer Mode не даёт создавать симлинки — копируем только недостающие файлы.
-        # Цеiling: старые файлы из других проектов остаются в public, на рендер не влияют.
-        remo_public_assets.mkdir(parents=True, exist_ok=True)
-        for root, _, files in os.walk(str(proj_assets)):
-            for f in files:
-                src = Path(root) / f
-                dst = remo_public_assets / src.relative_to(proj_assets)
-                if not dst.exists():
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(str(src), str(dst))
+    # Внешние файлы B-Roll копируются под своим именем в public/assets/b-roll/ (совпадает с staticFile("assets/b-roll/<имя>"))
+    remo_public_broll = remo_public_assets / "b-roll"
+    for src in extra_sources or []:
+        p = Path(src)
+        if not p.is_file() or p.suffix.lower() not in MEDIA_EXTENSIONS:
+            continue
+        try:
+            remo_public_broll.mkdir(parents=True, exist_ok=True)
+            dest = remo_public_broll / p.name
+            if not dest.exists() or dest.stat().st_size != p.stat().st_size:
+                shutil.copy2(str(p), str(dest))
+                print(f"[RENDER] Внешний b-roll скопирован: {src} -> {dest}")
+        except Exception as e:
+            print(f"[RENDER] Ошибка копирования внешнего b-roll {src}: {e}")
 
 def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEventLoop):
     temp_output = OUT_DIR / f"{task_id}.mp4"
@@ -155,11 +177,17 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
 
     try:
         proj_dir = _resolve_path(req.project_path) or str((BACKEND_DIR / req.project_path).resolve())
-        _prepare_remotion_public_assets(Path(proj_dir) / "assets")
+        _prepare_remotion_public_assets(Path(proj_dir) / "assets", req.broll_sources)
 
         if req.tsx_code:
             SCENE_FILE.parent.mkdir(parents=True, exist_ok=True)
             SCENE_FILE.write_text(req.tsx_code, encoding="utf-8")
+
+        try:
+            from app.services.history_logger import add_log
+            add_log("INFO", "RENDER", f"Запуск рендера [{task_id}] target={req.target_id} (project={req.project_path})")
+        except Exception:
+            pass
         
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         process = subprocess.Popen(
@@ -207,6 +235,17 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                 if "Error:" in line or "Error " in line or "Exception" in line:
                     error_msg = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', line).strip()
                     break
+            # Детальный лог: хвост вывода Remotion (стек ошибки) без ANSI-кодов
+            error_details = "\n".join(
+                re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', l).strip()
+                for l in output_logs[-100:]
+                if l.strip()
+            )
+            try:
+                from app.services.history_logger import add_log
+                add_log("ERROR", "RENDER", f"Ошибка рендера [{task_id}] (target={req.target_id}): {error_msg}", details=error_details)
+            except Exception:
+                pass
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast({
                     "type": "RENDER_PROGRESS",
@@ -216,7 +255,8 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                         "status": "error",
                         "target_id": req.target_id,
                         "target": req.target,
-                        "error": error_msg
+                        "error": error_msg,
+                        "error_details": error_details
                     }
                 }), loop
             )
@@ -301,6 +341,12 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
             dest_file = dest_dir / f"{req.target_id}.mp4"
             shutil.copy2(source_video, dest_file)
             final_file_path = str(dest_file)
+
+            try:
+                from app.services.history_logger import add_log
+                add_log("SUCCESS", "RENDER", f"Рендер завершен [{task_id}] -> {final_file_path}")
+            except Exception:
+                pass
 
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast({
@@ -406,7 +452,9 @@ async def serve_media(path: str):
     resolved = _resolve_path(path)
     if not resolved:
         p = Path(path)
-        if p.is_absolute() and p.exists() and _is_safe_path(p):
+        # ponytail: абсолютные пути B-roll вне ALLOWED_ROOTS разрешаем только для существующих медиафайлов.
+        # Ceiling: любой существующий медиафайл на машине отдаётся по абсолютному пути; защита — whitelist расширений + is_file().
+        if p.is_absolute() and _is_media_file(p):
             resolved = str(p.resolve())
         else:
             raise HTTPException(status_code=403, detail="Доступ запрещен: путь выходит за пределы разрешенных папок")

@@ -1,6 +1,6 @@
 import type { ProjectSettings } from '@entities/project'
 import { Button, Dropdown, DropdownItem } from '@shared/ui'
-import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap } from 'lucide-react'
+import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap, Terminal } from 'lucide-react'
 
 interface Props {
   project: ProjectSettings
@@ -14,6 +14,7 @@ interface Props {
   onNewProject: () => void
   onOpenSettings: () => void
   onOpenGlobalSettings: () => void
+  onOpenLogs: () => void
   onFullAutoPipeline: () => void
 }
 
@@ -29,6 +30,7 @@ export const EditorHeader = ({
   onNewProject,
   onOpenSettings,
   onOpenGlobalSettings,
+  onOpenLogs,
   onFullAutoPipeline,
 }: Props) => (
   <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
@@ -92,6 +94,14 @@ export const EditorHeader = ({
     </div>
 
     <div className="flex items-center gap-3">
+      <button
+        onClick={onOpenLogs}
+        title="Журнал логов"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 font-medium text-sm text-on-surface-variant hover:text-white transition-colors"
+      >
+        <Terminal size={18} />
+        <span className="hidden xl:inline">Журнал</span>
+      </button>
       <Button
         variant="primary"
         disabled={isAutoPipelineRunning || isRendering}

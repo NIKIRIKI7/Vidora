@@ -29,6 +29,7 @@ backend/ai-models/
 backend/remotion-project/node_modules/
 backend/remotion-project/out/
 backend/remotion-project/public/
+backend/remotion-project/src/assets/
 
 # Per-project generated artifacts
 backend/*/assets/
@@ -46,6 +47,9 @@ test_project/
 *.mp4
 *.wav
 *.bak
+
+# Runtime data (логи и история версий кода)
+backend/data_storage/
 
 # Environment
 .env

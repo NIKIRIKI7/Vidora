@@ -203,7 +203,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           ...newFrag,
           id: oldFrag?.id || newFrag.id,
           audioFileName: oldFrag?.audioFileName,
-          bRollFileName: oldFrag?.bRollFileName,
+          bRollFileName: newFrag.bRollFileName || oldFrag?.bRollFileName,
           startTime: oldFrag?.startTime,
           endTime: oldFrag?.endTime,
           lastAudioHash: oldFrag?.lastAudioHash,

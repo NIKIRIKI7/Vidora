@@ -13,6 +13,7 @@ import { CustomAudioModal } from './CustomAudioModal'
 import { MusicSettingsModal } from './MusicSettingsModal'
 import { MusicLibraryModal } from './MusicLibraryModal'
 import { BRollModal } from './BRollModal'
+import { LogsViewer } from './LogsViewer'
 
 interface Props {
   project: ProjectSettings
@@ -38,6 +39,7 @@ export const EditorWorkspace = ({
   const showNotification = useNotificationStore(s => s.showNotification)
   const [isMusicSettingsOpen, setIsMusicSettingsOpen] = useState(false)
   const [isMusicLibraryOpen, setIsMusicLibraryOpen] = useState(false)
+  const [isLogsOpen, setIsLogsOpen] = useState(false)
 
   const handleUpdateBackgroundMusic = useCallback((bgMusic: BackgroundMusicSettings) => {
     onUpdateProject({ ...project, backgroundMusic: bgMusic })
@@ -113,6 +115,7 @@ export const EditorWorkspace = ({
         onNewProject={onNewProject}
         onOpenSettings={() => model.setIsSettingsOpen(true)}
         onOpenGlobalSettings={onOpenGlobalSettings}
+        onOpenLogs={() => setIsLogsOpen(true)}
         onFullAutoPipeline={model.handleFullAutoPipeline}
       />
 
@@ -491,6 +494,8 @@ export const EditorWorkspace = ({
         activeTrackId={project.backgroundMusic?.trackId}
         onSelectTrack={handleSelectMusicTrack}
       />
+
+      <LogsViewer isOpen={isLogsOpen} onClose={() => setIsLogsOpen(false)} />
     </div>
   )
 }

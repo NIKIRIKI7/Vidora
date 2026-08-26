@@ -5,9 +5,16 @@ from pathlib import Path
 from fastapi import APIRouter
 from app.schemas import CodeGenerationRequest
 from app.services.llm_client import MultiProviderClient
+from app.services.history_logger import add_log, save_code_revision
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(prefix="/api/v1/code", tags=["code"])
+
+def _save_revision(request: CodeGenerationRequest, tsx_code: str):
+    try:
+        save_code_revision(request.project_path, request.target_id, tsx_code, request.prompt)
+    except Exception as log_err:
+        print(f"[CODE API] Ошибка сохранения ревизии: {log_err}")
 
 def _extract_tsx(data: str) -> str:
     match = re.search(r"```tsx\s*(.*?)\s*```", data, re.DOTALL)
@@ -25,6 +32,7 @@ def _save_code(request: CodeGenerationRequest, tsx_code: str):
         code_dir.mkdir(parents=True, exist_ok=True)
         code_file = code_dir / f"{request.target_id}.tsx"
         code_file.write_text(tsx_code, encoding="utf-8")
+        _save_revision(request, tsx_code)
     except Exception as fs_err:
         print(f"[CODE API] Ошибка сохранения файла: {fs_err}")
 

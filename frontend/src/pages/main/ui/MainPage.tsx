@@ -7,9 +7,60 @@ import { AudioHubView } from '@widgets/audio-hub'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { Spinner } from '@shared/ui'
 import { API } from '@shared/lib'
-import { CircleCheckBig, TriangleAlert, Info } from 'lucide-react'
+import { CircleCheckBig, TriangleAlert, Info, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 
 type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
+
+const NotificationToast = ({ notification }: { notification: { message: string; type: 'success' | 'error' | 'info'; details?: string } }) => {
+  const [showDetails, setShowDetails] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copy = () => {
+    navigator.clipboard.writeText(`${notification.message}\n\n${notification.details || ''}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="fixed top-20 right-6 z-[100] w-[420px] max-w-[90vw] animate-in fade-in slide-in-from-right-8 duration-300">
+      <div className={`px-4 py-3 rounded-lg shadow-xl border flex flex-col gap-2 backdrop-blur-xl
+        ${notification.type === 'success' ? 'bg-secondary/10 border-secondary/50 text-secondary' :
+          notification.type === 'error' ? 'bg-error/10 border-error/50 text-error' :
+            'bg-primary/10 border-primary/50 text-primary'}
+      `}>
+        <div className="flex items-center gap-3">
+          {notification.type === 'success' && <CircleCheckBig size={20} fill="currentColor" />}
+          {notification.type === 'error' && <TriangleAlert size={20} fill="currentColor" />}
+          {notification.type === 'info' && <Info size={20} fill="currentColor" />}
+          <span className="font-medium text-sm flex-1">{notification.message}</span>
+        </div>
+        {notification.details && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowDetails(v => !v)}
+                className="px-2 py-1 rounded bg-black/20 hover:bg-black/40 text-[11px] font-mono flex items-center gap-1 transition-colors"
+              >
+                {showDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Подробнее
+              </button>
+              <button
+                onClick={copy}
+                className="px-2 py-1 rounded bg-black/20 hover:bg-black/40 text-[11px] font-mono flex items-center gap-1 transition-colors"
+              >
+                {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Скопировано' : 'Копировать'}
+              </button>
+            </div>
+            {showDetails && (
+              <pre className="p-2.5 rounded-lg bg-black/70 text-rose-300 font-mono text-[11px] leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap custom-scrollbar">
+                {notification.details}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export const MainPage = () => {
   const [isBooting, setIsBooting] = useState(true)
@@ -57,18 +108,7 @@ export const MainPage = () => {
   return (
     <>
       {notification && (
-        <div className="fixed top-20 right-6 z-[100] animate-in fade-in slide-in-from-right-8 duration-300">
-          <div className={`px-4 py-3 rounded-lg shadow-xl border flex items-center gap-3 backdrop-blur-xl
-            ${notification.type === 'success' ? 'bg-secondary/10 border-secondary/50 text-secondary' :
-              notification.type === 'error' ? 'bg-error/10 border-error/50 text-error' :
-                'bg-primary/10 border-primary/50 text-primary'}
-          `}>
-            {notification.type === 'success' && <CircleCheckBig size={20} fill="currentColor" />}
-            {notification.type === 'error' && <TriangleAlert size={20} fill="currentColor" />}
-            {notification.type === 'info' && <Info size={20} fill="currentColor" />}
-            <span className="font-medium text-sm">{notification.message}</span>
-          </div>
-        </div>
+        <NotificationToast key={notification.timestamp} notification={notification} />
       )}
 
       {activeProject ? (
