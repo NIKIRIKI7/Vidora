@@ -35,6 +35,7 @@ interface Props {
   backgroundMusic?: BackgroundMusicSettings | null
   onUpdateBackgroundMusic?: (settings: BackgroundMusicSettings) => void
   onOpenMusicSettings?: () => void
+  onOpenBRollModal?: (scope: 'fragment' | 'scene' | 'project', fragId?: string) => void
   showTimeline: boolean
 }
 
@@ -44,7 +45,7 @@ export const CenterCanvas = ({
   onCodeHistory, isRendering, isAutoPipelineRunning, pipelineStep, renderProgress, onCancelAll,
   onUpdateMarkdown, onCaptureFrame, onUpdateFragmentBounds, showTimeline,
   onSplitFragment, onDeleteFragment, onDuplicateFragment, onSelectFragment, selectedFragmentId,
-  backgroundMusic, onUpdateBackgroundMusic, onOpenMusicSettings,
+  backgroundMusic, onUpdateBackgroundMusic, onOpenMusicSettings, onOpenBRollModal,
 }: Props) => {
   const isBusy = isRendering || isAutoPipelineRunning
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
@@ -242,6 +243,7 @@ export const CenterCanvas = ({
             backgroundMusic={backgroundMusic}
             onUpdateBackgroundMusic={onUpdateBackgroundMusic}
             onOpenMusicSettings={onOpenMusicSettings}
+            onOpenBRollModal={onOpenBRollModal}
           />
         </div>
       )}

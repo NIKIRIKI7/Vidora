@@ -5,6 +5,7 @@ import difflib
 import re
 import warnings
 import asyncio
+import time
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
@@ -29,6 +30,61 @@ os.environ.setdefault("TORCH_HOME", CACHE_DIR)
 
 router = APIRouter(prefix="/api/v1/audio", tags=["audio"])
 audio_service = AudioService()
+
+class WhisperModelCache:
+    _model = None
+    _model_name = None
+    _last_used = 0.0
+    _ttl_sec = 60.0
+    _cleanup_task = None
+    _lock = asyncio.Lock()
+
+    @classmethod
+    def get_model(cls, model_name: str):
+        import whisperx
+        import torch
+        cls._last_used = time.time()
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
+
+        if cls._model is not None and cls._model_name == model_name:
+            return cls._model
+
+        cls.unload()
+        cls._model_name = model_name
+        cls._model = whisperx.load_model(model_name, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
+        return cls._model
+
+    @classmethod
+    def touch(cls):
+        cls._last_used = time.time()
+
+    @classmethod
+    def unload(cls):
+        if cls._model is not None:
+            del cls._model
+            cls._model = None
+            cls._model_name = None
+            import gc, torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    @classmethod
+    async def schedule_cleanup(cls):
+        async with cls._lock:
+            if cls._cleanup_task is None or cls._cleanup_task.done():
+                cls._cleanup_task = asyncio.create_task(cls._auto_cleanup_loop())
+
+    @classmethod
+    async def _auto_cleanup_loop(cls):
+        while True:
+            await asyncio.sleep(15.0)
+            if cls._model is not None and (time.time() - cls._last_used > cls._ttl_sec):
+                print("[Whisper Cache] Авто-выгрузка модели по таймауту неактивности...")
+                cls.unload()
+                break
+
 
 def _resolve_path(path: str, project_path: str = "") -> str:
     if not path:
@@ -216,18 +272,11 @@ def _sync_silero_vad(audio_path: str, temp_out: str):
 
 def _sync_transcribe(audio_path: str, whisper_model: str) -> str:
     import whisperx
-    import torch
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    compute_type = "float16" if device == "cuda" else "int8"
-    model = whisperx.load_model(whisper_model, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
-    try:
-        audio = whisperx.load_audio(audio_path)
-        result = model.transcribe(audio, batch_size=8, language="ru")
-        text = " ".join([seg["text"].strip() for seg in result["segments"]]).strip()
-        return text
-    finally:
-        del model
-        _free_vram()
+    model = WhisperModelCache.get_model(whisper_model)
+    audio = whisperx.load_audio(audio_path)
+    result = model.transcribe(audio, batch_size=8, language="ru")
+    WhisperModelCache.touch()
+    return " ".join([seg["text"].strip() for seg in result["segments"]]).strip()
 
 def _sync_advanced_silence(audio_path: str, req: AdvancedSilenceRequest) -> float:
     from pydub import AudioSegment
@@ -263,48 +312,44 @@ def _sync_whisper_alignment(audio_path: str, whisper_model: str, fragments, audi
     import whisperx
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    compute_type = "float16" if device == "cuda" else "int8"
+    model = WhisperModelCache.get_model(whisper_model)
+    audio = whisperx.load_audio(audio_path)
+    result = model.transcribe(audio, batch_size=8, language="ru")
+    lang = result.get("language", "ru")
+    recognized_words = []
 
-    model = whisperx.load_model(whisper_model, device=device, compute_type=compute_type, download_root=WHISPER_MODEL_DIR)
     try:
-        audio = whisperx.load_audio(audio_path)
-        result = model.transcribe(audio, batch_size=8, language="ru")
-        lang = result.get("language", "ru")
-        recognized_words = []
-
-        try:
-            model_a, metadata = whisperx.load_align_model(language_code=lang, device=device, model_dir=WHISPER_MODEL_DIR)
-            aligned_res = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
-            for segment in aligned_res.get("segments", []):
-                for w in segment.get("words", []):
-                    if "start" in w and "end" in w:
-                        recognized_words.append(w)
-            del model_a
-        except Exception:
-            for segment in result.get("segments", []):
-                for w in segment.get("words", []):
-                    if "start" in w and "end" in w:
-                        recognized_words.append(w)
-                if not segment.get("words"):
-                    seg_words = _normalize_words(segment.get("text", ""))
-                    if seg_words:
-                        w_dur = max(0.1, (segment["end"] - segment["start"])) / len(seg_words)
-                        for wi, sw in enumerate(seg_words):
-                            recognized_words.append({
-                                "word": sw,
-                                "start": segment["start"] + wi * w_dur,
-                                "end": segment["start"] + (wi + 1) * w_dur
-                            })
-        return _align_fragments_globally(fragments, recognized_words, audio_dur)
-    finally:
-        del model
-        _free_vram()
+        model_a, metadata = whisperx.load_align_model(language_code=lang, device=device, model_dir=WHISPER_MODEL_DIR)
+        aligned_res = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+        for segment in aligned_res.get("segments", []):
+            for w in segment.get("words", []):
+                if "start" in w and "end" in w:
+                    recognized_words.append(w)
+        del model_a
+    except Exception:
+        for segment in result.get("segments", []):
+            for w in segment.get("words", []):
+                if "start" in w and "end" in w:
+                    recognized_words.append(w)
+            if not segment.get("words"):
+                seg_words = _normalize_words(segment.get("text", ""))
+                if seg_words:
+                    w_dur = max(0.1, (segment["end"] - segment["start"])) / len(seg_words)
+                    for wi, sw in enumerate(seg_words):
+                        recognized_words.append({
+                            "word": sw,
+                            "start": segment["start"] + wi * w_dur,
+                            "end": segment["start"] + (wi + 1) * w_dur
+                        })
+    WhisperModelCache.touch()
+    return _align_fragments_globally(fragments, recognized_words, audio_dur)
 
 @router.post("/vram/unload")
 async def unload_vram_endpoint():
     await asyncio.to_thread(OmniVoiceProvider.unload_model)
     await asyncio.to_thread(LocalLLMTTSProvider.unload_model)
     await asyncio.to_thread(TTSProviderFactory.unload_all)
+    await asyncio.to_thread(WhisperModelCache.unload)
     await asyncio.to_thread(_free_vram)
     return {"status": "ok", "detail": "VRAM полностью очищена"}
 
@@ -398,6 +443,7 @@ async def transcribe_audio(req: TranscribeRequest):
         return {"status": "error", "detail": "Файл не найден"}
     try:
         text = await asyncio.to_thread(_sync_transcribe, audio_path, req.whisper_model)
+        await WhisperModelCache.schedule_cleanup()
         return {"status": "ok", "text": text}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
@@ -480,7 +526,9 @@ async def sync_audio(request: AudioSyncRequest):
 
     try:
         timings = await asyncio.to_thread(_sync_whisper_alignment, audio_path, request.whisper_model, request.fragments, audio_dur)
+        await WhisperModelCache.schedule_cleanup()
         return {"status": "ok", "fragments_timings": timings, "fallback": False}
     except Exception as e:
+        await asyncio.to_thread(WhisperModelCache.unload)
         await asyncio.to_thread(_free_vram)
         return _make_fallback_response(request.fragments, reason=str(e), audio_dur=audio_dur)

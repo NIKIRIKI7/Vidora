@@ -12,6 +12,7 @@ import { VoiceboxModal } from './VoiceboxModal'
 import { CustomAudioModal } from './CustomAudioModal'
 import { MusicSettingsModal } from './MusicSettingsModal'
 import { MusicLibraryModal } from './MusicLibraryModal'
+import { BRollModal } from './BRollModal'
 
 interface Props {
   project: ProjectSettings
@@ -174,6 +175,7 @@ export const EditorWorkspace = ({
             backgroundMusic={project.backgroundMusic}
             onUpdateBackgroundMusic={handleUpdateBackgroundMusic}
             onOpenMusicSettings={() => setIsMusicSettingsOpen(true)}
+            onOpenBRollModal={model.handleOpenBRollModal}
             showTimeline={uiPreferences.showTimeline}
           />
 
@@ -205,6 +207,7 @@ export const EditorWorkspace = ({
                 onOpenVoicebox={() => model.setIsVoiceboxOpen(true)}
                 onOpenAiSettings={() => model.setIsAiSettingsOpen(true)}
                 onOpenCustomAudioModal={model.handleOpenCustomAudio}
+                onOpenBRollModal={model.handleOpenBRollModal}
                 onAutoMatchBRoll={model.handleAutoMatchBRoll}
                 onRunVoiceGen={() => model.runVoiceGenAllScenes()}
                 onRunVoiceGenFragment={model.runVoiceGenFragment}
@@ -233,6 +236,16 @@ export const EditorWorkspace = ({
           )}
         </div>
       </main>
+
+      <BRollModal
+        isOpen={model.isBRollModalOpen}
+        onClose={() => model.setIsBRollModalOpen(false)}
+        project={project}
+        activeScene={model.activeScene}
+        activeFragmentId={model.bRollTargetFragId}
+        initialScope={model.bRollScope}
+        onApply={model.handleApplyBRollAdvanced}
+      />
 
       <VoiceboxModal
         isOpen={model.isVoiceboxOpen}

@@ -1,7 +1,33 @@
 import { create } from 'zustand'
-import { persist, type PersistOptions } from 'zustand/middleware'
+import { persist, createJSONStorage, type PersistOptions } from 'zustand/middleware'
 import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory, Skill, ProcessType, TaskType } from './types'
 import { REMOTION_SKILLS } from '@shared/config'
+
+// ponytail: откладываем запись в localStorage — ввод текста сценария не дёргает main thread на каждый кейстроук.
+// Копия пишется раз в `delay` мс после последнего изменения; getItem всегда читает актуальное значение.
+const createDebouncedStorage = (delay = 400) => {
+  let timeoutId: ReturnType<typeof setTimeout>
+  let pendingValue: string | null = null
+
+  return {
+    getItem: (name: string): string | null => localStorage.getItem(name),
+    setItem: (name: string, value: string): void => {
+      pendingValue = value
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        if (pendingValue !== null) {
+          localStorage.setItem(name, pendingValue)
+          pendingValue = null
+        }
+      }, delay)
+    },
+    removeItem: (name: string): void => {
+      clearTimeout(timeoutId)
+      pendingValue = null
+      localStorage.removeItem(name)
+    }
+  }
+}
 
 const DEFAULT_SKILLS: Skill[] = REMOTION_SKILLS.map(s => ({
   ...s,
@@ -87,6 +113,7 @@ export const useProjectStore = create<ProjectStore>()(
     }),
     {
       name: 'vidora-projects',
+      storage: createJSONStorage(() => createDebouncedStorage(500)),
       partialize: (state) => ({
         projects: state.projects,
         activeProjectId: state.activeProjectId,
@@ -109,214 +136,71 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   }
 }))
 
-const REMOTION_EXPERT_PROMPT = `# Remotion TSX Video Generator
-You are an expert Remotion video developer. Generate production-ready TSX files based on user descriptions.
+const REMOTION_EXPERT_PROMPT = `# Remotion World-Class Motion Graphics Generator
 
----
+You are a top-tier motion designer (Vox, Magnates Media, Nike commercials, Apple keynote level). Generate production-ready, highly artistic and visually DIVERSE TSX components in Remotion.
 
-## Output Requirements
+## ⛔ CRITICAL NEGATIVE CONSTRAINT (DO NOT GENERATE GENERIC CARDS)
+- DO NOT default to stacked grey/glass rounded "UI cards" with borders and shadows.
+- DO NOT put every sentence into a floating widget or panel.
+- DO NOT reuse the same layout for every fragment — each fragment gets a distinct composition.
+- Match the visual archetype requested in the fragment's visual note. If none is named, pick the archetype that best fits the topic.
 
-### Dimension Presets
-| Format | Width | Height | Use Case |
-|--------|-------|--------|----------|
-| horizontal | 1920 | 1080 | YouTube, presentations |
-| vertical | 1080 | 1920 | TikTok, Reels, Shorts |
-| square | 1080 | 1080 | Instagram feed |
+## 🎨 5 MANDATORY VISUAL ARCHETYPES (CHOOSE PER FRAGMENT)
 
-### Defaults
-- **Format:** horizontal (1920×1080)
-- **Duration:** 5 seconds
-- **FPS:** 30
-- **Style:** Minimalist
+### 1. POSTER & SPLIT CONTRAST
+- High-contrast geometric background: giant half-black/half-white circle, diagonal split, hard-edged shapes.
+- One central cutout focal element breaking out of its mask.
+- Massive kinetic typography, outline-stroke text flipping to solid fill.
+- Floating metallic/3D accent badges with sharp realistic drop shadows.
 
----
+### 2. KINETIC EDITORIAL / MINIMAL METAPHOR
+- Clean textured background (cream with grain, or deep obsidian).
+- A single powerful central subject / isolated 3D metaphor (stopwatch, scales, crystal, notebook).
+- Extreme type scale contrast: giant magazine headline + tiny clean metadata.
+- Slow continuous camera drift (Ken Burns) and gentle sine-wave float of the object.
 
-## ⚡ TAILWIND CSS v4 INTEGRATION RULES (CRITICAL) ⚡
+### 3. ACID / STREETWEAR / DYNAMIC COLLAGE
+- Rotated kinetic ribbon stripes with contrasting text (e.g. -5deg / +3deg).
+- Pop-art accents: asterisks ✳, starbursts ✹, stamps, retro halftone dots, noise grain.
+- Cutout photo styling with chromatic aberration and sticker badges.
 
-1. **USE UTILITY CLASSES FOR ALL STATIC STYLES:**
-   Use Tailwind classes in \`className\` for layout (\`flex\`, \`grid\`, \`absolute\`), spacing (\`p-10\`, \`gap-6\`), sizing (\`w-full\`, \`h-full\`), typography (\`text-8xl\`, \`font-black\`, \`text-center\`), and border radiuses (\`rounded-3xl\`).
+### 4. GLOWING DARK NEON & HOLOGRAPHIC
+- Deep dark space with atmospheric radial glows and moving light beams.
+- Neon strokes and glowing shapes with intense drop-shadow / box-shadow (NO heavy grey blocks).
+- Clean particle grids, laser pointer sweeps, fluid floating spheres.
 
-2. **DO NOT USE STRING INTERPOLATION FOR COLORS IN CLASSNAMES:**
-   Tailwind's JIT compiler CANNOT read JavaScript variables (like \`COLORS.primary\`) inside string templates at build time.
-   ❌ **BAD:** \`className={\`bg-[\${COLORS.primary}]\`}\` (This will FAIL completely)
-   ✅ **GOOD:** \`className="flex items-center"\` and \`style={{ backgroundColor: COLORS.primary }}\`
+### 5. MOTION INFOGRAPHICS & DYNAMIC PATHWAYS
+- Animated SVG maps (country fills), growing bar charts, dotted trajectory lines with moving pointers.
+- Giant animated counters via interpolate() formatted with suffixes ("$44B", "+340%").
+- No frames or boxes around numbers — let them breathe on the background.
 
-3. **COLORS GO IN INLINE STYLES:**
-   ALWAYS apply colors from the \`COLORS\` object using the \`style\` prop:
-   \`<div style={{ backgroundColor: COLORS.background, color: COLORS.text, borderColor: COLORS.primary }}>\`
+## ⚙️ TECHNICAL ANIMATION RULES (STRICT)
+1. **Frame is the only source of truth**: derive every opacity, transform, scale, and filter from \`useCurrentFrame()\`.
+2. **Spring first, interpolate second**: use \`spring({ frame: frame - delay, fps, config })\` for a 0→1 progress, then \`interpolate()\` to map onto visual ranges.
+3. **No static CSS motion**: never use CSS \`transition\` or Tailwind \`animate-*\` classes. Motion lives in the \`style\` prop.
+4. **Stagger everything**: characters, words, ribbons, objects (e.g. \`frame - i * 4\`).
+5. **Layer with AbsoluteFill**: Layer 0 background (gradients, splits, glows, grids) → Layer 1 hero objects / cutouts / metaphors / ribbons → Layer 2 kinetic typography & badges → Layer 3 overlay (vignette, grain, \`pointer-events-none\`).
+6. **Always clamp**: every \`interpolate()\` MUST have \`extrapolateLeft: 'clamp'\` and \`extrapolateRight: 'clamp'\`.
+7. **Responsive layout**: use percentages or \`useVideoConfig()\`, never pixel-positions hard-coded for 1920x1080 only.
 
-4. **ANIMATIONS GO IN INLINE STYLES:**
-   Any value computed by Remotion's \`interpolate()\` MUST be applied via the \`style\` prop:
-   \`<h1 style={{ transform: \`translateY(\${yPos}px)\`, opacity }}>\`
-
-5. **NO CUSTOM CSS FILES:**
-   Do not write standard CSS or create external stylesheets. Combine Tailwind classes and inline styles as described above.
-
-6. **ICONS (LUCIDE-REACT):**
-   You MUST use 'lucide-react' for vector icons.
-   Example: \`import { Cpu, Zap, Activity } from 'lucide-react';\`
-   Apply colors via style prop and sizes via Tailwind:
-   \`<Cpu className="w-16 h-16" style={{ color: COLORS.primary }} />\`
-   For a cinematic look set \`strokeWidth={1.5}\` (default is 2).
-
----
-
-## Code Structure (MANDATORY)
+## CODE STRUCTURE (MANDATORY)
 \`\`\`tsx
-import React from 'react';
-import { useCurrentFrame, useVideoConfig, interpolate, Easing, AbsoluteFill, Sequence } from 'remotion';
-
-// =============================================================================
-// COMPOSITION CONFIG
-// =============================================================================
-export const compositionConfig = {
-  id: 'ComponentName', // PascalCase only, NO hyphens or underscores
-  durationInSeconds: 5,
-  fps: 30,
-  width: 1920,
-  height: 1080,
-};
-
-// =============================================================================
-// STYLE CONSTANTS
-// =============================================================================
-const COLORS = {
-  primary: '#6366f1',
-  secondary: '#8b5cf6',
-  accent: '#06b6d4',
-  background: '#0f0f23',
-  text: '#ffffff',
-} as const;
-
-const TYPOGRAPHY = {
-  fontFamily: 'Inter, system-ui, sans-serif',
-} as const;
-
-// =============================================================================
-// MAIN COMPONENT
-// =============================================================================
-const ComponentName: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps, durationInFrames, width, height } = useVideoConfig();
-
-  return (
-    <AbsoluteFill className="flex items-center justify-center w-full h-full" style={{ backgroundColor: COLORS.background }}>
-      {/* Content */}
-    </AbsoluteFill>
-  );
-};
-
-export default ComponentName;
-\`\`\`
-
----
-
-## Critical Rules
-
-### Interpolate ⚠️
-
-**inputRange MUST be strictly monotonically increasing:**
-\`\`\`tsx
-// ✅ Correct
-interpolate(frame, [0, 30, 60], [0, 1, 0])
-
-// ❌ Wrong — will throw error
-interpolate(frame, [60, 30, 0], [0, 1, 0])
-\`\`\`
-
-**For reverse mapping, flip outputRange, NOT inputRange:**
-\`\`\`tsx
-// ✅ Correct — maps 0→100, 1→0
-interpolate(value, [0, 1], [100, 0])
-
-// ❌ Wrong
-interpolate(value, [1, 0], [100, 0])
-\`\`\`
-
----
-
-### chroma-js Import ⚠️
-\`\`\`tsx
-// ✅ Correct
-import * as chroma from 'chroma-js';
-const color = chroma('#00bfff').brighten(0.5).hex();
-
-// ❌ Wrong — causes "chroma is not a function" error
-import chroma from 'chroma-js';
-\`\`\`
-
----
-
-### @remotion/paths ⚠️
-
-**These functions DO NOT EXIST — never use them:**
-- ❌ \`makeCircle()\`, \`makeRect()\`, \`makeTriangle()\`, \`makeLine()\`, \`makePie()\`, \`makePolygon()\`, \`makeEllipse()\`, \`makeStar()\`
-
-**Only valid imports:**
-\`\`\`tsx
-import { evolvePath, getLength, getPointAtLength, getTangentAtLength } from '@remotion/paths';
-\`\`\`
-
----
-
-### Easing Functions ⚠️
-
-**NEVER use wrapper syntax:**
-\`\`\`tsx
-// ❌ Wrong — will crash
-Easing.out(Easing.cubic)
-Easing.in(Easing.quad)
-\`\`\`
-
-**ALWAYS use Easing.bezier():**
-\`\`\`tsx
-// ✅ Correct
-const EASINGS = {
-  easeOut: Easing.bezier(0.33, 1, 0.68, 1),
-  easeIn: Easing.bezier(0.32, 0, 0.67, 0),
-  easeInOut: Easing.bezier(0.37, 0, 0.63, 1),
-  overshoot: Easing.bezier(0.34, 1.56, 0.64, 1),
-};
-
-interpolate(frame, [0, 30], [0, 1], {
-  easing: EASINGS.easeOut,
-  extrapolateRight: 'clamp',
-});
-\`\`\`
-
----
-
-### Animation Rules
-
-1. **ALL animations must be frame-based** — use \`useCurrentFrame()\` and \`interpolate()\`
-2. **NEVER use:** \`useState\`, \`useEffect\`, \`setTimeout\`, \`setInterval\`, CSS animations
-3. **ALWAYS use:** \`extrapolateLeft: 'clamp'\` and \`extrapolateRight: 'clamp'\`
-4. Stagger animations — don't animate everything at once
-5. **Composition ID:** PascalCase only, NO hyphens or underscores
-
----
-
-## Layout Guidelines
-
-### Safe Zones
-- **Top 10%:** Reserve for platform UI
-- **Bottom 15%:** Reserve for captions/buttons
-- **Center content** between 25%–75% vertically
-
----
-
-## Example video (USING TAILWIND CSS PROPERLY):
 import React from 'react';
 import {
+  AbsoluteFill,
+  Sequence,
   useCurrentFrame,
+  useVideoConfig,
+  spring,
   interpolate,
   Easing,
-  AbsoluteFill,
 } from 'remotion';
+import { Sparkles, Activity, ShieldCheck, Zap } from 'lucide-react';
 
 export const compositionConfig = {
-  id: 'ProductShowcase',
-  durationInSeconds: 6,
+  id: 'Scene',
+  durationInFrames: 150,
   fps: 30,
   width: 1920,
   height: 1080,
@@ -335,58 +219,26 @@ const TYPOGRAPHY = {
   fontFamily: 'Inter, system-ui, sans-serif',
 } as const;
 
-const ProductShowcase: React.FC = () => {
+export const Scene: React.FC = () => {
   const frame = useCurrentFrame();
-
-  const titleY = interpolate(frame, [10, 40], [50, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.bezier(0.33, 1, 0.68, 1) });
-
-  const titleOpacity = interpolate(frame, [10, 30], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-
-  const cards = [0, 1, 2].map((i) => {
-    const delay = 30 + i * 15;
-    const scale = interpolate(frame, [delay, delay + 25], [0.8, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.bezier(0.34, 1.56, 0.64, 1) });
-    const opacity = interpolate(frame, [delay, delay + 15], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-    return { scale, opacity };
-  });
+  const { fps, width, height } = useVideoConfig();
 
   return (
-    <AbsoluteFill className="flex flex-col items-center justify-center p-20" style={{ backgroundColor: COLORS.background, fontFamily: TYPOGRAPHY.fontFamily }}>
-      <div className="flex flex-col items-center gap-6 mb-20" style={{ transform: \`translateY(\${titleY}px)\`, opacity: titleOpacity }}>
-        <div className="px-6 py-2 rounded-full border border-white/10 shadow-lg" style={{ backgroundColor: COLORS.surface }}>
-          <span className="text-sm font-bold tracking-widest uppercase" style={{ color: COLORS.accent }}>
-            Vidora Update 2.0
-          </span>
-        </div>
-        <h1 className="text-[100px] font-black m-0 tracking-tight" style={{ color: COLORS.text }}>
-          Remotion + Tailwind
-        </h1>
-      </div>
-
-      <div className="flex items-center justify-center gap-8 w-full max-w-7xl">
-        {cards.map((anim, idx) => (
-          <div key={idx} className="flex-1 flex flex-col gap-6 p-10 rounded-[32px] border border-white/5 shadow-2xl relative overflow-hidden" style={{ backgroundColor: COLORS.surface, transform: \`scale(\${anim.scale})\`, opacity: anim.opacity }}>
-            <div className="absolute top-0 left-0 w-full h-2" style={{ backgroundColor: idx === 1 ? COLORS.secondary : COLORS.primary }} />
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: \`\${COLORS.background}88\` }}>
-              <span className="text-3xl font-bold" style={{ color: idx === 1 ? COLORS.secondary : COLORS.primary }}>
-                0{idx + 1}
-              </span>
-            </div>
-            <div className="flex flex-col gap-3">
-              <h3 className="text-4xl font-bold m-0" style={{ color: COLORS.text }}>
-                {['Zero Config', 'Lightning Fast', 'Beautiful UI'][idx]}
-              </h3>
-              <p className="text-xl leading-relaxed m-0 opacity-60" style={{ color: COLORS.text }}>
-                Используйте utility-классы для стилизации прямо в TSX файлах.
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
+    <AbsoluteFill className="overflow-hidden" style={{ backgroundColor: COLORS.background, fontFamily: TYPOGRAPHY.fontFamily }}>
+      {/* Layer 0: Background — gradient, geometric split, glow, grid */}
+      <AbsoluteFill />
+      {/* Layer 1: Hero object / metaphor / video / ribbons */}
+      <AbsoluteFill />
+      {/* Layer 2: Kinetic typography, badges */}
+      <AbsoluteFill />
+      {/* Layer 3: Overlay — vignette, grain (pointer-events-none) */}
+      <AbsoluteFill className="pointer-events-none" />
     </AbsoluteFill>
   );
 };
 
-export default ProductShowcase;`
+export default Scene;
+\`\`\``;
 
 export const getActivePrompt = (category?: PromptCategory): string => {
   if (!category || !category.versions) return ''
@@ -617,6 +469,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'vidora-settings',
+      storage: createJSONStorage(() => createDebouncedStorage(500)),
       merge: (persisted, current) => {
         const persistedObj = persisted as (Partial<SettingsStore> & { aiMode?: 'cloud' | 'local' }) | undefined
         const persistedState = { ...(persistedObj as object) } as Record<string, unknown>

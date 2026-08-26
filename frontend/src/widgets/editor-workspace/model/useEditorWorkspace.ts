@@ -3,7 +3,7 @@ import type { ProjectSettings, Scene, SceneFragment, VideoFormat } from '@entiti
 import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeProjectToMarkdown } from '@entities/project'
 import { generateRemotionPrompt } from '../lib/generateRemotionPrompt'
 import { useHotkeys } from '@shared/lib/useHotkeys'
-import { hashCode } from '@shared/lib'
+import { hashCode } from '../lib/helpers'
 import { normalizeText, recalculateTimingsProportionally } from '../lib/timingAlgorithms'
 import type { CenterViewMode } from './types'
 import { useAudio, type AudioOptions } from './useAudio'
@@ -36,6 +36,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [useWhisper, setUseWhisper] = useState(true)
   const [autoOffloadVram, setAutoOffloadVram] = useState(true)
 
+  // B-Roll Modal state
+  const [isBRollModalOpen, setIsBRollModalOpen] = useState(false)
+  const [bRollScope, setBRollScope] = useState<'fragment' | 'scene' | 'project'>('fragment')
+  const [bRollTargetFragId, setBRollTargetFragId] = useState<string | null>(null)
+
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -44,7 +49,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const showNotification = useNotificationStore(s => s.showNotification)
   const undo = useProjectStore(s => s.undo)
   const redo = useProjectStore(s => s.redo)
-
   const taskModes = useSettingsStore(s => s.taskModes)
   const cloudProvider = useSettingsStore(s => s.cloudProvider)
   const cloudEngines = useSettingsStore(s => s.cloudEngines)
@@ -175,6 +179,12 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     runProjectRender: render.runProjectRender,
   })
 
+  const handleOpenBRollModal = (scope: 'fragment' | 'scene' | 'project', fragId?: string) => {
+    setBRollScope(scope)
+    setBRollTargetFragId(fragId || null)
+    setIsBRollModalOpen(true)
+  }
+
   const handleSelectScene = (id: string) => {
     setActiveSceneId(id)
     render.setPlayingTargetId(id)
@@ -187,7 +197,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
       const oldScene: Scene | undefined = project.scenes[sIdx]
       const oldTotalText = oldScene?.fragments?.map(f => normalizeText(f.text || '')).join('') || ''
       const newTotalText = newScene.fragments.map(f => normalizeText(f.text)).join('')
-
       let mergedFragments: SceneFragment[] = newScene.fragments.map((newFrag, fIdx) => {
         const oldFrag: SceneFragment | undefined = oldScene?.fragments?.[fIdx]
         return {
@@ -200,7 +209,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           lastAudioHash: oldFrag?.lastAudioHash,
         }
       })
-
       if (oldTotalText === newTotalText && project.audioMode === 'scene' && oldScene?.fragments?.length) {
         const firstStart = oldScene.fragments[0].startTime || 0
         const lastEnd = oldScene.fragments[oldScene.fragments.length - 1].endTime || 0
@@ -208,7 +216,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
           mergedFragments = recalculateTimingsProportionally(mergedFragments, lastEnd - firstStart)
         }
       }
-
       return {
         ...newScene,
         id: oldScene?.id || newScene.id,
@@ -220,7 +227,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
         fragments: mergedFragments,
       }
     })
-
     handleUpdateProjectSync(
       {
         ...project,
@@ -322,6 +328,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     llmEngine,
     brollEngine,
     apiKeys: activeApiKeys,
+    isBRollModalOpen,
+    bRollScope,
+    bRollTargetFragId,
+    setIsBRollModalOpen,
+    handleOpenBRollModal,
     setActiveSceneId: handleSelectScene,
     setCenterView,
     setPreviewFormat,

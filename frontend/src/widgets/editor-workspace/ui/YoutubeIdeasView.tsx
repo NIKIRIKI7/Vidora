@@ -48,7 +48,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   }
 
   const [activeTab, setActiveTab] = useState<'agent' | 'thumbnail'>('agent')
-  const [searchEngine, setSearchEngine] = useState<'api' | 'ai' | 'script' | 'mcp'>('api')
+  const [searchEngine, setSearchEngine] = useState<'auto' | 'ytscrape' | 'api' | 'ai' | 'script' | 'mcp'>('auto')
   const [searchMode, setSearchMode] = useState<'trending' | 'competitors'>('trending')
   const [videoType, setVideoType] = useState<'all' | 'long' | 'short'>('all')
   const [language, setLanguage] = useState('ru')
@@ -234,7 +234,9 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
             <div className="w-[340px] xl:w-[380px] flex flex-col gap-4 bg-surface-container-lowest/30 border-r border-white/10 p-5 shrink-0 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-3">
                 <FieldGroup label="Источник поиска">
-                  <Select value={searchEngine} onChange={e => setSearchEngine(e.target.value as 'api'|'ai'|'script'|'mcp')} className="text-xs">
+                  <Select value={searchEngine} onChange={e => setSearchEngine(e.target.value as 'auto'|'ytscrape'|'api'|'ai'|'script'|'mcp')} className="text-xs">
+                    <option value="auto">Автоматический выбор (ytscrape + API)</option>
+                    <option value="ytscrape">ytscrape (Scraper, без ключа)</option>
                     <option value="api">YouTube API v3 (Бэкенд)</option>
                     <option value="ai">Только ИИ (Фантазия)</option>
                     <option value="script">Скрипты (yt_search.ps1)</option>

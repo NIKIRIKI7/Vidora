@@ -1,8 +1,11 @@
-﻿import os
+import os
 from typing import List, Dict, Any
+
 from app.services.yt_searcher import YouTubeSearcher
 from app.services.yt_parser import YouTubeParser
 from app.services.thumbnail_engine import ThumbnailPromptEngine
+from app.services.yt_scraper_service import YtScrapeService
+
 
 class YouTubeManager:
     def __init__(self, api_key: str = None):
@@ -12,11 +15,11 @@ class YouTubeManager:
     async def search_ideas(
         self,
         query: str,
-        days_back: int = 7,
+        days_back: int = 30,
         min_subs: int = 1000,
         max_subs: int = 100000,
         min_ratio: float = 1.0,
-        language: str = "en"
+        language: str = "ru"
     ) -> List[Dict[str, Any]]:
         return await YouTubeSearcher.search_viral_videos(
             queries=[query],
@@ -30,6 +33,9 @@ class YouTubeManager:
 
     def download_meta(self, video_url: str, output_dir: str, lang: str = "ru") -> Dict[str, Any]:
         return YouTubeParser.download_metadata_and_subs(video_url=video_url, output_dir=output_dir, lang=lang)
+
+    async def get_video_comments(self, video_id: str, max_comments: int = 15) -> List[Dict[str, Any]]:
+        return await YtScrapeService.get_comments(video_id, max_comments)
 
     async def generate_thumbnail_prompt(self, video_title: str, transcript: str, engine: str, api_keys: dict) -> Dict[str, Any]:
         return await self.thumb_engine.generate_concept(video_title, transcript, engine, api_keys)

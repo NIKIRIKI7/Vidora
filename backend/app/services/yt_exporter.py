@@ -18,7 +18,11 @@ class YouTubeExporter:
 
             df = pd.DataFrame(data_list)
             cols = df.columns.tolist()
-            pref = ["title", "channel", "views", "subs", "ratio", "duration_sec", "is_short", "url", "keyword_found", "transcript_sample"]
+            pref = [
+                "title", "channel", "published_at", "views", "subs", "ratio",
+                "vph", "duration_sec", "is_short", "url", "keyword_found",
+                "transcript_sample", "comments_summary"
+            ]
             final_cols = [c for c in pref if c in cols] + [c for c in cols if c not in pref]
 
             df[final_cols].to_excel(filepath, index=False, engine='openpyxl')

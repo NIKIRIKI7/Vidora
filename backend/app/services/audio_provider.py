@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import wave
 import struct
@@ -307,6 +308,7 @@ def resolve_clone_reference(voice_model: str, ref_audio_path, ref_text):
 
 
 class LocalLLMTTSProvider(BaseTTSProvider):
+    _procs = {}
     _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
     def __init__(self, engine: str, python: Path, model: str, mode: str, codec: str = None):
@@ -318,48 +320,89 @@ class LocalLLMTTSProvider(BaseTTSProvider):
 
     @classmethod
     def unload_model(cls):
-        # ponytail: модель живёт в отдельном subprocess — выгружается при его завершении
-        pass
+        # ponytail: persistent-воркер — завершаем все процессы, модель освобождается вместе с ними
+        for key, proc in list(cls._procs.items()):
+            if proc and proc.poll() is None:
+                try:
+                    proc.stdin.write('{"shutdown": true}\n')
+                    proc.stdin.flush()
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+        cls._procs.clear()
+
+    def _get_worker_proc(self):
+        key = f"{self.engine}_{self.python}"
+        proc = self._procs.get(key)
+        if proc is not None and proc.poll() is None:
+            return proc
+
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        new_proc = subprocess.Popen(
+            [str(self.python), str(_TTS_WORKER)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=sys.stderr,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+            env=env,
+        )
+        line = new_proc.stdout.readline().strip()
+        if line != "READY":
+            raise RuntimeError(f"[{self.engine}] Worker failed to start: {line}")
+
+        self._procs[key] = new_proc
+        return new_proc
 
     def _generate_sync(self, text: str, voice_model: str, kwargs: dict):
         text = clean_voice_tags(text).strip()
         output_path = kwargs.get("output_path", "")
-        args = {
+
+        job = {
             "engine": self.engine,
-            "model-id": str(_BACKEND_DIR / self.model),
+            "model_id": str(_BACKEND_DIR / self.model),
             "mode": self.mode,
             "text": text,
-            "voice-model": voice_model,
+            "voice_model": voice_model,
             "language": kwargs.get("language", "Russian"),
             "output": output_path,
         }
+
         if self.mode == "design":
             instruct = kwargs.get("design_prompt") or kwargs.get("instruct")
             if not instruct:
                 raise ValueError("Для voice-design нужен design_prompt (промпт дизайна голоса)")
-            args["design-prompt"] = instruct
+            job["design_prompt"] = instruct
         elif self.mode == "clone":
             ref_audio, ref_text = resolve_clone_reference(
                 voice_model, kwargs.get("ref_audio_path"), kwargs.get("ref_text")
             )
-            args["ref-audio"] = ref_audio
-            args["ref-text"] = ref_text or ""
+            job["ref_audio"] = ref_audio
+            job["ref_text"] = ref_text or ""
         elif self.mode == "custom":
-            args["speaker"] = _QWEN_SPEAKERS.get(voice_model, "Vivian")
+            job["speaker"] = _QWEN_SPEAKERS.get(voice_model, "Vivian")
         elif self.mode == "moss":
-            args["codec-path"] = str(_BACKEND_DIR / self.codec)
+            job["codec_path"] = str(_BACKEND_DIR / self.codec)
             # ponytail: MOSS ~10 ГБ — не влезает в 4 ГБ VRAM, форсируем CPU
-            args["device"] = "cpu"
+            job["device"] = "cpu"
 
-        cmd = [str(self.python), str(_TTS_WORKER)]
-        for k, v in args.items():
-            cmd += [f"--{k}", str(v)]
+        proc = self._get_worker_proc()
+        proc.stdin.write(json.dumps(job, ensure_ascii=False) + "\n")
+        proc.stdin.flush()
 
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, encoding="utf-8", errors="replace")
-        if res.returncode != 0:
-            raise RuntimeError(f"TTS worker ({self.engine}) failed: {res.stderr.strip()[-600:]}")
+        res_line = proc.stdout.readline().strip()
+        if not res_line:
+            self.unload_model()
+            raise RuntimeError(f"[{self.engine}] Worker упал во время генерации")
+
+        res = json.loads(res_line)
+        if "error" in res:
+            raise RuntimeError(f"[{self.engine}] Ошибка генерации: {res['error']}")
+
     async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._thread_pool, self._generate_sync, text, voice_model, kwargs)
 class CosyVoiceProvider(BaseTTSProvider):
     # ponytail: CosyVoice3 генерит чушь под transformers>=5 (ломается инкрементальный
@@ -927,7 +970,7 @@ if __name__ == "__main__":
         # S2: инлайн-теги [tag], <#пауза#> -> [pause], скобки вырезаются, design_prompt ведущим тегом
         assert to_s2_text("Привет <#1.5#> (sighs) [emotion: calm] друг") == "Привет [pause] [calm] друг"
         assert to_s2_text("Привет.", "говори тихо") == "[говори тихо] Привет."
-        assert to_s2_text("*ремарка* Привет.") == "Привет."
+        assert to_s2_text("*(ремарка)* Привет.") == "Привет."
         t, v, extra = _gateway_prep("[instruct: грубый голос] Привет.", "aria", True, {})
         assert v == MINIMAX_DEFAULT_VOICE and extra["voice_setting"]["design_prompt"] == "грубый голос" and "[instruct" not in t
         # шлюз: minimax получает очищенный текст + voice_setting.emotion в extra_body

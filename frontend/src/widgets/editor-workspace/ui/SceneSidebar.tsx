@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import type { ProjectSettings } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { SceneCard, Input, Button, Spinner } from '@shared/ui'
@@ -24,7 +24,7 @@ interface Props {
   onReplaceSceneAudio?: (sceneId: string, file: File) => void
 }
 
-export const SceneSidebar = ({
+export const SceneSidebar = React.memo(({
   project, activeSceneId, audioLoaded, onSelectScene, onAddScene, onDeleteScene,
   onUpdateTitle, onToggleIgnoreTsx, onDragStart, onDrop, onShowNotification,
   onExportScene, onReplaceScene, onFixAudioPacing, onCopyFixPacingPrompt, onReplaceSceneAudio
@@ -211,4 +211,4 @@ export const SceneSidebar = ({
       )}
     </aside>
   )
-}
+})

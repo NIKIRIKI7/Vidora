@@ -72,6 +72,8 @@ export interface MontageSettings {
   typography: { heading: string; body: string }
 }
 
+export type BRollAudioMode = 'voice' | 'broll' | 'mix'
+
 export interface SceneFragment {
   id: string
   visualNote: string
@@ -81,6 +83,7 @@ export interface SceneFragment {
   remotionCode?: string
   audioFileName?: string
   bRollFileName?: string
+  bRollAudioMode?: BRollAudioMode
   lastAudioHash?: string
   lastAudioTextNormalized?: string
 }

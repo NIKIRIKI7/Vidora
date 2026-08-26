@@ -111,6 +111,33 @@ def _sync_create_export_zip(proj_dir: Path, markdown: str) -> io.BytesIO:
     zip_buffer.seek(0)
     return zip_buffer
 
+def _prepare_remotion_public_assets(proj_assets: Path):
+    """Прокидывает папку assets проекта в public Remotion, чтобы staticFile() находил b-roll."""
+    remo_public_assets = REMO_DIR / "public" / "assets"
+    remo_public_assets.parent.mkdir(parents=True, exist_ok=True)
+
+    if remo_public_assets.is_symlink():
+        if remo_public_assets.resolve() == proj_assets.resolve():
+            return
+        remo_public_assets.unlink()
+
+    if not proj_assets.exists():
+        return
+
+    try:
+        os.symlink(str(proj_assets.resolve()), str(remo_public_assets), target_is_directory=True)
+    except OSError:
+        # ponytail: Windows без Developer Mode не даёт создавать симлинки — копируем только недостающие файлы.
+        # Цеiling: старые файлы из других проектов остаются в public, на рендер не влияют.
+        remo_public_assets.mkdir(parents=True, exist_ok=True)
+        for root, _, files in os.walk(str(proj_assets)):
+            for f in files:
+                src = Path(root) / f
+                dst = remo_public_assets / src.relative_to(proj_assets)
+                if not dst.exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src), str(dst))
+
 def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEventLoop):
     temp_output = OUT_DIR / f"{task_id}.mp4"
     merged_output = OUT_DIR / f"{task_id}_merged.mp4"
@@ -127,6 +154,9 @@ def run_remotion_sync(task_id: str, req: RenderRequest, loop: asyncio.AbstractEv
                "--codec=h264", f"--concurrency={cores}"]
 
     try:
+        proj_dir = _resolve_path(req.project_path) or str((BACKEND_DIR / req.project_path).resolve())
+        _prepare_remotion_public_assets(Path(proj_dir) / "assets")
+
         if req.tsx_code:
             SCENE_FILE.parent.mkdir(parents=True, exist_ok=True)
             SCENE_FILE.write_text(req.tsx_code, encoding="utf-8")

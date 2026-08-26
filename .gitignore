@@ -28,6 +28,7 @@ backend/ai-models/
 # Remotion workspace (generated videos + npm deps)
 backend/remotion-project/node_modules/
 backend/remotion-project/out/
+backend/remotion-project/public/
 
 # Per-project generated artifacts
 backend/*/assets/

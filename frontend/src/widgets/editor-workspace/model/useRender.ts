@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { API, getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, getWhisperSyncedDuration, getSceneDurationFromTimecode, getVisualNoteDuration } from '@widgets/editor-workspace/lib/helpers'
+import { API, getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, generateDefaultSceneTsx } from '@widgets/editor-workspace/lib/helpers'
 import { generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { serializeProjectToMarkdown } from '@entities/project'
 import type { ProjectSettings, Scene, ApiKeys } from '@entities/project'
@@ -130,7 +130,11 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     setRenderProgress(0)
     abortControllerRef.current = new AbortController()
 
-    const codeToUse = typeof code === 'string' ? code : activeScene.ignoreTsx ? 'import { AbsoluteFill } from "remotion"; export const SceneComponent = () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;' : activeScene.remotionCode || ''
+    const codeToUse = typeof code === 'string' && code.trim()
+      ? code
+      : activeScene.remotionCode && activeScene.remotionCode.trim()
+      ? activeScene.remotionCode
+      : generateDefaultSceneTsx(project, activeScene)
     const audioToUse = typeof audioPath === 'string' ? audioPath : audioLoaded || getAudioPathForScene(project, activeScene)
 
     const result = await retryRenderWithFix(activeScene, codeToUse, audioToUse, getProjectPath(project), abortControllerRef.current.signal, 2)
@@ -182,9 +186,6 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
   }
 
   const runProjectRender = async () => {
-    const unreadyScene = project.scenes.find(s => !s.ignoreTsx && (!s.remotionCode || !s.remotionCode.trim()))
-    if (unreadyScene) { showNotification(`У сцены "${unreadyScene.title}" нет кода. Сгенерируйте или включите "Игнор".`, 'error'); return }
-
     setRenderType('project')
     setIsRendering(true)
     setRenderProgress(0)
@@ -193,21 +194,13 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     const renderedSceneVideoPaths: string[] = []
 
     try {
-      const fps = Number(project.montage?.fps) || 30
-      const width = project.format === '9:16' ? 1080 : 1920
-      const height = project.format === '9:16' ? 1920 : 1080
-
       for (let i = 0; i < project.scenes.length; i++) {
         if (abortControllerRef.current.signal.aborted) break
         const scene = project.scenes[i]
 
-        const sceneDurationSec = getWhisperSyncedDuration(scene.fragments) || getSceneDurationFromTimecode(scene.timecode) || getVisualNoteDuration(scene.fragments) || 5
-        const durationInFrames = Math.max(Math.ceil(sceneDurationSec * fps), 30)
-
-        let codeToRender = scene.remotionCode || ''
-        if (scene.ignoreTsx || !codeToRender.trim()) {
-          codeToRender = `import { AbsoluteFill } from 'remotion';\nexport const compositionConfig = { id: 'BlackScreen', durationInFrames: ${durationInFrames}, fps: ${fps}, width: ${width}, height: ${height} };\nexport default () => <AbsoluteFill style={{ backgroundColor: "#000000" }} />;`
-        }
+        const codeToRender = scene.remotionCode && scene.remotionCode.trim()
+          ? scene.remotionCode
+          : generateDefaultSceneTsx(project, scene)
 
         const audioPathToUse = getAudioPathForScene(project, scene)
         let sceneVideoPath: string | null = renderedVideos[scene.id]

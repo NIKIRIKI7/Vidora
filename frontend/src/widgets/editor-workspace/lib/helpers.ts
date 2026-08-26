@@ -113,3 +113,69 @@ export const getProjectTeleprompterScript = (project: ProjectSettings, options: 
     .filter(Boolean)
     .join('\n\n\n')
 }
+
+// Фоллбэк-компонент: рендерит сцену без сгенерированного кода.
+// B-Roll фрагменты вставляются через <OffthreadVideo>, остальные — текстовая плашка.
+export const generateDefaultSceneTsx = (project: ProjectSettings, scene: Scene): string => {
+  const fps = Number(project.montage?.fps) || 30
+  const isVertical = project.format === '9:16'
+  const width = isVertical ? 1080 : 1920
+  const height = isVertical ? 1920 : 1080
+
+  const syncedEnd = scene.fragments.reduce((acc, f) => Math.max(acc, f.endTime || 0), 0)
+  const fallbackDur = scene.fragments.reduce((acc, f) => acc + Math.max((f.text || '').split(' ').length / 2.5, 3.0), 0)
+  const durationInFrames = Math.max(Math.ceil(Math.max(syncedEnd, fallbackDur, 5) * fps), 30)
+
+  let runningStart = 0
+  const sequences = scene.fragments.map((frag, i) => {
+    const startSec = frag.startTime ?? runningStart
+    const durSec = Math.max(0.5, (frag.endTime ?? startSec + 3.0) - startSec)
+    runningStart = startSec + durSec
+
+    const startFrame = Math.round(startSec * fps)
+    const durFrames = Math.max(1, Math.round(durSec * fps))
+    const text = frag.text ? JSON.stringify(frag.text) : ''
+
+    if (frag.bRollFileName) {
+      const cleanFile = frag.bRollFileName.replace(/^assets\/b-roll\//, '')
+      return `      <Sequence from={${startFrame}} durationInFrames={${durFrames}}>
+        <AbsoluteFill className="bg-black">
+          <OffthreadVideo src={staticFile("assets/b-roll/${cleanFile}")} className="w-full h-full object-cover" />
+          ${text ? `          <AbsoluteFill className="flex items-end justify-center p-12 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+            <p className="text-3xl font-bold text-white text-center drop-shadow-xl max-w-4xl">{${text}}</p>
+          </AbsoluteFill>` : ''}
+        </AbsoluteFill>
+      </Sequence>`
+    }
+
+    const note = frag.visualNote ? JSON.stringify(frag.visualNote) : JSON.stringify(`Фрагмент ${i + 1}`)
+    return `      <Sequence from={${startFrame}} durationInFrames={${durFrames}}>
+        <AbsoluteFill className="flex flex-col items-center justify-center p-16 bg-[#0b1326]">
+          <h2 className="text-5xl font-black text-white text-center mb-4">{${note}}</h2>
+          ${text ? `          <p className="text-2xl text-slate-300 text-center max-w-3xl">{${text}}</p>` : ''}
+        </AbsoluteFill>
+      </Sequence>`
+  }).join('\n')
+
+  return `import React from 'react';
+import { AbsoluteFill, Sequence, OffthreadVideo, staticFile } from 'remotion';
+
+export const compositionConfig = {
+  id: 'Scene_${scene.id.slice(0, 6)}',
+  durationInFrames: ${durationInFrames},
+  fps: ${fps},
+  width: ${width},
+  height: ${height},
+};
+
+export const Scene: React.FC = () => {
+  return (
+    <AbsoluteFill className="bg-black">
+${sequences}
+    </AbsoluteFill>
+  );
+};
+
+export default Scene;
+`
+}

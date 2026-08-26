@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
-import { parseTcString, hashCode } from '@shared/lib'
-import { normalizeText, recalculateTimingsProportionally } from '../lib/timingAlgorithms'
+import { parseTcString, hashCode, API } from '@shared/lib'
+import { normalizeText, recalculateTimingsProportionally, applyBRollWithRipple, recalculateProjectTimecodes } from '../lib/timingAlgorithms'
+import { getProjectPath } from '../lib/helpers'
+import type { BRollApplyParams } from '../ui/BRollModal'
 
 interface UseTimelineOperationsProps {
   project: ProjectSettings
@@ -80,7 +82,6 @@ export const useTimelineOperations = ({
       }
       return { ...f, text: newText, visualNote: vNote, startTime: newStart, endTime: newEnd }
     })
-
     const newTotalText = updatedFragments.map(f => normalizeText(f.text)).join('')
     if (oldTotalText === newTotalText && project.audioMode === 'scene') {
       const firstStartTime = activeScene.fragments[0].startTime || 0
@@ -160,7 +161,6 @@ export const useTimelineOperations = ({
     const start = target.startTime ?? 0
     const end = target.endTime ?? start + Math.max(target.text.split(' ').length / 2.5, 1)
     if (splitTime <= start + 0.05 || splitTime >= end - 0.05) return
-
     const ratio = Math.max(0.05, Math.min(0.95, (splitTime - start) / (end - start)))
     const emotionMatch = target.text.match(/^\[emotion:\s*[^\]]+]\s*/i)
     const emotionTag = emotionMatch ? emotionMatch[0] : ''
@@ -168,7 +168,6 @@ export const useTimelineOperations = ({
     const words = rawText.trim().split(/\s+/).filter(Boolean)
     const splitWordIdx = Math.max(1, Math.min(words.length - 1, Math.round(words.length * ratio)))
     const fallbackAudio = target.audioFileName || activeScene.fragments.find(f => f.audioFileName)?.audioFileName
-
     const frag1: SceneFragment = {
       ...target,
       text: (emotionTag + words.slice(0, splitWordIdx).join(' ')).trim(),
@@ -177,7 +176,6 @@ export const useTimelineOperations = ({
       audioFileName: fallbackAudio,
       lastAudioHash: undefined,
     }
-
     const frag2: SceneFragment = {
       id: crypto.randomUUID(),
       visualNote: target.visualNote,
@@ -187,7 +185,6 @@ export const useTimelineOperations = ({
       audioFileName: fallbackAudio,
       bRollFileName: target.bRollFileName,
     }
-
     const updatedFrags = [...activeScene.fragments]
     updatedFrags.splice(fragIdx, 1, frag1, frag2)
     onUpdateProjectSync({
@@ -205,7 +202,6 @@ export const useTimelineOperations = ({
     const source = activeScene.fragments[fragIdx]
     const dur = Math.max((source.endTime ?? (source.startTime ?? 0) + 3) - (source.startTime ?? 0), 0.5)
     const newStart = source.endTime ?? (source.startTime ?? 0) + dur
-
     const copy: SceneFragment = {
       ...source,
       id: crypto.randomUUID(),
@@ -214,7 +210,6 @@ export const useTimelineOperations = ({
       audioFileName: undefined,
       lastAudioHash: undefined,
     }
-
     const updatedFrags = [...activeScene.fragments]
     updatedFrags.splice(fragIdx + 1, 0, copy)
     for (let i = fragIdx + 2; i < updatedFrags.length; i++) {
@@ -225,7 +220,6 @@ export const useTimelineOperations = ({
         endTime: f.endTime != null ? f.endTime + dur : f.endTime,
       }
     }
-
     onUpdateProjectSync({
       ...project,
       scenes: project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: updatedFrags } : s)),
@@ -263,6 +257,135 @@ export const useTimelineOperations = ({
     })
   }
 
+  // === SMART B-ROLL APPLIER & NORMALIZER ===
+  const handleApplyBRollAdvanced = async (params: BRollApplyParams) => {
+    const { scope, sourcePath, targetFragId, fitMode, timingMode, audioMode } = params
+    const projectPath = getProjectPath(project)
+    const shouldKeepAudio = audioMode === 'broll' || audioMode === 'mix'
+    const shouldExtractAudio = audioMode === 'broll'
+
+    showNotification('Нормализация B-Roll под разрешение проекта...', 'info')
+
+    try {
+      if (scope === 'fragment' && targetFragId && activeScene) {
+        const targetFrag = activeScene.fragments.find(f => f.id === targetFragId)
+        if (!targetFrag) return
+
+        const currentDur = Math.max(0.5, (targetFrag.endTime ?? 3.0) - (targetFrag.startTime ?? 0.0))
+        const targetDuration = timingMode === 'trim' ? currentDur : params.duration
+
+        const procRes = await fetch(`${API}/api/v1/media/process-broll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_path: projectPath,
+            source_path: sourcePath,
+            filename_prefix: `broll_${targetFrag.id.slice(0, 6)}`,
+            target_format: project.format,
+            target_resolution: project.resolution,
+            fps: Number(project.montage?.fps) || 30,
+            fit_mode: fitMode,
+            target_duration: targetDuration,
+            loop_if_shorter: timingMode === 'trim',
+            keep_audio: shouldKeepAudio,
+            extract_audio: shouldExtractAudio
+          })
+        })
+        const procData = await procRes.json()
+        if (!procRes.ok || procData.status !== 'ok') throw new Error(procData.detail || 'Processing error')
+
+        let updatedFragments = activeScene.fragments.map(f => {
+          if (f.id !== targetFragId) return f
+          const updatedFrag: SceneFragment = {
+            ...f,
+            bRollFileName: procData.filename,
+            bRollAudioMode: audioMode,
+          }
+          if (audioMode === 'broll' && procData.extracted_audio_path) {
+            updatedFrag.audioFileName = procData.extracted_audio_path
+          }
+          return updatedFrag
+        })
+
+        if (timingMode === 'ripple') {
+          updatedFragments = applyBRollWithRipple(updatedFragments, targetFragId, procData.duration)
+        }
+
+        const updatedScenes = recalculateProjectTimecodes(
+          project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s))
+        )
+
+        onUpdateProjectSync({ ...project, scenes: updatedScenes })
+        showNotification('B-Roll применен и тайминги пересчитаны!', 'success')
+      } else if (scope === 'scene' && activeScene) {
+        const totalSceneDur = Math.max(1.0, ...activeScene.fragments.map(f => f.endTime || 0))
+        const procRes = await fetch(`${API}/api/v1/media/process-broll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_path: projectPath,
+            source_path: sourcePath,
+            filename_prefix: `broll_scene_${activeScene.id.slice(0, 6)}`,
+            target_format: project.format,
+            target_resolution: project.resolution,
+            fps: Number(project.montage?.fps) || 30,
+            fit_mode: fitMode,
+            target_duration: timingMode === 'trim' ? totalSceneDur : params.duration,
+            loop_if_shorter: true,
+            keep_audio: shouldKeepAudio
+          })
+        })
+        const procData = await procRes.json()
+        if (!procRes.ok || procData.status !== 'ok') throw new Error(procData.detail)
+
+        let updatedFragments: SceneFragment[] = activeScene.fragments.map(f => ({
+          ...f,
+          bRollFileName: procData.filename,
+          bRollAudioMode: audioMode,
+        }))
+
+        if (timingMode === 'ripple' && procData.duration) {
+          updatedFragments = recalculateTimingsProportionally(updatedFragments, procData.duration)
+        }
+
+        const updatedScenes = recalculateProjectTimecodes(
+          project.scenes.map(s => (s.id === activeScene.id ? { ...s, fragments: updatedFragments } : s))
+        )
+        onUpdateProjectSync({ ...project, scenes: updatedScenes })
+        showNotification(`B-Roll применен ко всей сцене "${activeScene.title}"!`, 'success')
+      } else if (scope === 'project') {
+        const procRes = await fetch(`${API}/api/v1/media/process-broll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_path: projectPath,
+            source_path: sourcePath,
+            filename_prefix: `broll_proj_bg`,
+            target_format: project.format,
+            target_resolution: project.resolution,
+            fps: Number(project.montage?.fps) || 30,
+            fit_mode: fitMode,
+            loop_if_shorter: true,
+            keep_audio: shouldKeepAudio
+          })
+        })
+        const procData = await procRes.json()
+        if (!procRes.ok || procData.status !== 'ok') throw new Error(procData.detail)
+
+        const updatedScenes = project.scenes.map(s => ({
+          ...s,
+          fragments: s.fragments.map(f => ({ ...f, bRollFileName: procData.filename, bRollAudioMode: audioMode }))
+        }))
+
+        onUpdateProjectSync({ ...project, scenes: updatedScenes })
+        showNotification('B-Roll видеоряд применен ко всему проекту!', 'success')
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      showNotification(`Ошибка B-Roll: ${msg}`, 'error')
+    }
+  }
+
   return {
     selectedFragmentId,
     setSelectedFragmentId,
@@ -278,5 +401,6 @@ export const useTimelineOperations = ({
     handleUpdateFragmentBRoll,
     handleUnlinkFragmentBRoll,
     handleReplaceFragmentAudio,
+    handleApplyBRollAdvanced,
   }
 }

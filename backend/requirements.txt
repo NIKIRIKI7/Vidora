@@ -6,6 +6,7 @@ openai>=1.40.0
 llama-cpp-python
 yt-dlp
 youtube-transcript-api
+ytscrape[async]
 httpx
 pandas
 openpyxl

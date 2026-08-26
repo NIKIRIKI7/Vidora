@@ -9,6 +9,57 @@ export interface RemotionSkill {
 // ponytail: distilled offline fallback, full set comes from POST /api/v1/system/remotion-skills-sync
 export const REMOTION_SKILLS: RemotionSkill[] = [
   {
+    id: 'remotion-tailwind-motion',
+    title: 'Remotion + Tailwind Premium Motion Graphics',
+    description: 'Кинетическая типографика, премиальная анимация через useCurrentFrame, spring-физика и верстка слоев AbsoluteFill.',
+    applyTo: ['scene', 'fragment', 'project'],
+    content: `# Remotion + Tailwind Premium Motion Graphics
+
+Create production-quality motion graphics that feel cinematic, intentional, and polished. Every animation must be driven by useCurrentFrame() + spring() / interpolate(). Never use CSS transitions, animate-* Tailwind classes, or wall-clock timers — they are invisible during Remotion's frame-by-frame render.
+
+## Core Principles
+1. **Frame is the only source of truth** — derive every opacity, transform, scale, blur, letter-spacing from current frame.
+2. **Spring first, interpolate second** — use spring() for natural motion, then interpolate() to map 0→1 progress onto visual ranges.
+3. **Stagger everything** — characters, words, lines, cards, particles. Stagger creates rhythm and premium feel.
+4. **Layer with AbsoluteFill** — stack backgrounds, content, overlays, particles. Last rendered = topmost.
+5. **Tailwind for statics only** — colors, spacing, typography, borders, flex/grid. All motion via inline style props.
+6. **Clamp everything** — always set extrapolateLeft: "clamp" and extrapolateRight: "clamp".
+
+## Spring Configurations
+\`\`\`ts
+// Smooth elegant (no bounce) — titles, reveals, highlights
+{ damping: 200 }
+
+// Snappy UI (minimal bounce)
+{ damping: 20, stiffness: 200 }
+
+// Playful bouncy
+{ damping: 8, stiffness: 120, mass: 0.6 }
+
+// Heavy cinematic
+{ damping: 30, stiffness: 80, mass: 1.4 }
+
+// Ultra fast pop
+{ mass: 0.4, stiffness: 300, damping: 14 }
+\`\`\`
+
+## Typography & Layering Patterns
+- **Word-by-word stagger:** \`text.split(' ').map((word, i) => ... spring({ frame: frame - i * 4, fps, config: { damping: 200 } }))\`
+- **Character-level with blur:** \`spring({ frame: frame - i * 2, fps, config: { mass: 0.5, stiffness: 200, damping: 14 } })\` с интерполяцией \`filter: blur(...)px\` и \`letterSpacing\`.
+- **Composition Layering:**
+  \`\`\`tsx
+  <AbsoluteFill className="bg-neutral-950 overflow-hidden">
+    {/* 1. Background layer */}
+    <AbsoluteFill>{/* gradients, noise, particles */}</AbsoluteFill>
+    {/* 2. Content layer */}
+    <AbsoluteFill className="flex items-center justify-center">{/* typography, cards */}</AbsoluteFill>
+    {/* 3. Overlay layer */}
+    <AbsoluteFill className="pointer-events-none">{/* vignettes, light accents */}</AbsoluteFill>
+  </AbsoluteFill>
+  \`\`\`
+`,
+  },
+  {
     id: 'best-practices',
     title: 'Remotion Best Practices',
     description: 'Ключевые правила генерации: стейты без useState, анимации через интерполяцию, отзывчивые размеры через проценты.',
@@ -99,5 +150,133 @@ export const REMOTION_SKILLS: RemotionSkill[] = [
 - ВСЕ английские слова, бренды и IT-термины в тексте озвучки — русскими буквами: эпл (Apple), пайтон (Python), си плюс плюс (C++), гугл (Google), бэкенд. В ремарках монтажёра (A-roll/B-roll, названия сервисов) — не транслитерируем.
 - Пиши правильно буквы е и ё (не «елка», а «ёлка»; не «берет», а «берёт»).
 - Максимум 1-2 эмоциональных акцента на сцену; остальное нейтрально.`,
+  },
+  {
+    id: 'archetype-poster-split',
+    title: 'Архетип: Постерный сплит-контраст (Nike / Editorial)',
+    description: 'Контрастный геометрический фон, вырезной объект, гигантская кинетическая типографика.',
+    applyTo: ['scene', 'fragment', 'project'],
+    content: `## Шаблон: Постерный сплит-контраст
+\`\`\`tsx
+const frame = useCurrentFrame();
+const { fps } = useVideoConfig();
+
+const zoom = interpolate(frame, [0, 90], [1.0, 1.12], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+const titleY = interpolate(frame, [0, 30], [90, 0], { easing: Easing.out(Easing.cubic), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+const badgePop = spring({ frame: frame - 20, fps, config: { damping: 10, stiffness: 160 } });
+
+return (
+  <AbsoluteFill className="overflow-hidden bg-neutral-950 flex items-center justify-center">
+    {/* Фон: контрастный сплит */}
+    <div className="absolute inset-0 flex" style={{ transform: \`scale(\${zoom}) rotate(-12deg)\` }}>
+      <div className="w-1/2 h-full bg-white" />
+      <div className="w-1/2 h-full bg-neutral-950" />
+    </div>
+
+    {/* Гигантская кинетическая типографика */}
+    <h1
+      className="absolute z-10 text-[150px] font-black uppercase tracking-tighter m-0 text-white"
+      style={{ transform: \`translateY(\${titleY}px)\`, textShadow: '0 24px 70px rgba(0,0,0,0.7)' }}
+    >
+      SPOTLIGHT
+    </h1>
+
+    {/* Вырезной объект по центру */}
+    <div className="relative z-20" style={{ transform: \`scale(\${zoom}) translateY(\${Math.sin(frame / 20) * 10}px)\` }}>
+      {/* сюда: OffthreadVideo, 3D-объект или векторная вырезка */}
+    </div>
+
+    {/* Хромированный бейдж */}
+    <div
+      className="absolute bottom-16 right-20 z-30 w-28 h-28 rounded-full border-4 border-white/80 bg-gradient-to-br from-neutral-300 to-neutral-600"
+      style={{ transform: \`scale(\${badgePop})\`, boxShadow: '0 30px 80px rgba(0,0,0,0.8)' }}
+    />
+  </AbsoluteFill>
+);
+\`\`\``
+  },
+  {
+    id: 'archetype-kinetic-collage',
+    title: 'Архетип: Кинетический коллаж и ленты (Streetwear / Acid)',
+    description: 'Скошенные цветные ленты с текстом, стикеры-звёзды, ретро-эффекты, гранж.',
+    applyTo: ['scene', 'fragment', 'project'],
+    content: `## Шаблон: Скошенные ленты и коллаж
+\`\`\`tsx
+const frame = useCurrentFrame();
+const { fps } = useVideoConfig();
+
+const ribbon1 = interpolate(frame, [0, 30], [-1300, 0], { easing: Easing.out(Easing.cubic), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+const ribbon2 = interpolate(frame, [10, 40], [1300, 0], { easing: Easing.out(Easing.cubic), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+const starSpin = frame * 3;
+
+return (
+  <AbsoluteFill className="bg-neutral-900 overflow-hidden flex items-center justify-center">
+    {/* Лента 1 */}
+    <div
+      className="absolute bg-lime-400 text-black font-black text-6xl px-14 py-4 uppercase tracking-tight flex items-center gap-6 shadow-2xl"
+      style={{ transform: \`translateX(\${ribbon1}px) rotate(-6deg)\` }}
+    >
+      <span>WANNA</span>
+      <span className="text-white">✹</span>
+      <span>GROW FASTER</span>
+    </div>
+
+    {/* Лента 2 встречным движением */}
+    <div
+      className="absolute bg-white text-black font-black text-7xl px-20 py-5 uppercase tracking-tighter shadow-2xl"
+      style={{ transform: \`translateX(\${ribbon2}px) rotate(3deg)\` }}
+    >
+      WITH CONTENT
+    </div>
+
+    {/* Стикеры-акценты */}
+    <div className="absolute top-12 left-12 text-6xl text-lime-400 select-none" style={{ transform: \`rotate(\${starSpin}deg)\` }}>✳</div>
+    <div className="absolute bottom-16 right-14 text-5xl text-pink-500 select-none" style={{ transform: \`rotate(-\${starSpin}deg)\` }}>✹</div>
+
+    {/* Зерно поверх */}
+    <div className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '4px 4px' }} />
+  </AbsoluteFill>
+);
+\`\`\``
+  },
+  {
+    id: 'archetype-editorial-metaphor',
+    title: 'Архетип: Журнальный минимализм и предмет-метафора',
+    description: 'Светлый текстурированный фон, один парящий предмет, крупный заголовок и мелкие метаданные.',
+    applyTo: ['scene', 'fragment', 'project'],
+    content: `## Шаблон: Журнальная сцена с изолированным предметом
+\`\`\`tsx
+const frame = useCurrentFrame();
+const { fps } = useVideoConfig();
+
+const floatY = Math.sin(frame / 25) * 14;
+const kenBurns = interpolate(frame, [0, 120], [1.0, 1.06], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+const reveal = interpolate(frame, [0, 25], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+
+return (
+  <AbsoluteFill className="bg-[#f4f1ea] text-neutral-900 overflow-hidden" style={{ transform: \`scale(\${kenBurns})\` }}>
+    <div className="flex flex-col items-center justify-between h-full p-20">
+      {/* Заголовок сверху */}
+      <div className="flex flex-col items-center text-center max-w-3xl z-10" style={{ opacity: reveal }}>
+        <span className="text-xs font-mono tracking-[0.4em] uppercase text-neutral-400 mb-3">EXECUTIVE BLUEPRINT</span>
+        <h1 className="text-6xl font-serif font-medium tracking-tight leading-tight m-0">
+          Waiting For The Perfect Moment
+        </h1>
+      </div>
+
+      {/* Парящий предмет-метафора */}
+      <div className="relative flex items-center justify-center my-auto" style={{ transform: \`translateY(\${floatY}px)\` }}>
+        <div className="w-72 h-72 rounded-full bg-black/10 blur-3xl absolute -bottom-12" />
+        {/* сюда: иконка, 3D-модель или векторный предмет */}
+      </div>
+
+      {/* Метаданные снизу */}
+      <p className="max-w-md text-center text-xs leading-relaxed tracking-wide text-neutral-500" style={{ opacity: interpolate(frame, [30, 55], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) }}>
+        Consistency is showing up even when motivation ghosts you.
+      </p>
+    </div>
+  </AbsoluteFill>
+);
+\`\`\``
   },
 ]

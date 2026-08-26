@@ -10,6 +10,7 @@ from typing import Optional
 from app.schemas import AudioGenerationRequest, BackgroundMusicSchema, DuckingPreviewRequest
 from app.services.audio_provider import BaseTTSProvider, TTSProviderFactory, clean_voice_tags
 from app.services.lavasr_enhancer import LavaSREnhancer
+from app.services.gpu_manager import GPUManager
 from app.ws_manager import manager
 
 WHISPER_MODEL_DIR = str(Path(__file__).resolve().parents[2] / "ai-models")
@@ -266,36 +267,38 @@ class AudioService:
         api_keys_dict = request.api_keys.model_dump() if request.api_keys else {}
         provider = self._get_provider(request)
 
-        await provider.generate_tts(
-            text=request.text,
-            voice_model=request.voice_model,
-            guidance_scale=request.guidance_scale,
-            num_steps=request.num_steps,
-            speed=request.speed,
-            duration=request.duration,
-            denoise=request.denoise,
-            preprocess_prompt=request.preprocess_prompt,
-            postprocess_output=request.postprocess_output,
-            output_path=output_path,
-            ref_audio_path=request.ref_audio_path,
-            ref_text=request.ref_text,
-            design_prompt=request.design_prompt,
-            api_keys=api_keys_dict,
-        )
+        # Монопольный захват GPU: TTS + Whisper leak-clean + LavaSR не пересекаются по VRAM
+        async with GPUManager.run_exclusive():
+            await provider.generate_tts(
+                text=request.text,
+                voice_model=request.voice_model,
+                guidance_scale=request.guidance_scale,
+                num_steps=request.num_steps,
+                speed=request.speed,
+                duration=request.duration,
+                denoise=request.denoise,
+                preprocess_prompt=request.preprocess_prompt,
+                postprocess_output=request.postprocess_output,
+                output_path=output_path,
+                ref_audio_path=request.ref_audio_path,
+                ref_text=request.ref_text,
+                design_prompt=request.design_prompt,
+                api_keys=api_keys_dict,
+            )
 
-        await asyncio.to_thread(clean_leaks_with_whisper, output_path, request.text)
+            await asyncio.to_thread(clean_leaks_with_whisper, output_path, request.text)
 
-        if request.postprocess_output:
-            try:
-                await asyncio.to_thread(
-                    LavaSREnhancer.enhance_file,
-                    output_path,
-                    output_path,
-                    True,
-                    bool(request.denoise),
-                )
-            except Exception as enh_err:
-                print(f"[AUDIO SERVICE] Ошибка LavaSR апскейла: {enh_err}")
+            if request.postprocess_output:
+                try:
+                    await asyncio.to_thread(
+                        LavaSREnhancer.enhance_file,
+                        output_path,
+                        output_path,
+                        True,
+                        bool(request.denoise),
+                    )
+                except Exception as enh_err:
+                    print(f"[AUDIO SERVICE] Ошибка LavaSR апскейла: {enh_err}")
 
         duration = await asyncio.to_thread(_get_audio_duration, output_path)
 

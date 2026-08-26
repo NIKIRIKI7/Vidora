@@ -53,37 +53,96 @@ const getSceneDuration = (fragments: SceneFragment[]): number => {
   return fragments.reduce((acc, f) => acc + Math.max(f.text.split(' ').length / 2.5, 1.0), 0)
 }
 
+const formatFragmentsForPrompt = (fragments: SceneFragment[], fps: number): string => {
+  let runningStart = 0
+
+  return fragments.map((frag, i) => {
+    const startSec = frag.startTime ?? runningStart
+    const fallbackDur = Math.max((frag.text || '').split(' ').length / 2.5, 1.0)
+    const endSec = frag.endTime ?? startSec + fallbackDur
+    runningStart = endSec
+
+    const startFrame = Math.round(startSec * fps)
+    const durationFrames = Math.max(1, Math.round((endSec - startSec) * fps))
+
+    if (frag.bRollFileName) {
+      const cleanFileName = frag.bRollFileName.replace(/^assets\/b-roll\//, '')
+      return `- Фрагмент ${i + 1} [ТИП: B-ROLL ВИДЕОРЯД]:
+  Тайминг: ${startSec.toFixed(2)}с - ${endSec.toFixed(2)}с (Sequence from={${startFrame}} durationInFrames={${durationFrames}})
+  Видеофайл: staticFile("assets/b-roll/${cleanFileName}")
+  Ремарка: ${frag.visualNote || 'Фоновое видео'}
+  Суфлер: "${frag.text || ''}"
+  Правило: в этом интервале рендерите <OffthreadVideo src={staticFile("assets/b-roll/${cleanFileName}")} /> на весь кадр (object-cover), поверх - легкое затемнение и аккуратный субтитр. Сложную фоновую графику не добавлять.`
+    }
+
+    return `- Фрагмент ${i + 1} [ТИП: АНИМАЦИЯ / МОУШН-ДИЗАЙН]:
+  Тайминг: ${startSec.toFixed(2)}с - ${endSec.toFixed(2)}с (Sequence from={${startFrame}} durationInFrames={${durationFrames}})
+  Ремарка: ${frag.visualNote}
+  Суфлер: "${frag.text || ''}"
+  Правило: полная кинетическая 2D-анимация по ремарке (карточки, схемы, типографика) строго внутри этого интервала.`
+  }).join('\n\n')
+}
+
 export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): string => {
   const globalPrompts = useSettingsStore.getState().globalPrompts
   const durationSec = getSceneDuration(scene.fragments)
+  const fps = Number(project.montage.fps) || 30
+
+  const bRollRules = scene.fragments.some(f => Boolean(f.bRollFileName))
+    ? `
+
+## 🎞️ ПРАВИЛА РЕНДЕРА B-ROLL ВИДЕО:
+В этой сцене есть фрагменты с видеофайлом B-Roll. В их интервалах рендерится реальный видеоряд, а не 2D-графика.
+1. Импортируйте видео-компоненты: \`import { OffthreadVideo, staticFile } from 'remotion';\`.
+2. Каждый фрагмент [ТИП: B-ROLL ВИДЕОРЯД] верстайте строго так (точные from/durationInFrames и имя файла указаны в блоке фрагмента):
+   \`\`\`tsx
+   <Sequence from={...} durationInFrames={...}>
+     <OffthreadVideo src={staticFile("assets/b-roll/ИМЯ_ФАЙЛА")} className="w-full h-full object-cover" />
+     <AbsoluteFill className="bg-black/30" />
+     <AbsoluteFill className="flex items-end p-12">
+       <p className="text-4xl font-black text-white drop-shadow-md">ТЕКСТ СУФЛЕРА</p>
+     </AbsoluteFill>
+   </Sequence>
+   \`\`\`
+3. Фрагменты [ТИП: АНИМАЦИЯ / МОУШН-ДИЗАЙН] рендерите программной графикой по ремарке.
+4. Не накладывайте тяжелую графику поверх видео - только затемнение и читаемые субтитры.
+5. Соблюдайте тайминги из блоков фрагментов без наложений и пустот между ними.`
+    : ''
 
   const promptBody = replaceVars(project.promptOverrides?.scene || getActivePrompt(globalPrompts.scene), {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
-    DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
+    DURATION_FRAMES: Math.max(Math.ceil(durationSec * fps), 30),
     SCENE_TITLE: scene.title,
     SCENE_TIMECODE: scene.timecode,
-    FRAGMENTS: scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}:\nТайминг: ${(frag.startTime ?? 0).toFixed(2)} - ${(frag.endTime ?? 5).toFixed(2)}с\nВизуал: ${frag.visualNote}\nСуфлер: "${frag.text}"`).join('\n')
+    FRAGMENTS: formatFragmentsForPrompt(scene.fragments, fps),
   })
 
-  const audioOffsetInstruction = scene.audioOffset && scene.audioOffset > 0 
+  const audioOffsetInstruction = scene.audioOffset && scene.audioOffset > 0
     ? `\n\n> ВАЖНО ДЛЯ МОНТАЖА: В этой сцене вы должны использовать <Audio src={...} startFrom={Math.round(${scene.audioOffset} * fps)} /> потому что аудиофайл является общим для всего проекта, и эта сцена начинается на ${scene.audioOffset} секунде общего файла.`
     : '';
 
-  return promptBody + audioOffsetInstruction + getSkillsForProcess('scene');
+  return promptBody + bRollRules + audioOffsetInstruction + getSkillsForProcess('scene');
 }
 
 export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, fragment: SceneFragment): string => {
   const globalPrompts = useSettingsStore.getState().globalPrompts
+  const fps = Number(project.montage.fps) || 30
   const durationSec = Math.max((fragment.endTime || 5) - (fragment.startTime || 0), 1)
+
+  const isBRoll = Boolean(fragment.bRollFileName)
+  const cleanFileName = fragment.bRollFileName ? fragment.bRollFileName.replace(/^assets\/b-roll\//, '') : ''
+  const visualPrompt = isBRoll
+    ? `[B-ROLL ВИДЕОРЯД] Вставьте <OffthreadVideo src={staticFile("assets/b-roll/${cleanFileName}")} className="w-full h-full object-cover" /> на весь кадр, поверх - легкое затемнение и субтитры. Ремарка: ${fragment.visualNote}`
+    : `[ГРАФИКА] ${fragment.visualNote}`
 
   return replaceVars(project.promptOverrides?.fragment || getActivePrompt(globalPrompts.fragment), {
     ...getBaseVars(project),
     DURATION: durationSec.toFixed(1),
-    DURATION_FRAMES: Math.max(Math.ceil(durationSec * Number(project.montage.fps)), 30),
+    DURATION_FRAMES: Math.max(Math.ceil(durationSec * fps), 30),
     SCENE_TITLE: scene.title,
-    VISUAL_NOTE: fragment.visualNote,
-    TEXT: fragment.text,
+    VISUAL_NOTE: visualPrompt,
+    TEXT: fragment.text || '',
   }) + getSkillsForProcess('fragment')
 }
 
@@ -92,7 +151,13 @@ export const generateProjectPrompt = (project: ProjectSettings): string => {
 
   const scenesList = project.scenes.map((scene, si) => {
     const duration = getSceneDuration(scene.fragments)
-    return `### Сцена ${si + 1}: ${scene.title}\nТаймкод: ${scene.timecode} | Длительность: ~${Math.ceil(duration)}с\n${scene.fragments.map((frag, i) => `- Фрагмент ${i + 1}: "${frag.text}"\n  Визуал: ${frag.visualNote}`).join('\n')}`
+    const fragmentsDesc = scene.fragments
+      .map((frag, i) => {
+        const brollTag = frag.bRollFileName ? ` [B-Roll: ${frag.bRollFileName}]` : ''
+        return `- Фрагмент ${i + 1}${brollTag}: "${frag.text || ''}"\n  Визуал: ${frag.visualNote}`
+      })
+      .join('\n')
+    return `### Сцена ${si + 1}: ${scene.title}\nТаймкод: ${scene.timecode} | Длительность: ~${Math.ceil(duration)}с\n${fragmentsDesc}`
   }).join('\n\n')
 
   return replaceVars(project.promptOverrides?.project || getActivePrompt(globalPrompts.project), {
