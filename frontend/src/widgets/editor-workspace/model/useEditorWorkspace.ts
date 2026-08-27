@@ -177,6 +177,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     runSyncAllScenes: audio.runSyncAllScenes,
     runCodeGen: render.runCodeGen,
     runProjectRender: render.runProjectRender,
+    cancelRender: render.cancelRender,
   })
 
   const handleOpenBRollModal = (scope: 'fragment' | 'scene' | 'project', fragId?: string) => {

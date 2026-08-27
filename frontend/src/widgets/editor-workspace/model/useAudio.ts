@@ -22,8 +22,9 @@ export interface AudioOptions {
 }
 
 export interface CustomAudioUploadParams {
-  scope: 'fragment' | 'scene' | 'project'
+  scope: 'fragment' | 'scene' | 'project' | 'all_scenes'
   file: File
+  files?: File[]
   targetSceneId?: string
   targetFragmentId?: string
   transcribeWithWhisper?: boolean
@@ -521,6 +522,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
   const handleUploadCustomAudioAdvanced = async ({
     scope,
     file,
+    files,
     targetSceneId,
     targetFragmentId,
     transcribeWithWhisper = false,
@@ -529,6 +531,58 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
     setIsGeneratingAudio(true)
     showNotification('Загрузка аудиофайла...', 'info')
     const projectPath = getProjectPath(project)
+
+    if (scope === 'all_scenes') {
+      const batchFiles = files || []
+      if (batchFiles.length === 0) return
+      try {
+        const sceneIds = project.scenes.map(s => s.id)
+        const fd = new FormData()
+        fd.append('project_path', projectPath)
+        fd.append('scene_ids', JSON.stringify(sceneIds))
+        batchFiles.forEach(f => fd.append('files', f))
+
+        const uploadRes = await fetch(`${API}/api/v1/audio/batch-upload-scenes`, { method: 'POST', body: fd })
+        const uploadData = await uploadRes.json()
+        if (!uploadRes.ok || uploadData.status !== 'ok') {
+          throw new Error(uploadData.detail || 'Ошибка пакетной загрузки аудио')
+        }
+
+        const matches = (uploadData.matches || []) as { scene_id: string; absolute_path: string; duration: number }[]
+        const matchedScenes: Scene[] = []
+        for (const m of matches) {
+          const scene = project.scenes.find(s => s.id === m.scene_id)
+          if (!scene) continue
+          const updatedFragments = recalculateTimingsProportionally(scene.fragments, m.duration || 0)
+          updatedFragments.forEach(f => {
+            f.audioFileName = m.absolute_path
+            f.lastAudioHash = hashCode(f.text)
+            f.lastAudioTextNormalized = normalizeText(f.text)
+          })
+          matchedScenes.push({ ...scene, fragments: updatedFragments, audioOffset: 0 })
+        }
+
+        if (matchedScenes.length > 0) {
+          onUpdateProject({ ...project, scenes: project.scenes.map(s => matchedScenes.find(m => m.id === s.id) || s) })
+          showNotification('Синхронизация таймингов сцен (WhisperX)...', 'info')
+          await runSyncAllScenes(matchedScenes)
+        }
+
+        const unmatched = uploadData.unmatched_files?.length || 0
+        showNotification(
+          `Привязано сцен: ${matchedScenes.length}${unmatched ? `, не привязано файлов: ${unmatched}` : ''}!`,
+          'success',
+        )
+        return
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        showNotification(`Ошибка: ${msg}`, 'error')
+      } finally {
+        setIsGeneratingAudio(false)
+      }
+      return
+    }
+
     const fd = new FormData()
     fd.append('file', file)
     fd.append('project_path', projectPath)

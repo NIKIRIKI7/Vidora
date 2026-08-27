@@ -18,6 +18,7 @@ interface UseAutoPipelineProps {
   runSyncAllScenes: (scenes?: Scene[]) => Promise<Scene[]>
   runCodeGen: (targetScene?: Scene) => Promise<string | null>
   runProjectRender: () => Promise<void>
+  cancelRender: () => void
 }
 
 export const useAutoPipeline = ({
@@ -35,6 +36,7 @@ export const useAutoPipeline = ({
   runSyncAllScenes,
   runCodeGen,
   runProjectRender,
+  cancelRender,
 }: UseAutoPipelineProps) => {
   const [isAutoPipelineRunning, setIsAutoPipelineRunning] = useState(false)
   const [pipelineStep, setPipelineStep] = useState<string>('')
@@ -153,8 +155,9 @@ export const useAutoPipeline = ({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
+    cancelRender()
     setIsAutoPipelineRunning(false)
-    setPipelineStep('Отменено')
+    setPipelineStep('')
     if (currentTaskIdRef.current) {
       try {
         await fetch(`${API}/api/v1/render/cancel/${currentTaskIdRef.current}`, { method: 'POST' })

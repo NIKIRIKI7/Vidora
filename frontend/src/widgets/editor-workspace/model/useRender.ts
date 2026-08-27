@@ -25,12 +25,13 @@ const isUsableCode = (code?: string | null): boolean => {
   return c.length > 0 && !c.startsWith('//')
 }
 
-// Внешние абсолютные пути B-Roll (вне папки проекта) — бэкенд скопирует их в public/assets/b-roll.
+// Пути B-Roll: и абсолютные (вне проекта), и относительные (внутри assets/b-roll).
+// Бэкенд найдёт файл на диске (проект, Videos, Downloads, ...) и скопирует в public/assets/b-roll.
 const collectBRollSources = (fragments: SceneFragment[]): string[] => {
   const sources: string[] = []
   for (const f of fragments) {
     const p = (f.bRollFileName || '').trim()
-    if (/^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('/')) sources.push(p)
+    if (p) sources.push(p)
   }
   return sources
 }
@@ -46,6 +47,16 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
   const [playingTargetId, setPlayingTargetId] = useState<string | null>(null)
 
   const { renderProgress, setRenderProgress, renderListenerRef } = useRenderWebSocket()
+
+  const cancelRender = () => {
+    if (abortControllerRef.current) abortControllerRef.current.abort()
+    setIsRendering(false)
+    setIsGeneratingCode(false)
+    setRenderType(null)
+    setRenderProgress(0)
+    renderListenerRef.current = null
+    currentTaskIdRef.current = null
+  }
 
   const runCodeGen = async (targetScene?: Scene | unknown): Promise<string | null> => {
     const sceneToUse = targetScene && typeof targetScene === 'object' && 'id' in targetScene ? (targetScene as Scene) : activeScene
@@ -85,29 +96,51 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
 
   const renderSingleScenePromise = (sceneId: string, code: string, audioPath: string, projectPath: string, signal: AbortSignal): Promise<string | null> => {
     return new Promise((resolve, reject) => {
+      if (signal.aborted) return reject(new DOMException('Aborted', 'AbortError'))
+
       const scene = project.scenes.find(s => s.id === sceneId)
       const brollSources = scene ? collectBRollSources(scene.fragments) : []
+
+      const onAbort = () => {
+        renderListenerRef.current = null
+        currentTaskIdRef.current = null
+        reject(new DOMException('Aborted', 'AbortError'))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+
       fetch(`${API}/api/v1/render/start`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, broll_sources: brollSources, background_music: project.backgroundMusic }),
+        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, broll_sources: brollSources, background_music: project.backgroundMusic, render_quality: project.renderQuality || 'medium' }),
         signal,
       }).then(res => res.json()).then(data => {
-        if (!data.task_id) return reject(new Error('Нет task_id'))
+        if (signal.aborted) return
+        if (!data.task_id) {
+          signal.removeEventListener('abort', onAbort)
+          return reject(new Error('Нет task_id от сервера'))
+        }
         currentTaskIdRef.current = data.task_id
+
         renderListenerRef.current = (payload: RenderPayload) => {
+          const matchesTask = payload.task_id && payload.task_id === data.task_id
+          const matchesTarget = payload.target_id && payload.target_id === sceneId
+          if (!matchesTask && !matchesTarget) return
+
           if (payload.status === 'done') {
+            signal.removeEventListener('abort', onAbort)
             renderListenerRef.current = null
             currentTaskIdRef.current = null
             resolve(payload.output_path || null)
           } else if (payload.status === 'error') {
+            signal.removeEventListener('abort', onAbort)
             renderListenerRef.current = null
             currentTaskIdRef.current = null
-            const err = new Error(payload.error || 'Неизвестная ошибка рендера')
+            const err = new Error(payload.error || 'Ошибка рендера Remotion')
             if (payload.error_details) (err as Error & { details?: string }).details = payload.error_details
             reject(err)
           }
         }
       }).catch(error => {
+        signal.removeEventListener('abort', onAbort)
         reject(error)
       })
     })
@@ -116,10 +149,11 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
   const retryRenderWithFix = async (scene: Scene, code: string, audioPath: string, projectPath: string, signal: AbortSignal, retriesLeft: number): Promise<string | null> => {
     let currentCode = code
     for (let attempt = 0; attempt <= retriesLeft; attempt++) {
+      if (signal.aborted) return null
       try {
         return await renderSingleScenePromise(scene.id, currentCode, audioPath, projectPath, signal)
       } catch (err: unknown) {
-        if (signal.aborted) return null
+        if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) return null
         if (attempt < retriesLeft && !scene.ignoreTsx) {
           showNotification(`Ошибка рендера. ИИ исправляет... (Попытка ${attempt + 1}/${retriesLeft})`, 'info')
           try {
@@ -325,5 +359,5 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     }
   }
 
-  return { isGeneratingCode, isRendering, renderType, renderedVideos, renderedHashes, playingTargetId, setPlayingTargetId, renderProgress, runCodeGen, runRender, runProjectRender, handleExportProject }
+  return { isGeneratingCode, isRendering, renderType, renderedVideos, renderedHashes, playingTargetId, setPlayingTargetId, renderProgress, runCodeGen, runRender, runProjectRender, handleExportProject, cancelRender }
 }

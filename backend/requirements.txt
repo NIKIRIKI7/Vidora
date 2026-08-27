@@ -8,10 +8,12 @@ yt-dlp
 youtube-transcript-api
 ytscrape[async]
 httpx
+h2
 pandas
 openpyxl
 omnivoice
 qwen-tts
 torch>=2.0.0
+faster-whisper
 soundfile
 pydub
