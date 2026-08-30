@@ -78,6 +78,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const [agentLogs, setAgentLogs] = useState<AgentLog[]>([])
   const [earlySignals, setEarlySignals] = useState<EarlySignalItem[]>([])
   const [agentResults, setAgentResults] = useState<VideoResult[]>([])
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
   const [blueOceanGaps, setBlueOceanGaps] = useState<BlueOceanOpportunity[]>([])
   const [goldmineReports, setGoldmineReports] = useState<CommentGoldmineVideoEntry[]>([])
@@ -227,6 +228,43 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
     }
   }
 
+  const handleLoadMoreVideos = async () => {
+    const currentQuery = nichePreset === 'custom' ? customQuery : nichePreset
+    if (isLoadingMore || !currentQuery.trim()) return
+    if (agentResults.length === 0) { showNotification('Сначала запустите поиск', 'error'); return }
+    setIsLoadingMore(true)
+    try {
+      const excludeIds = agentResults.map(v => v.video_id)
+      const res = await fetch(`${API}/api/v1/youtube/more-videos`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: currentQuery,
+          exclude_video_ids: excludeIds,
+          settings: { days_back: daysBack, min_subs: minSubs, max_subs: maxSubs, min_ratio: minRatio, video_type: videoType, llm_engine: effectiveEngine },
+          language,
+          youtube_key: apiKeys.youtube || '',
+          api_keys: activeApiKeys,
+        })
+      })
+      const data = await res.json()
+      if (data.status === 'ok' && Array.isArray(data.results) && data.results.length > 0) {
+        setAgentResults(prev => {
+          const existingIds = new Set(prev.map(v => v.video_id))
+          const uniqueNew = data.results.filter((v: VideoResult) => !existingIds.has(v.video_id))
+          return [...prev, ...uniqueNew]
+        })
+        showNotification(`Найдено дополнительно ${data.results.length} видео!`, 'success')
+      } else {
+        showNotification('Новых видео не найдено', 'info')
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки дополнительных видео:', err)
+      showNotification('Ошибка загрузки дополнительных видео', 'error')
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
+
   const handleAnalyzeHook = async (transcript?: string) => {
     if (!transcript) { showNotification('Субтитры недоступны', 'error'); return }
     setHookData(null)
@@ -257,7 +295,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
       const res = await fetch(`${API}/api/v1/youtube/agent/draft-script`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: idea.titles[0] || 'Viral Video',
+          title: idea.titles?.[0] || idea.title || 'Viral Video',
           idea_description: `${idea.description}. Психологический хук: ${idea.psychological_hook || ''}`.trim(),
           channel_context: channelContext,
           engine: effectiveEngine,
@@ -666,8 +704,8 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                                       {idea.angle_type}
                                     </span>
                                   )}
-                                  {idea.titles.map((t, i) => (
-                                    <h4 key={i} className={`text-lg font-bold ${i===0 ? 'text-white' : 'text-white/60 text-base'}`}>{i===0 && '🔥 '}{t}</h4>
+                                  {(idea.titles?.length ? idea.titles : (idea.title ? [idea.title] : [])).map((t, i) => (
+                                    <h4 key={i} className={`text-lg font-bold ${i===0 ? 'text-white' : 'text-white/60 text-base font-normal'}`}>{i===0 && '🔥 '}{t}</h4>
                                   ))}
                                 </div>
                                 <Button variant="primary" onClick={() => onSelectIdea(idea, agentResults)} className="shrink-0 bg-success hover:bg-success/80 text-black shadow-[0_0_15px_rgba(74,222,128,0.3)]">
@@ -869,6 +907,27 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                           ))}
                         </div>
                       )}
+
+                      {/* Кнопка «Найти еще видео»: добавляет новые ролики без дубликатов */}
+                      <div className="flex justify-center mt-5">
+                        <button
+                          onClick={handleLoadMoreVideos}
+                          disabled={isLoadingMore || isAgentRunning}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl border border-white/10 shadow-lg transition-all"
+                        >
+                          {isLoadingMore ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                              <span>Поиск новых аномалий...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-base">↻</span>
+                              <span>Найти еще видео</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   )}
                   </>
@@ -887,7 +946,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                             <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-primary/20 text-primary border border-primary/30">
                               Концепт #{idx + 1} {idea.angle_type && `· ${idea.angle_type}`}
                             </span>
-                            <h4 className="text-sm font-bold text-white leading-snug">{idea.titles[0]}</h4>
+                            <h4 className="text-sm font-bold text-white leading-snug">{idea.titles?.[0] || idea.title || 'Без названия'}</h4>
                             <div className="bg-black/40 border border-white/10 p-3 rounded-lg space-y-1.5">
                               {idea.thumbnail_overlay && (
                                 <span className="block px-2 py-0.5 rounded bg-error/20 text-error border border-error/30 text-[11px] font-bold uppercase">
@@ -982,7 +1041,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
       <Modal isOpen={draftModalOpen} onClose={() => setDraftModalOpen(false)} title={`📝 Сценарий на ${language.toUpperCase()}`} className="max-w-3xl">
         <div className="flex flex-col gap-4 pb-2">
           <div className="bg-[#0A0E17] border border-white/10 p-3 rounded-xl text-xs text-on-surface-variant">
-            {draftingIdea?.titles[0]}
+            {draftingIdea?.titles?.[0] || draftingIdea?.title}
           </div>
           <div className="bg-[#0A0E17] border border-white/10 rounded-xl p-4 font-mono text-xs text-on-surface whitespace-pre-wrap leading-relaxed max-h-[50vh] overflow-y-auto custom-scrollbar">
             {isDrafting ? (

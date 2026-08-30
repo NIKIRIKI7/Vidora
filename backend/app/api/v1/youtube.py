@@ -12,6 +12,7 @@ from app.domain.schemas.youtube import (
     CommentsReq,
     DraftReq,
     HookReq,
+    MoreVideosReq,
     PromptReq,
     SuggestCompetitorsReq,
 )
@@ -57,6 +58,15 @@ async def get_comments(
 ) -> dict:
     comments = await service.get_video_comments(req)
     return {"status": "ok", "comments": comments}
+
+
+@router.post("/more-videos")
+async def get_more_videos(
+        req: MoreVideosReq,
+        service: YouTubeService = Depends(get_youtube_service),
+) -> dict:
+    results = await service.search_more_videos(req)
+    return {"status": "ok", "results": results}
 
 
 @router.post("/agent/suggest-competitors")

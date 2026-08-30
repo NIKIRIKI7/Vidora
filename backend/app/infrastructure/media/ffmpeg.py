@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -10,23 +11,29 @@ from app.domain.exceptions import RenderProcessError
 
 class AsyncFFmpegRunner:
     @staticmethod
-    async def run(cmd: List[str], desc: str = "FFmpeg", timeout: float = 600.0) -> str:
+    def _run_sync(cmd: List[str], timeout: float) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+        )
+
+    @classmethod
+    async def run(cls, cmd: List[str], desc: str = "FFmpeg", timeout: float = 600.0) -> str:
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-            if process.returncode != 0:
-                err_text = stderr.decode("utf-8", errors="replace").strip()
+            res = await asyncio.to_thread(cls._run_sync, cmd, timeout)
+            if res.returncode != 0:
+                err_text = res.stderr.decode("utf-8", errors="replace").strip()
                 raise RenderProcessError(
-                    f"FFmpeg ({desc}) завершился с кодом {process.returncode}: {err_text[-500:]}"
+                    f"FFmpeg ({desc}) завершился с кодом {res.returncode}: {err_text[-500:]}"
                 )
-            return stdout.decode("utf-8", errors="replace")
-        except asyncio.TimeoutError:
-            process.kill()
+            return res.stdout.decode("utf-8", errors="replace")
+        except subprocess.TimeoutExpired:
             raise RenderProcessError(f"FFmpeg ({desc}) превысил допустимый лимит времени ({timeout}s)")
+        except Exception as e:
+            if isinstance(e, RenderProcessError):
+                raise e
+            raise RenderProcessError(f"FFmpeg ({desc}) ошибка выполнения: {str(e)}")
 
     @classmethod
     async def probe_video(cls, file_path: Path | str) -> Dict[str, Any]:
@@ -43,7 +50,7 @@ class AsyncFFmpegRunner:
             str(file_path),
         ]
         try:
-            raw = await cls.run(cmd, desc="ffprobe")
+            raw = await cls.run(cmd, desc="ffprobe", timeout=30.0)
             data = json.loads(raw)
             stream = data.get("streams", [{}])[0]
             fmt = data.get("format", {})

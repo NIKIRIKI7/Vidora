@@ -49,6 +49,9 @@ class ViralVideoResult(BaseModel):
     acceleration_pct: Optional[str] = None
     is_rocket: Optional[bool] = None
     engagement_multiplier: Optional[float] = None
+    # Blue Ocean 3.0 (качественная аналитика)
+    thumbnail_overlay_text: Optional[str] = None
+    confusion_index: Optional[float] = None
 
 
 class MomentumMetrics(BaseModel):
@@ -59,14 +62,45 @@ class MomentumMetrics(BaseModel):
     is_rocket: bool
 
 
+class ConfusionMetrics(BaseModel):
+    confusion_index: float = Field(..., ge=0.0, le=1.0)
+    status: str = Field(..., description="PSEUDO_RED_DISRUPTIVE | MODERATE_QUALITY_GAP | RED_OCEAN_SATISFIED")
+    questions_count: int = 0
+    frustrations_count: int = 0
+    debates_count: int = 0
+    actionable_fix: str = ""
+
+
+class ThumbnailVisionResult(BaseModel):
+    overlay_text: str = ""
+    has_overlay: bool = False
+    curiosity_gap_type: str = "none"
+    visual_tension_summary: str = ""
+
+
+class ArbitrageOpportunity(BaseModel):
+    en_topic: str
+    target_lang_topic: str
+    arbitrage_score: float = Field(..., ge=0.0, le=100.0)
+    status: str = "ARBITRAGE_FIRST_MOVER"
+    en_vps_score: int = 0
+    actionable_plan: str = ""
+
+
 class BlueOceanOpportunity(BaseModel):
     topic: str
     opportunity_score: float = Field(..., ge=0.0, le=100.0)
-    status: str = Field(..., description="BLUE_OCEAN_UNCONTESTED | MODERATE_GAP | RED_OCEAN_SATURATED")
+    status: str = Field(
+        ...,
+        description="BLUE_OCEAN_UNCONTESTED | ARBITRAGE_FIRST_MOVER | PSEUDO_RED_DISRUPTIVE | MODERATE_GAP | RED_OCEAN_SATURATED",
+    )
     max_competitor_similarity: float
     competing_videos_count: int
     demand_source: str
     actionable_angle: str
+    confusion_index: Optional[float] = None
+    thumbnail_insight: Optional[str] = None
+    arbitrage_source: Optional[str] = None
 
 
 class AgentReq(BaseModel):
@@ -111,6 +145,15 @@ class DraftReq(BaseModel):
 class CommentsReq(BaseModel):
     video_id: str
     max_comments: int = 20
+
+
+class MoreVideosReq(BaseModel):
+    query: str
+    exclude_video_ids: List[str] = Field(default_factory=list)
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    language: Optional[str] = "en"
+    youtube_key: Optional[str] = ""
+    api_keys: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SuggestCompetitorsReq(BaseModel):

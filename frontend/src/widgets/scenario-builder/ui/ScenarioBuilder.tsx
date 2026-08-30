@@ -51,7 +51,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
 
   const getScenarioPrompt = () => {
     const globalPrompts = useSettingsStore.getState().globalPrompts;
-    const topic = idea ? idea.titles[0] : customTopic;
+    const topic = idea ? (idea.titles?.[0] || idea.title || '') : customTopic;
     const desc = idea ? idea.description : '';
     const formatText = genFormat === 'short' ? 'Вертикальный Shorts/Reels (сверхбыстрый темп, без воды)' : 'Горизонтальное длинное видео';
     const wordsCount = Math.round(Number(genDuration) * 150);
@@ -101,7 +101,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   }
 
   const handleCopyPrompt = async () => {
-    const topic = idea ? idea.titles[0] : customTopic;
+    const topic = idea ? (idea.titles?.[0] || idea.title || '') : customTopic;
     if (!topic.trim()) { showNotification('Укажите тему для сценария', 'error'); return; }
 
     const prompt = getScenarioPrompt();
@@ -115,7 +115,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   }
 
   const handleGenerateAI = async () => {
-    const topic = idea ? idea.titles[0] : customTopic;
+    const topic = idea ? (idea.titles?.[0] || idea.title || '') : customTopic;
     const desc = idea ? idea.description : '';
     if (!topic.trim()) { showNotification('Укажите тему для сценария', 'error'); return; }
 

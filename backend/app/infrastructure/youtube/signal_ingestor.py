@@ -6,7 +6,6 @@
 
 import asyncio
 import re
-import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -18,53 +17,32 @@ from app.domain.schemas.youtube import EarlySignalItem
 from app.infrastructure.youtube.circuit_cache import DeepTrendCircuitCache
 from app.infrastructure.youtube.http_client import DeepTrendHTTPPool
 from app.infrastructure.youtube.it_signal_ingestor import GitHubTrendingIngestor, HackerNewsIngestor
-from app.infrastructure.youtube.normalizer import parse_published_to_hours
+from app.infrastructure.youtube.normalizer import normalize_language_code, parse_published_to_hours
+from app.infrastructure.youtube.reddit_ingestor import RedditScraperEngine
 from app.infrastructure.youtube.scoring import cluster_and_rank_signals
 
 
 class RedditIngestor:
+    """Адаптер сбора ранних сигналов Reddit через RSS-фиды профильных сабреддитов.
+
+    Пустые результаты НЕ кэшируются (иначе при временной блокировке список [] жил бы
+    в L1 10 минут и вытеснял Reddit из выдачи).
+    """
+
     @classmethod
-    async def fetch_signals(cls, query: str, lang: str = "ru", limit: int = 15) -> List[Dict[str, Any]]:
-        if not DeepTrendCircuitCache.is_service_available("reddit"):
-            return []
-        cached = DeepTrendCircuitCache.get_l1(f"reddit_{query}_{lang}")
-        if cached is not None:
+    async def fetch_signals(
+        cls, query: str, lang: str = "ru", limit: int = 15
+    ) -> List[Dict[str, Any]]:
+        lang_code, _, _ = normalize_language_code(lang)
+        cache_key = f"reddit_signals_v3_{query.lower()}_{lang_code}"
+        cached = DeepTrendCircuitCache.get_l1(cache_key)
+        if cached is not None and len(cached) > 0:
             return cached
 
-        results: List[Dict[str, Any]] = []
-        clean_q = query.strip()
-        url = "https://www.reddit.com/search.json"
-        params = {"q": clean_q, "sort": "relevance", "t": "week", "limit": limit}
-
-        client = await DeepTrendHTTPPool.get_client()
-        try:
-            res = await client.get(url, params=params)
-            if res.status_code == 200:
-                DeepTrendCircuitCache.record_service_success("reddit")
-                for child in res.json().get("data", {}).get("children", []):
-                    post = child.get("data", {})
-                    title = post.get("title", "").strip()
-                    if not title or post.get("over_18"):
-                        continue
-                    score = int(post.get("score", 0))
-                    num_comments = int(post.get("num_comments", 0))
-                    permalink = post.get("permalink", "")
-                    created_utc = float(post.get("created_utc", 0.0))
-                    age_hours = max(0.1, (time.time() - created_utc) / 3600.0) if created_utc > 0 else 24.0
-                    results.append({
-                        "title": title, "query": clean_q, "platform": "reddit",
-                        "url": f"https://www.reddit.com{permalink}" if permalink else post.get("url", ""),
-                        "upvotes": score, "comments": num_comments,
-                        "bookmarks": int(score * 0.15), "age_hours": age_hours,
-                        "demand_score": min(95.0, 50.0 + (score / 10.0)),
-                        "breakout": score > 500 and num_comments > 100,
-                    })
-            elif res.status_code == 429:
-                DeepTrendCircuitCache.record_service_failure("reddit", "Rate limited 429")
-        except Exception as e:
-            DeepTrendCircuitCache.record_service_failure("reddit", str(e))
-
-        DeepTrendCircuitCache.set_l1(f"reddit_{query}_{lang}", results)
+        results = await RedditScraperEngine.fetch_signals(query, lang=lang_code, limit=limit)
+        if results:
+            DeepTrendCircuitCache.set_l1(cache_key, results, ttl=600.0)
+            DeepTrendCircuitCache.record_service_success("reddit")
         return results
 
 

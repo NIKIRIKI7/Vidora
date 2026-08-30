@@ -1,14 +1,15 @@
 """Сервис генерации и версионирования Remotion TSX компонентов."""
 
-import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.logging import add_log
 from app.domain.exceptions import ProviderExecutionError, ResourceNotFoundError
 from app.domain.schemas.code import CodeGenerationRequest, SaveRevisionRequest
+from app.domain.schemas.widgets import WidgetMetadata
 from app.infrastructure.ai.llm.gateway import LLMGateway
 from app.infrastructure.ai.llm.tsx_parser import extract_tsx
+from app.infrastructure.remotion.widgets_registry import WidgetRegistry
 from app.infrastructure.storage.code_history_repo import CodeHistoryRepository
 from app.infrastructure.storage.path_resolver import PathResolver
 
@@ -23,19 +24,53 @@ class CodeGenService:
         self.history_repo = history_repo or CodeHistoryRepository()
 
     def build_prompt(
-            self, target_id: str, user_prompt: str, project_data: Optional[Dict[str, Any]]
-    ) -> tuple[str, str]:
-        system_prompt = (
-            "You are an expert Remotion React TSX code generator. "
-            "Output ONLY valid and clean TSX code inside a single ```tsx ... ``` block. "
-            "Do not include any introductory or concluding comments."
-        )
-        context_str = ""
-        if project_data:
-            snippet = json.dumps(project_data, ensure_ascii=False, default=str)
-            context_str = f"Context Project Data:\n{snippet[:4000]}\n\n"
+            self,
+            target_id: str,
+            user_prompt: str,
+            project_data: Optional[Dict[str, Any]],
+    ) -> Tuple[str, str]:
+        """
+        Формирует системный и пользовательский промпт с внедрением библиотеки виджетов и палитры проекта.
+        """
+        widgets_context = WidgetRegistry.generate_llm_system_prompt_context()
 
-        full_user_prompt = f"{context_str}Target Component/Scene: {target_id}\n\nTask:\n{user_prompt.strip()}"
+        system_prompt = (
+            "You are an Elite Remotion React TSX Motion Graphics Generator.\n"
+            f"{widgets_context}\n\n"
+            "CRITICAL: Output ONLY valid, compile-ready TSX code inside a single ```tsx ... ``` markdown block. "
+            "Never write introductory comments or explanations."
+        )
+
+        context_blocks = []
+        if project_data:
+            montage = project_data.get("montage", {})
+            colors = montage.get("colors", {})
+            context_blocks.append(
+                f"PROJECT BRANDBOOK & PALETTE:\n"
+                f"- Primary: {colors.get('primary', '#38bdf8')}\n"
+                f"- Secondary: {colors.get('secondary', '#818cf8')}\n"
+                f"- Background: {colors.get('background', '#020617')}\n"
+                f"- Surface: {colors.get('surface', '#0f172a')}\n"
+                f"- Accent: {colors.get('accent', '#f43f5e')}\n"
+                f"- Text: {colors.get('text', '#f8fafc')}\n"
+                f"- FPS: {montage.get('fps', 30)}\n"
+                f"- Animation Style: {montage.get('animationStyle', 'cinematic_smooth')}"
+            )
+
+            # Поиск текущей сцены/фрагмента
+            scenes = project_data.get("scenes", [])
+            for sc in scenes:
+                if sc.get("id") == target_id:
+                    context_blocks.append(f"SCENE CONTEXT:\n- Title: {sc.get('title')}\n- Fragments: {len(sc.get('fragments', []))}")
+                    break
+
+        context_str = "\n\n".join(context_blocks)
+        full_user_prompt = (
+            f"{context_str}\n\n"
+            f"TARGET COMPONENT/SCENE: {target_id}\n\n"
+            f"DIRECTOR TASK / VISUAL REQUIREMENTS:\n{user_prompt.strip()}"
+        )
+
         return system_prompt, full_user_prompt
 
     async def generate_code(
@@ -104,9 +139,19 @@ class CodeGenService:
     async def save_manual_revision(self, req: SaveRevisionRequest) -> Path:
         if not req.project_id or not req.scene_id:
             raise ResourceNotFoundError("ID проекта и сцены обязательны для сохранения")
+
         return self.save_code_to_project(
             project_path=req.project_id,
             target_id=req.scene_id,
             tsx_code=req.tsx_code,
             prompt=req.prompt,
         )
+
+    def get_widget_catalog(self) -> List[WidgetMetadata]:
+        return WidgetRegistry.get_all_widgets()
+
+    def get_widget_detail(self, widget_id: str) -> Optional[WidgetMetadata]:
+        return WidgetRegistry.get_widget(widget_id)
+
+    def get_widgets_documentation(self) -> str:
+        return WidgetRegistry.generate_markdown_documentation()

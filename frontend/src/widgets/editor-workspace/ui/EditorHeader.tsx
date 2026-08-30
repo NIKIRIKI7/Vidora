@@ -1,6 +1,6 @@
 import type { ProjectSettings } from '@entities/project'
 import { Button, Dropdown, DropdownItem } from '@shared/ui'
-import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap, Terminal } from 'lucide-react'
+import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap, Terminal, ArrowLeft } from 'lucide-react'
 
 interface Props {
   project: ProjectSettings
@@ -12,6 +12,7 @@ interface Props {
   onToggleUi: (key: 'showSceneSidebar' | 'showInspector' | 'showTimeline') => void
   onSwitchProject: (id: string) => void
   onNewProject: () => void
+  onBack: () => void
   onOpenSettings: () => void
   onOpenGlobalSettings: () => void
   onOpenLogs: () => void
@@ -28,6 +29,7 @@ export const EditorHeader = ({
   onToggleUi,
   onSwitchProject,
   onNewProject,
+  onBack,
   onOpenSettings,
   onOpenGlobalSettings,
   onOpenLogs,
@@ -35,6 +37,13 @@ export const EditorHeader = ({
 }: Props) => (
   <header className="h-16 shrink-0 border-b border-white/10 bg-surface-container/60 backdrop-blur-2xl px-6 flex justify-between items-center z-20">
     <div className="flex items-center gap-4">
+      <button
+        onClick={onBack}
+        title="На главную"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/5 text-on-surface-variant hover:text-white transition-colors font-medium text-sm"
+      >
+        <ArrowLeft size={18} />
+      </button>
       <span className="font-display text-2xl font-bold text-primary tracking-tight">Vidora</span>
       <div className="h-4 w-px bg-white/20" />
       <Dropdown

@@ -20,6 +20,7 @@ interface Props {
   projects: ProjectSettings[]
   onSwitchProject: (id: string) => void
   onNewProject: () => void
+  onBack: () => void
   onUpdateProject: (project: ProjectSettings) => void
   onDeleteProject: (id: string) => void
   onOpenGlobalSettings: () => void
@@ -30,6 +31,7 @@ export const EditorWorkspace = ({
   projects,
   onSwitchProject,
   onNewProject,
+  onBack,
   onUpdateProject,
   onDeleteProject,
   onOpenGlobalSettings,
@@ -113,6 +115,7 @@ export const EditorWorkspace = ({
         onToggleUi={(key) => setUiPreferences({ [key]: !uiPreferences[key] })}
         onSwitchProject={onSwitchProject}
         onNewProject={onNewProject}
+        onBack={onBack}
         onOpenSettings={() => model.setIsSettingsOpen(true)}
         onOpenGlobalSettings={onOpenGlobalSettings}
         onOpenLogs={() => setIsLogsOpen(true)}

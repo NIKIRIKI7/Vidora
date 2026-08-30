@@ -1,8 +1,6 @@
-"""Движок динамической производной вирусности (Momentum Velocity Engine).
+"""Движок дифференциального импульса виральности Momentum 2.0.
 
-Статический VPH = views/hours искажает картину: старое видео с огромным VPH уже
-остановилось, а свежее от микро-канала с колоссальным ускорением алгоритма — нет.
-M-Score наказывает возраст нелинейно (h^1.3) и усиливает вовлечённость (E_mult).
+Учитывает нелинейное затухание времени (H+0.5)^1.18, веса комментариев x30 и коэффициент свежести.
 """
 
 import math
@@ -11,7 +9,7 @@ from app.domain.schemas.youtube import MomentumMetrics
 
 
 class MomentumEngine:
-    """Расчёт нелинейного импульса и отлов роликов-ракет в первые часы публикации."""
+    """Дифференциальный движок виральности Momentum 2.0."""
 
     @classmethod
     def calculate_momentum(
@@ -21,43 +19,51 @@ class MomentumEngine:
         likes: int = 0,
         comments: int = 0,
         ratio: float = 1.0,
+        is_short: bool = False,
     ) -> MomentumMetrics:
         v = max(1, int(views))
-        h = max(0.2, float(hours_alive))
+        h = max(0.5, float(hours_alive))
         l = max(0, int(likes))
         c = max(0, int(comments))
         r = max(0.1, float(ratio))
 
-        # 1. Нелинейное затухание времени h^1.3 (штрафует старые ролики)
-        time_decay = math.pow(h, 1.3)
+        # 1. Нелинейное степенное затухание времени
+        time_decay = math.pow(h + 0.5, 1.18)
         base_velocity = v / time_decay
 
-        # 2. Мультипликатор вовлечённости (комментарии x24, лайки x12)
-        raw_engagement = (l * 12.0 + c * 24.0) / float(v + 1)
+        # 2. Множитель вовлечения: комментарии весят в 2.5 раза больше лайков
+        raw_engagement = (l * 12.0 + c * 30.0) / float(v + 1)
         e_mult = 1.0 + min(4.0, raw_engagement)
 
-        # 3. Множитель превышения базы подписчиков
-        ratio_boost = math.pow(r, 0.5)
+        # 3. Нормализация размера канала
+        ratio_boost = math.sqrt(r)
 
-        # Итоговый M-Score
-        m_score_raw = base_velocity * e_mult * ratio_boost
-        m_score = int(round(m_score_raw * 10.0))
+        # 4. Буст-коэффициент ранней фазы
+        k_freshness = 1.0
+        if h <= 12.0 and r >= 2.0:
+            k_freshness = 2.5
+        elif h <= 48.0 and r >= 1.5:
+            k_freshness = 1.5
 
-        # Оценка ускорения относительно линейного VPH
+        # Итоговый M-Score без лишнего x10 (соответствует порогам M >= 500 / 180 / 60)
+        m_score_raw = base_velocity * e_mult * ratio_boost * k_freshness
+        m_score = int(round(m_score_raw))
+
+        # Оценка ускорения трафика
         linear_vph = v / h
-        accel_ratio = round((base_velocity / max(1.0, linear_vph)) * 100)
+        accel_ratio = round((base_velocity / max(1.0, linear_vph)) * 100 * k_freshness)
         acceleration_str = f"+{accel_ratio}%" if accel_ratio > 0 else f"{accel_ratio}%"
 
-        # Классификация стадии взлёта
-        if h <= 18.0 and m_score >= 180 and r >= 2.0:
+        # Классификация фазы разгона (Velocity Stage)
+        if (h <= 18.0 and m_score >= 500 and r >= 2.0) or (h <= 8.0 and m_score >= 250 and r >= 2.0):
             stage = "ROCKET_IGNITION"
             is_rocket = True
-            acceleration_str = f"+{max(250, accel_ratio * 3)}% 🔥"
-        elif h <= 72.0 and m_score >= 80 and r >= 1.5:
+            acceleration_str = f"+{max(350, accel_ratio * 2)}% 🔥"
+        elif (h <= 72.0 and m_score >= 180 and r >= 1.5) or (m_score >= 180 and r >= 1.5):
             stage = "VIRAL_SURGE"
             is_rocket = True
-            acceleration_str = f"+{max(120, accel_ratio * 2)}%"
-        elif r >= 1.5 and linear_vph >= 250:
+            acceleration_str = f"+{max(150, accel_ratio)}%"
+        elif r >= 1.3 and linear_vph >= 150:
             stage = "STEADY_CLIMBER"
             is_rocket = False
         else:

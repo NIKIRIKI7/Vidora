@@ -69,6 +69,15 @@ from app.domain.schemas.youtube import (
     CommentGoldmineVideoEntry,
     DeepTrendAnalysis,
 )
+from app.domain.schemas.widgets import (
+    WidgetCategory,
+    PropType,
+    WidgetPropDefinition,
+    WidgetMetadata,
+    WidgetCatalogResponse,
+    WidgetDetailResponse,
+    WidgetDocsResponse,
+)
 
 __all__ = [
     "AppColors",
@@ -123,4 +132,11 @@ __all__ = [
     "SeoMetadata",
     "IdeaPackageItem",
     "DeepTrendAnalysis",
+    "WidgetCategory",
+    "PropType",
+    "WidgetPropDefinition",
+    "WidgetMetadata",
+    "WidgetCatalogResponse",
+    "WidgetDetailResponse",
+    "WidgetDocsResponse",
 ]

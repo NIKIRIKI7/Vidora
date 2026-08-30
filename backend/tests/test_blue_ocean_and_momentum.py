@@ -1,8 +1,9 @@
-"""Самопроверка Blue Ocean Detector и Momentum Velocity Engine."""
+"""Самопроверка Blue Ocean Detector 3.0 и Momentum Velocity Engine 2.0."""
 
 import asyncio
+from unittest.mock import patch
 
-from app.infrastructure.youtube.blue_ocean_detector import BlueOceanDetector
+from app.infrastructure.youtube.blue_ocean_detector import BlueOceanDetector, FastEmbeddingEngine
 from app.infrastructure.youtube.momentum_engine import MomentumEngine
 
 
@@ -24,7 +25,6 @@ def test_momentum_legacy_decay():
     )
     assert legacy.is_rocket is False
     assert legacy.velocity_stage == "SATURATED_LEGACY"
-    # M-Score ~240 — намного ниже ракеты, но не <50: формула m = v/h^1.3 * E * ratio^0.5 * 10
     assert legacy.m_score < 500
 
 
@@ -36,18 +36,19 @@ def test_momentum_fresh_beats_stale():
 
 
 def test_blue_ocean_gap_lexical_fallback():
-    # Спрос на DeepSeek, на YouTube только кулинария -> лексическое сходство ~0
+    # Спрос на DeepSeek, на YouTube только кулинария -> лексическое сходство ~0.
+    # embed_texts замокан на None: детектор обязан работать и без эмбеддингов (fallback).
     demand = [{"title": "DeepSeek R1 Architecture Explained in Depth", "vps_score": 95, "breakout": True}]
     youtube_vids = [{"title": "Best Italian Pasta Recipe"}]
 
     async def _run():
         return await BlueOceanDetector.detect_gaps(demand, youtube_vids, lang="en")
 
-    gaps = asyncio.run(_run())
+    with patch.object(FastEmbeddingEngine, "embed_texts", return_value=None):
+        gaps = asyncio.run(_run())
     assert len(gaps) == 1
     assert gaps[0].status == "BLUE_OCEAN_UNCONTESTED"
     assert gaps[0].opportunity_score >= 75.0
-    # реальные эмбеддинги дают ~0.4 между разными темами — ниже порога насыщения 0.65
     assert gaps[0].max_competitor_similarity < 0.65
     assert gaps[0].competing_videos_count == 0
 
@@ -60,7 +61,8 @@ def test_blue_ocean_similar_topic_is_saturated():
     async def _run():
         return await BlueOceanDetector.detect_gaps(demand, youtube_vids, lang="en")
 
-    gaps = asyncio.run(_run())
+    with patch.object(FastEmbeddingEngine, "embed_texts", return_value=None):
+        gaps = asyncio.run(_run())
     assert len(gaps) == 1
     assert gaps[0].status in ("MODERATE_GAP", "RED_OCEAN_SATURATED")
     assert gaps[0].max_competitor_similarity > 0.4

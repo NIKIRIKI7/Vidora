@@ -3,6 +3,7 @@
 import glob
 import json
 import asyncio
+import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
@@ -54,10 +55,7 @@ class YouTubeMetadataDownloader:
                 "--write-info-json", "-o", f"{out_dir}/%(id)s.%(ext)s", video_url,
             ]
             try:
-                process = await asyncio.create_subprocess_exec(
-                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                )
-                await asyncio.wait_for(process.communicate(), timeout=60.0)
+                await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=60.0)
             except Exception:
                 pass
 

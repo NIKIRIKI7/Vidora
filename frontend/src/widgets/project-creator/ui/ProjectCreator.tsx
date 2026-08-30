@@ -1,5 +1,5 @@
 import { Button } from '@shared/ui'
-import { Lightbulb, FileText, Folder, Trash2, Globe, Mic } from 'lucide-react'
+import { Lightbulb, FileText, Folder, Trash2, Globe, Mic, Sparkles } from 'lucide-react'
 import type { ProjectSettings } from '@entities/project'
 
 interface Props {
@@ -7,17 +7,22 @@ interface Props {
   onGoScenario: () => void
   onGoSettings: () => void
   onGoAudioHub: () => void
+  onGoStudio: () => void
   projects: ProjectSettings[]
   onOpenProject: (id: string) => void
   onDeleteProject: (id: string) => void
 }
 
-export const ProjectCreator = ({ onGoIdeas, onGoScenario, onGoSettings, onGoAudioHub, projects, onOpenProject, onDeleteProject }: Props) => {
+export const ProjectCreator = ({ onGoIdeas, onGoScenario, onGoSettings, onGoAudioHub, onGoStudio, projects, onOpenProject, onDeleteProject }: Props) => {
   return (
     <div className="flex flex-col items-center min-h-dvh p-8 pb-20 bg-background overflow-y-auto custom-scrollbar relative">
 
       <Button variant="ghost" icon={Globe} onClick={onGoSettings} className="absolute top-6 right-6 text-on-surface-variant hover:text-primary">
         Глобальные настройки
+      </Button>
+
+      <Button variant="ghost" icon={Sparkles} onClick={onGoStudio} className="absolute top-6 left-6 text-on-surface-variant hover:text-primary">
+        Motion Studio
       </Button>
 
       <div className="w-full max-w-4xl flex flex-col gap-10 mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">

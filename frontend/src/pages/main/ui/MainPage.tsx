@@ -4,12 +4,13 @@ import { EditorWorkspace, YoutubeIdeasView } from '@widgets/editor-workspace'
 import { ScenarioBuilder } from '@widgets/scenario-builder'
 import { GlobalSettingsView } from '@widgets/global-settings'
 import { AudioHubView } from '@widgets/audio-hub'
+import { MotionStudioView } from '@widgets/motion-studio'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { Spinner } from '@shared/ui'
 import { API } from '@shared/lib'
 import { CircleCheckBig, TriangleAlert, Info, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 
-type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
+type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub' | 'studio'
 
 const NotificationToast = ({ notification }: { notification: { message: string; type: 'success' | 'error' | 'info'; details?: string } }) => {
   const [showDetails, setShowDetails] = useState(false)
@@ -121,6 +122,10 @@ export const MainPage = () => {
             setActiveProject(null)
             setView('hub')
           }}
+          onBack={() => {
+            setActiveProject(null)
+            setView('hub')
+          }}
           onUpdateProject={updateProject}
           onDeleteProject={deleteProject}
           onOpenGlobalSettings={() => setView('settings')}
@@ -146,6 +151,8 @@ export const MainPage = () => {
         />
       ) : view === 'audio-hub' ? (
         <AudioHubView onBack={() => setView('hub')} />
+      ) : view === 'studio' ? (
+        <MotionStudioView onBack={() => setView('hub')} />
       ) : (
         <ProjectCreator
           onGoIdeas={() => setView('ideas')}
@@ -156,6 +163,7 @@ export const MainPage = () => {
           }}
           onGoSettings={() => setView('settings')}
           onGoAudioHub={() => setView('audio-hub')}
+          onGoStudio={() => setView('studio')}
           projects={projects}
           onOpenProject={setActiveProject}
           onDeleteProject={deleteProject}

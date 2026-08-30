@@ -23,7 +23,8 @@ export interface GlobalVoice {
 }
 
 export interface IdeaFormat {
-  titles: string[]
+  titles?: string[]
+  title?: string
   description: string
   thumbnail_concept: string
   concept_id?: string

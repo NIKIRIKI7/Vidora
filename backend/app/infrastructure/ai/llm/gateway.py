@@ -28,6 +28,12 @@ class LLMGateway:
     _model_lock = threading.Lock()
     _gen_lock = threading.Lock()
 
+    # Семафор ограничения параллельных GPU-слотов llama.cpp (предотвращает CUDA OOM):
+    # N_slots = max(1, (FreeVRAM - ModelSize) / KVSizePerSlot), по умолчанию 2 слота.
+    _local_slot_semaphore = asyncio.Semaphore(
+        int(os.environ.get("VIDORA_MAX_LOCAL_LLM_SLOTS", "2"))
+    )
+
     def __init__(self, api_keys: Optional[Dict[str, Any]] = None):
         keys = api_keys or {}
         router_key = keys.get("routerai") or settings.ROUTERAI_API_KEY
@@ -198,37 +204,40 @@ class LLMGateway:
         if gguf is None:
             return None
 
-        def _sync_generate():
-            llm = self._get_local_llama_model(gguf)
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": user_prompt})
-            with self._gen_lock:
-                kwargs: Dict[str, Any] = {
-                    "messages": messages,
-                    "temperature": 0.6,
-                    "max_tokens": max_tokens,
-                }
-                # GBNF-грамматика: строго валидный JSON с первого токена, без трат на форматирование
-                if json_mode:
-                    from app.infrastructure.ai.llm.grammar import get_llama_json_grammar
-                    grammar = get_llama_json_grammar()
-                    if grammar is not None:
-                        kwargs["grammar"] = grammar
-                    else:
-                        kwargs["response_format"] = {"type": "json_object"}
-                try:
-                    out = llm.create_chat_completion(**kwargs)
-                    return out["choices"][0]["message"].get("content", "")
-                except Exception:
-                    kwargs.pop("grammar", None)
-                    kwargs.pop("response_format", None)
-                    out = llm.create_chat_completion(**kwargs)
-                    return out["choices"][0]["message"].get("content", "")
+        # Bounded slot pool: запросы сверх лимита выстраиваются в очередь ожидания
+        async with self._local_slot_semaphore:
 
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, _sync_generate)
+            def _sync_generate():
+                llm = self._get_local_llama_model(gguf)
+                messages = []
+                if system_prompt:
+                    messages.append({"role": "system", "content": system_prompt})
+                messages.append({"role": "user", "content": user_prompt})
+                with self._gen_lock:
+                    kwargs: Dict[str, Any] = {
+                        "messages": messages,
+                        "temperature": 0.6,
+                        "max_tokens": max_tokens,
+                    }
+                    # GBNF-грамматика: строго валидный JSON с первого токена, без трат на форматирование
+                    if json_mode:
+                        from app.infrastructure.ai.llm.grammar import get_llama_json_grammar
+                        grammar = get_llama_json_grammar()
+                        if grammar is not None:
+                            kwargs["grammar"] = grammar
+                        else:
+                            kwargs["response_format"] = {"type": "json_object"}
+                    try:
+                        out = llm.create_chat_completion(**kwargs)
+                        return out["choices"][0]["message"].get("content", "")
+                    except Exception:
+                        kwargs.pop("grammar", None)
+                        kwargs.pop("response_format", None)
+                        out = llm.create_chat_completion(**kwargs)
+                        return out["choices"][0]["message"].get("content", "")
+
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _sync_generate)
 
     async def call_ollama(
             self,
@@ -253,37 +262,68 @@ class LLMGateway:
             except httpx.ConnectError:
                 raise ProviderExecutionError("Локальный сервис Ollama недоступен (127.0.0.1:11434)")
 
-    async def call_claude_direct(self, prompt: str, api_key: str, max_tokens: int = 4096) -> str:
+    async def call_claude_direct(
+            self, prompt: str, api_key: str, max_tokens: int = 4096,
+            system_prompt: str = "",
+    ) -> str:
         if not api_key:
             raise ProviderExecutionError("Anthropic API key не задан")
+
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+
+        body: Dict[str, Any] = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
+        # Ephemeral Prompt Caching: статический системный блок (>=800 токенов)
+        # помечается cache_control, повторные вызовы пересчитывают только хвост.
+        if system_prompt:
+            if len(system_prompt) > 800:
+                headers["anthropic-beta"] = "prompt-caching-2024-07-25"
+                body["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                body["system"] = system_prompt
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             res = await client.post(
                 "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-sonnet-4-20250514",
-                    "max_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
+                headers=headers,
+                json=body,
             )
             if res.status_code != 200:
                 raise ProviderExecutionError(f"Claude API error ({res.status_code}): {res.text}")
             return res.json()["content"][0]["text"]
 
-    async def call_openai_direct(self, prompt: str, api_key: str, max_tokens: int = 4096) -> str:
+    async def call_openai_direct(
+            self, prompt: str, api_key: str, max_tokens: int = 4096,
+            system_prompt: str = "",
+    ) -> str:
         if not api_key:
             raise ProviderExecutionError("OpenAI API key не задан")
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             res = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
                     "model": "gpt-4o",
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": messages,
                     "max_tokens": max_tokens,
                 },
             )
@@ -387,13 +427,23 @@ class LLMGateway:
         engine_str = (engine or "gemma3:4b").strip()
 
         # 1. Прямые облачные провайдеры
-        if engine_str == "claude":
+        if engine_str == "claude" or "claude" in engine_str.lower():
             api_key = self.api_keys.get("anthropic") or settings.ANTHROPIC_API_KEY
-            return await self.call_claude_direct(prompt, api_key, max_tokens)
+            return await self.call_claude_direct(
+                prompt=prompt,
+                api_key=api_key,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
+            )
 
         if engine_str == "openai":
             api_key = self.api_keys.get("openai") or settings.OPENAI_API_KEY
-            return await self.call_openai_direct(prompt, api_key, max_tokens)
+            return await self.call_openai_direct(
+                prompt=prompt,
+                api_key=api_key,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
+            )
 
         # 2. Облачные шлюзы RouterAI / AITunnel
         if "/" in engine_str or engine_str in ("routerai_gpt4o", "routerai_claude", "aitunnel"):
