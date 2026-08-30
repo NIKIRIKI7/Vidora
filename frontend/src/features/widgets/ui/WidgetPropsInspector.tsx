@@ -6,6 +6,17 @@ import { WidgetActionPanel } from './WidgetActionPanel'
 
 const str = (v: PropValue | undefined, fb = ''): string => (typeof v === 'string' ? v : fb)
 
+const toFiniteNumber = (v: PropValue | undefined, fb = 0): number => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fb
+}
+
+// Валидный hex (#rrggbb / #rgb) для <input type="color">; rgba/rgb/hsl -> null
+const toHexColor = (v: PropValue | undefined): string | null => {
+  const s = typeof v === 'string' ? v.trim() : ''
+  return /^#[0-9a-fA-F]{6}$/.test(s) || /^#[0-9a-fA-F]{3}$/.test(s) ? s : null
+}
+
 export const WidgetPropsInspector: React.FC = () => {
   const { selectedWidgetId, widgets, liveProps, updateLiveProp, resetLiveProps, deleteWidget } =
     useWidgetManagementStore()
@@ -23,7 +34,8 @@ export const WidgetPropsInspector: React.FC = () => {
     const val: PropValue | undefined = liveProps[propDef.name] ?? propDef.default
 
     switch (propDef.type) {
-      case 'number':
+      case 'number': {
+        const numVal = toFiniteNumber(val, 0)
         return (
           <div className="flex items-center gap-3">
             <input
@@ -31,18 +43,19 @@ export const WidgetPropsInspector: React.FC = () => {
               min={0}
               max={propDef.name.includes('delay') ? 60 : 1000000}
               step={propDef.name.includes('delay') ? 1 : 100}
-              value={Number(val || 0)}
+              value={numVal}
               onChange={(e) => updateLiveProp(propDef.name, Number(e.target.value))}
               className="flex-1 h-1.5 bg-slate-800 rounded-lg appearance-none accent-sky-500"
             />
             <input
               type="number"
-              value={Number(val ?? 0)}
+              value={numVal}
               onChange={(e) => updateLiveProp(propDef.name, Number(e.target.value))}
               className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs font-mono text-right text-white"
             />
           </div>
         )
+      }
 
       case 'boolean':
         return (
@@ -115,18 +128,27 @@ export const WidgetPropsInspector: React.FC = () => {
       case 'string':
       default:
         if (propDef.name.toLowerCase().includes('color')) {
+          const colorStr = str(val, '#38bdf8')
+          const hexVal = toHexColor(val)
           return (
             <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={str(val, '#38bdf8')}
-                onChange={(e) => updateLiveProp(propDef.name, e.target.value)}
-                className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer"
+              <div
+                className="w-8 h-8 rounded-lg border border-slate-700 shrink-0 shadow-inner"
+                style={{ backgroundColor: colorStr }}
               />
+              {hexVal ? (
+                <input
+                  type="color"
+                  value={hexVal}
+                  onChange={(e) => updateLiveProp(propDef.name, e.target.value)}
+                  className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer"
+                />
+              ) : null}
               <input
                 type="text"
-                value={str(val, '#38bdf8')}
+                value={colorStr}
                 onChange={(e) => updateLiveProp(propDef.name, e.target.value)}
+                placeholder="rgba(...) или #hex"
                 className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-mono text-white"
               />
             </div>
