@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FileText, Check, RotateCcw, Trash2, Code2, Wand2 } from 'lucide-react'
 import { WidgetRenderTester } from './WidgetRenderTester'
+import { WidgetQuickRender } from './WidgetQuickRender'
 import { useSkillsStore } from '@features/settings'
 import type { WidgetMetadata } from '../api/widgetsApi'
 
@@ -162,6 +163,12 @@ export const Scene: React.FC = () => {
           </>
         )}
       </button>
+
+      <WidgetQuickRender
+        widgetId={widget.id}
+        widgetName={widget.name}
+        currentProps={currentProps}
+      />
 
       <WidgetRenderTester
         widgetId={widget.id}

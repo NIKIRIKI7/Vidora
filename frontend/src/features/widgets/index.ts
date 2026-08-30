@@ -4,6 +4,7 @@ export { VirtualMotionCanvas } from './ui/VirtualMotionCanvas'
 export { WidgetPropsInspector } from './ui/WidgetPropsInspector'
 export { WidgetImportExportModal } from './ui/WidgetImportExportModal'
 export { WidgetCreateModal } from './ui/WidgetCreateModal'
+export { WidgetQuickRender } from './ui/WidgetQuickRender'
 
 export type {
   WidgetMetadata,
