@@ -69,9 +69,16 @@ export function compileTsxWidget(tsxCode: string, widgetId: string): CompileResu
     const exportsObj: Record<string, unknown> = {}
     const moduleObj = { exports: exportsObj }
 
-    // Инжектируем remotion-имена верхнего уровня (используются без импорта в части виджетов)
+    // Инжектируем remotion-имена верхнего уровня (используются без импорта в части виджетов).
+    // Распаковка React/remotion/lucide — fallback на случай, если ИИ-код вызывает хуки/иконки
+    // без явного импорта (напр. useState() вместо React.useState(), <Trophy /> без import).
     const scope: Record<string, unknown> = {
       React,
+      ...(React as unknown as Record<string, unknown>),
+      remotion,
+      ...(remotion as unknown as Record<string, unknown>),
+      LucideIcons,
+      ...(LucideIcons as unknown as Record<string, unknown>),
       require: makeRequire,
       module: moduleObj,
       exports: exportsObj,

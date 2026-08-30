@@ -81,11 +81,9 @@ export const DynamicCanvasPlayer: React.FC<DynamicCanvasPlayerProps> = ({
       <div
         className="relative rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-slate-800/80 bg-black flex items-center justify-center"
         style={{
-          width: isVertical ? '340px' : '680px',
-          height: isVertical ? '604px' : '382px',
-          maxHeight: '100%',
-          maxWidth: '100%',
           aspectRatio: isVertical ? '9 / 16' : '16 / 9',
+          height: isVertical ? 'min(600px, 85%)' : 'min(420px, 85%)',
+          maxWidth: '92%',
         }}
       >
         <Player

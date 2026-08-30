@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, Loader2, Check, X, Monitor, Smartphone, AlertCircle } from 'lucide-react'
 import { API } from '@shared/lib'
 
@@ -22,6 +22,20 @@ export const WidgetQuickRender: React.FC<WidgetQuickRenderProps> = ({
   const [copied, setCopied] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearRenderTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [])
+
+  const failRender = useCallback((message: string) => {
+    clearRenderTimeout()
+    setIsRendering(false)
+    setError(message)
+  }, [clearRenderTimeout])
 
   const isVertical = widgetId.includes('9x16') || widgetId.includes('Vertical')
   const duration = Number(currentProps.durationFrames) || 300
@@ -37,11 +51,11 @@ export const WidgetQuickRender: React.FC<WidgetQuickRenderProps> = ({
           const payload = data.payload
           setProgress(payload.progress || 0)
           if (payload.status === 'done' && payload.output_path) {
+            clearRenderTimeout()
             setVideoUrl(`${API}/api/v1/render/media?path=${encodeURIComponent(payload.output_path)}`)
             setIsRendering(false)
           } else if (payload.status === 'error') {
-            setError(payload.error || 'Сбой рендера Remotion')
-            setIsRendering(false)
+            failRender(payload.error || 'Сбой рендера Remotion')
           }
         }
       } catch (err) {
@@ -49,8 +63,11 @@ export const WidgetQuickRender: React.FC<WidgetQuickRenderProps> = ({
       }
     }
 
-    return () => ws.close()
-  }, [])
+    return () => {
+      clearRenderTimeout()
+      ws.close()
+    }
+  }, [failRender, clearRenderTimeout])
 
   const buildTsx = (): string => {
     const formatPropValue = (val: unknown): string => {
@@ -100,18 +117,30 @@ ${propLines}
     }
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15_000)
       const response = await fetch(`${API}/api/v1/render/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
       if (!response.ok) {
         const errData = await response.json()
         throw new Error(errData.detail || 'Не удалось запустить рендер')
       }
+
+      // Рендер асинхронный (через WS): ждём завершения максимум 90 сек
+      clearRenderTimeout()
+      timeoutRef.current = setTimeout(() => {
+        failRender('Превышено время ожидания рендера (90 сек). Проверьте логи бэкенда.')
+      }, 90_000)
     } catch (err) {
       setIsRendering(false)
-      setError(err instanceof Error ? err.message : 'Ошибка соединения с сервером')
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'Таймаут запуска рендера на сервере'
+        : (err instanceof Error ? err.message : 'Ошибка соединения с сервером'))
     }
   }
 

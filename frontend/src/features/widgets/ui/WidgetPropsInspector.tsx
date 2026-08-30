@@ -12,9 +12,27 @@ const toFiniteNumber = (v: PropValue | undefined, fb = 0): number => {
 }
 
 // Валидный hex (#rrggbb / #rgb) для <input type="color">; rgba/rgb/hsl -> null
+// Принимает любой CSS-цвет: HEX, rgb(), rgba() — извлекает/конвертирует в #rrggbb.
 const toHexColor = (v: PropValue | undefined): string | null => {
   const s = typeof v === 'string' ? v.trim() : ''
-  return /^#[0-9a-fA-F]{6}$/.test(s) || /^#[0-9a-fA-F]{3}$/.test(s) ? s : null
+  if (!s) return null
+
+  // Уже HEX: #rgb или #rrggbb
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s)) {
+    if (s.length === 4) {
+      return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`
+    }
+    return s.toLowerCase()
+  }
+
+  // rgba(r, g, b, a) / rgb(r, g, b) -> HEX (без альфы — она живёт в текстовом поле)
+  const rgb = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+  if (rgb) {
+    const to2 = (n: string) => Math.min(255, parseInt(n, 10) || 0).toString(16).padStart(2, '0')
+    return `#${to2(rgb[1])}${to2(rgb[2])}${to2(rgb[3])}`
+  }
+
+  return null
 }
 
 export const WidgetPropsInspector: React.FC = () => {
