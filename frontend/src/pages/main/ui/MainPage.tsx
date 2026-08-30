@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { ProjectCreator } from '@widgets/project-creator'
 import { EditorWorkspace, YoutubeIdeasView } from '@widgets/editor-workspace'
 import { ScenarioBuilder } from '@widgets/scenario-builder'
 import { GlobalSettingsView } from '@widgets/global-settings'
 import { AudioHubView } from '@widgets/audio-hub'
 import { MotionStudioView } from '@widgets/motion-studio'
+import { DashboardView } from '@widgets/dashboard'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { Spinner } from '@shared/ui'
 import { API } from '@shared/lib'
@@ -154,19 +154,14 @@ export const MainPage = () => {
       ) : view === 'studio' ? (
         <MotionStudioView onBack={() => setView('hub')} />
       ) : (
-        <ProjectCreator
-          onGoIdeas={() => setView('ideas')}
-          onGoScenario={() => {
+        <DashboardView
+          onOpenTrends={() => setView('ideas')}
+          onOpenScript={() => {
             setSelectedIdea(null)
             setSelectedVideos([])
             setView('scenario')
           }}
-          onGoSettings={() => setView('settings')}
-          onGoAudioHub={() => setView('audio-hub')}
-          onGoStudio={() => setView('studio')}
-          projects={projects}
-          onOpenProject={setActiveProject}
-          onDeleteProject={deleteProject}
+          onOpenAudio={() => setView('audio-hub')}
         />
       )}
 
