@@ -11,6 +11,7 @@ import {
   PlusCircle,
 } from 'lucide-react'
 import { useWidgetManagementStore } from '../model/useWidgetManagementStore'
+import { WidgetQuickRender } from './WidgetQuickRender'
 
 function evaluateSpring(frame: number, delay = 0, fps = 30): number {
   const t = Math.max(0, (frame - delay) / fps)
@@ -98,18 +99,18 @@ export const VirtualMotionCanvas: React.FC = () => {
     }
 
     return (
-      <div className="bg-slate-900/90 border border-slate-800 p-8 rounded-3xl text-center max-w-md backdrop-blur-2xl shadow-2xl space-y-4">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-bold">
-          <Sparkles size={13} />
-          <span>{widget.id}</span>
-        </div>
-        <h4 className="font-bold text-xl text-white">{widget.name}</h4>
-        <p className="text-xs text-slate-400 leading-relaxed">{widget.description}</p>
-        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800/80 text-left font-mono text-[11px] space-y-1 text-slate-300">
+      <div className="w-full max-w-xl flex flex-col gap-3">
+        {/* Живое превью виджета через реальный бэкенд-рендер Remotion */}
+        <WidgetQuickRender
+          widgetId={widget.id}
+          widgetName={widget.name}
+          currentProps={liveProps}
+        />
+        <div className="bg-slate-900/70 border border-slate-800/70 px-4 py-3 rounded-2xl text-left font-mono text-[11px] space-y-1 text-slate-300">
           {Object.entries(liveProps).map(([k, v]) => (
-            <div key={k} className="flex justify-between">
-              <span className="text-slate-500">{k}:</span>
-              <span className="text-sky-300 truncate max-w-[160px]">{JSON.stringify(v)}</span>
+            <div key={k} className="flex justify-between gap-4">
+              <span className="text-slate-500 shrink-0">{k}:</span>
+              <span className="text-sky-300 truncate">{JSON.stringify(v)}</span>
             </div>
           ))}
         </div>
@@ -199,7 +200,7 @@ export const VirtualMotionCanvas: React.FC = () => {
           )}
 
           <div
-            style={{
+            style={widget ? undefined : {
               opacity,
               transform: `scale(${scale}) translateY(${translateY}px)`,
               transition: isPlaying ? 'none' : 'all 0.05s ease-out',
