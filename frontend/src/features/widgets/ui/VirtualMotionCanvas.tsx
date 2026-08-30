@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useWidgetManagementStore } from '../model/useWidgetManagementStore'
 import { WidgetQuickRender } from './WidgetQuickRender'
+import { DynamicCanvasPlayer } from './DynamicCanvasPlayer'
 
 function evaluateSpring(frame: number, delay = 0, fps = 30): number {
   const t = Math.max(0, (frame - delay) / fps)
@@ -99,13 +100,27 @@ export const VirtualMotionCanvas: React.FC = () => {
     }
 
     return (
-      <div className="w-full max-w-xl flex flex-col gap-3">
-        {/* Живое превью виджета через реальный бэкенд-рендер Remotion */}
+      <div className="w-full max-w-2xl flex flex-col gap-4">
+        {/* 🎬 Живой Remotion Player: компиляция tsx_code в браузере + синхронизация с таймлайном */}
+        <DynamicCanvasPlayer
+          widgetId={widget.id}
+          widgetName={widget.name}
+          tsxCode={widget.tsx_code || ''}
+          liveProps={liveProps}
+          fps={30}
+          durationInFrames={Number(liveProps.durationFrames) || durationFrames}
+          isPlaying={isPlaying}
+          currentFrame={previewFrame}
+          onFrameChange={setPreviewFrame}
+        />
+
+        {/* Кнопка быстрого скачивания MP4 через бэкенд-рендер */}
         <WidgetQuickRender
           widgetId={widget.id}
           widgetName={widget.name}
           currentProps={liveProps}
         />
+
         <div className="bg-slate-900/70 border border-slate-800/70 px-4 py-3 rounded-2xl text-left font-mono text-[11px] space-y-1 text-slate-300">
           {Object.entries(liveProps).map(([k, v]) => (
             <div key={k} className="flex justify-between gap-4">
