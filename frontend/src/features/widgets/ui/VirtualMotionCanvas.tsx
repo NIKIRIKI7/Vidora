@@ -11,7 +11,6 @@ import {
   PlusCircle,
 } from 'lucide-react'
 import { useWidgetManagementStore } from '../model/useWidgetManagementStore'
-import { WidgetQuickRender } from './WidgetQuickRender'
 import { DynamicCanvasPlayer } from './DynamicCanvasPlayer'
 
 function evaluateSpring(frame: number, delay = 0, fps = 30): number {
@@ -30,7 +29,6 @@ export const VirtualMotionCanvas: React.FC = () => {
     liveProps,
     previewFrame,
     isPlaying,
-    durationFrames,
     viewportFormat,
     showSafeZones,
     backgroundMode,
@@ -45,6 +43,14 @@ export const VirtualMotionCanvas: React.FC = () => {
   const animFrameRef = useRef<number | null>(null)
   const lastTimeRef = useRef<number>(0)
 
+  // Длительность берём из пропсов виджета (durationFrames), иначе 300 — НЕ из store (120)
+  const totalFrames = Number.isFinite(Number(liveProps.durationFrames)) && Number(liveProps.durationFrames) > 0
+    ? Math.floor(Number(liveProps.durationFrames))
+    : 300
+  const safeFrame = Number.isFinite(previewFrame)
+    ? Math.min(totalFrames, Math.max(0, Math.floor(previewFrame)))
+    : 0
+
   useEffect(() => {
     if (!isPlaying) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
@@ -57,7 +63,8 @@ export const VirtualMotionCanvas: React.FC = () => {
       const elapsed = currentTime - lastTimeRef.current
       if (elapsed > fpsInterval) {
         lastTimeRef.current = currentTime - (elapsed % fpsInterval)
-        setPreviewFrame((previewFrame + 1) % durationFrames)
+        const next = (safeFrame + 1) % totalFrames
+        setPreviewFrame(Number.isFinite(next) ? next : 0)
       }
       animFrameRef.current = requestAnimationFrame(loop)
     }
@@ -66,13 +73,13 @@ export const VirtualMotionCanvas: React.FC = () => {
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
     }
-  }, [isPlaying, previewFrame, durationFrames, setPreviewFrame])
+  }, [isPlaying, totalFrames, safeFrame, setPreviewFrame])
 
   const widget = widgets.find((w) => w.id === selectedWidgetId)
   const delay = Number(liveProps.delayFrames || 0)
   const scaleMult = Number(liveProps.scale || 1.0)
-  const spr = evaluateSpring(previewFrame, delay)
-  const opacity = Math.min(1, Math.max(0, (previewFrame - delay) / 8))
+  const spr = evaluateSpring(safeFrame, delay)
+  const opacity = Math.min(1, Math.max(0, (safeFrame - delay) / 8))
   const scale = (0.8 + spr * 0.2) * scaleMult
   const translateY = (1 - spr) * 40
 
@@ -99,37 +106,19 @@ export const VirtualMotionCanvas: React.FC = () => {
       )
     }
 
+    // Чистый холст: только живой Remotion Player, без кнопок и дебаг-дампа
     return (
-      <div className="w-full max-w-2xl flex flex-col gap-4">
-        {/* 🎬 Живой Remotion Player: компиляция tsx_code в браузере + синхронизация с таймлайном */}
-        <DynamicCanvasPlayer
-          widgetId={widget.id}
-          widgetName={widget.name}
-          tsxCode={widget.tsx_code || ''}
-          liveProps={liveProps}
-          fps={30}
-          durationInFrames={Number(liveProps.durationFrames) || durationFrames}
-          isPlaying={isPlaying}
-          currentFrame={previewFrame}
-          onFrameChange={setPreviewFrame}
-        />
-
-        {/* Кнопка быстрого скачивания MP4 через бэкенд-рендер */}
-        <WidgetQuickRender
-          widgetId={widget.id}
-          widgetName={widget.name}
-          currentProps={liveProps}
-        />
-
-        <div className="bg-slate-900/70 border border-slate-800/70 px-4 py-3 rounded-2xl text-left font-mono text-[11px] space-y-1 text-slate-300">
-          {Object.entries(liveProps).map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-4">
-              <span className="text-slate-500 shrink-0">{k}:</span>
-              <span className="text-sky-300 truncate">{JSON.stringify(v)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <DynamicCanvasPlayer
+        widgetId={widget.id}
+        tsxCode={widget.tsx_code || ''}
+        liveProps={liveProps}
+        aspectRatio={viewportFormat}
+        fps={30}
+        durationInFrames={totalFrames}
+        isPlaying={isPlaying}
+        currentFrame={safeFrame}
+        onFrameChange={setPreviewFrame}
+      />
     )
   }
 
@@ -248,8 +237,8 @@ export const VirtualMotionCanvas: React.FC = () => {
           <input
             type="range"
             min={0}
-            max={durationFrames}
-            value={previewFrame}
+            max={totalFrames}
+            value={safeFrame}
             onChange={(e) => {
               setIsPlaying(false)
               setPreviewFrame(Number(e.target.value))
@@ -257,7 +246,7 @@ export const VirtualMotionCanvas: React.FC = () => {
             className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
           />
           <div className="font-mono text-xs text-slate-400 w-24 text-right">
-            <span className="text-white font-bold">{previewFrame}</span> / {durationFrames}f
+            <span className="text-white font-bold">{safeFrame}</span> / {totalFrames}f
           </div>
         </div>
       </div>
