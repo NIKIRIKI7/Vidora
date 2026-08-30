@@ -1,43 +1,21 @@
-import React, { useState } from 'react'
-import { Copy, Check, RotateCcw, Trash2, Sliders } from 'lucide-react'
+import React from 'react'
+import { Sliders } from 'lucide-react'
 import { useWidgetManagementStore } from '../model/useWidgetManagementStore'
 import type { PropValue, WidgetPropDefinition } from '../api/widgetsApi'
+import { WidgetActionPanel } from './WidgetActionPanel'
 
 const str = (v: PropValue | undefined, fb = ''): string => (typeof v === 'string' ? v : fb)
 
 export const WidgetPropsInspector: React.FC = () => {
   const { selectedWidgetId, widgets, liveProps, updateLiveProp, resetLiveProps, deleteWidget } =
     useWidgetManagementStore()
-  const [copied, setCopied] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const widget = widgets.find((w) => w.id === selectedWidgetId)
   if (!widget) return null
 
-  const handleCopySnippet = () => {
-    const propAssignments = Object.entries(liveProps)
-      .map(([key, val]) => {
-        if (typeof val === 'string') return `${key}="${val}"`
-        if (typeof val === 'boolean') return `${key}={${val}}`
-        if (typeof val === 'number') return `${key}={${val}}`
-        return `${key}={${JSON.stringify(val)}}`
-      })
-      .join('\n  ')
-
-    const snippet = `<${widget.id}\n  ${propAssignments}\n/>`
-    navigator.clipboard.writeText(snippet)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   const handleDelete = async () => {
     if (confirm(`Удалить кастомный виджет '${widget.name}'?`)) {
-      setIsDeleting(true)
-      try {
-        await deleteWidget(widget.id)
-      } finally {
-        setIsDeleting(false)
-      }
+      await deleteWidget(widget.id)
     }
   }
 
@@ -198,34 +176,13 @@ export const WidgetPropsInspector: React.FC = () => {
       </div>
 
       {/* Тулбар действий */}
-      <div className="p-5 border-t border-slate-800/80 bg-slate-900/40 space-y-2.5">
-        <button
-          onClick={handleCopySnippet}
-          className="w-full py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 transition-all"
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          <span>{copied ? 'Скопировано в буфер!' : 'Копировать вызов JSX'}</span>
-        </button>
-
-        <div className="flex gap-2">
-          <button
-            onClick={resetLiveProps}
-            className="flex-1 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <RotateCcw size={13} /> <span>Сброс</span>
-          </button>
-
-          {widget.is_custom && (
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="px-3 py-2 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-              title="Удалить компонент"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
-        </div>
+      <div className="p-5 bg-slate-900/40">
+        <WidgetActionPanel
+          widget={widget}
+          currentProps={liveProps}
+          onReset={resetLiveProps}
+          onDelete={handleDelete}
+        />
       </div>
     </div>
   )

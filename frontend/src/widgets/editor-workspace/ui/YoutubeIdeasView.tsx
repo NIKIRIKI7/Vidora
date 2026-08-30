@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal } from '@shared/ui'
 import { Bot, X, Plus, Sparkles, CirclePlay, List, LayoutGrid, Clapperboard, Paintbrush, BrainCircuit, Flame, FishingHook, Copy, Download, ArrowLeft, TrendingUp, Mic, Share2, Play, CheckCircle2, ShieldCheck, Edit3, GitBranch, Terminal, MessageSquare, MessageCircle, TriangleAlert, Compass, Rocket, ExternalLink, Eye, Check } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
-import { useSettingsStore, useNotificationStore, getSkillsForProcess, type IdeaFormat, type VideoResult, type HookAnalysisData, type EarlySignalItem, type DeepTrendAnalysis, type CommentGoldmineVideoEntry, type BlueOceanOpportunity } from '@entities/project'
+import { useSettingsStore, useNotificationStore, type IdeaFormat, type VideoResult, type HookAnalysisData, type EarlySignalItem, type DeepTrendAnalysis, type CommentGoldmineVideoEntry, type BlueOceanOpportunity } from '@entities/project'
 
 interface Props {
   onSelectIdea: (idea: IdeaFormat, videos: VideoResult[]) => void
@@ -142,7 +142,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/suggest-competitors`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, language, api_keys: activeApiKeys, skills_text: getSkillsForProcess('analysis') })
+        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, language, api_keys: activeApiKeys })
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') {
@@ -182,7 +182,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: finalQuery, project_path: 'vidora_projects/Drafts',
-          settings: { days_back: daysBack, min_subs: minSubs, max_subs: maxSubs, min_ratio: minRatio, search_mode: searchMode, search_engine: searchEngine, language: language, video_type: videoType, ideas_count: ideasCount, channel_context: channelContext, channels: competitorChannels, skills_text: getSkillsForProcess('analysis') },
+          settings: { days_back: daysBack, min_subs: minSubs, max_subs: maxSubs, min_ratio: minRatio, search_mode: searchMode, search_engine: searchEngine, language: language, video_type: videoType, ideas_count: ideasCount, channel_context: channelContext, channels: competitorChannels },
           youtube_key: apiKeys.youtube || '', llm_engine: effectiveEngine, api_keys: activeApiKeys
         })
       })
@@ -273,7 +273,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
     try {
       const res = await fetch(`${API}/api/v1/youtube/agent/analyze-hook`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, engine: effectiveEngine, language, api_keys: activeApiKeys, skills_text: getSkillsForProcess('analysis') })
+        body: JSON.stringify({ transcript, engine: effectiveEngine, language, api_keys: activeApiKeys })
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') setHookData(data.data)

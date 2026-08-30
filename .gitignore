@@ -94,3 +94,6 @@ stats.html
 # Playwright MCP output
 .playwright-mcp/
 backend/venv-cosyvoice/
+
+# Auto-generated widget registry files
+backend/remotion-project/src/widgets/

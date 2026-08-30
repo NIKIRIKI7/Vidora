@@ -12,27 +12,24 @@ const SceneComponent: React.FC = (props) => {
   return <Component {...props} />
 }
 
-const getConfig = () => {
-  const config = (CurrentSceneModule as any).compositionConfig || {}
-  const fps = Number(config.fps) || 30
-  const width = Number(config.width) || 1920
-  const height = Number(config.height) || 1080
-  const durationInSeconds = Number(config.durationInSeconds) || 5
-  const durationInFrames =
-    Number(config.durationInFrames) || Math.ceil(durationInSeconds * fps) || 150
-  return { fps, width, height, durationInFrames }
-}
-
 export const Root: React.FC = () => {
-  const { fps, width, height, durationInFrames } = getConfig()
   return (
     <Composition
       id="current"
       component={SceneComponent}
-      durationInFrames={durationInFrames}
-      fps={fps}
-      width={width}
-      height={height}
+      calculateMetadata={async () => {
+        const sceneModule = CurrentSceneModule as any
+        const durationInFrames = sceneModule.durationInFrames || 300
+        const isVertical = sceneModule.isVertical || false
+        const fps = sceneModule.fps || 30
+
+        return {
+          durationInFrames,
+          fps,
+          width: isVertical ? 1080 : 1920,
+          height: isVertical ? 1920 : 1080,
+        }
+      }}
     />
   )
 }

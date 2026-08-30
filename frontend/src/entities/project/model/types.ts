@@ -269,18 +269,7 @@ export interface PromptTemplates {
   scenario: string
 }
 
-export type ProcessType = 'scenario' | 'project' | 'scene' | 'fragment' | 'audio' | 'analysis' | 'broll'
-
 export type RenderQuality = 'low' | 'medium' | 'high'
-
-export interface Skill {
-  id: string
-  title: string
-  description: string
-  content: string
-  isCustom: boolean
-  applyTo: ProcessType[]
-}
 
 export interface ProjectSettings {
   name: string

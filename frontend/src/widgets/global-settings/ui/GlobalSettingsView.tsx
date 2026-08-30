@@ -1,95 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, LoaderCircle, Trash2, Plus, ChevronDown, Video } from 'lucide-react'
-import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory, type ProcessType, type Skill } from '@entities/project'
+import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, Plus, Trash2, Video } from 'lucide-react'
+import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory } from '@entities/project'
+import { SkillsSettingsView } from '@features/settings'
 import { API } from '@shared/lib'
-
-const PROCESS_TYPES: { id: ProcessType, label: string }[] = [
-  { id: 'scenario', label: 'Сценарий' },
-  { id: 'project', label: 'Проект (TSX)' },
-  { id: 'scene', label: 'Сцена (TSX)' },
-  { id: 'fragment', label: 'Фрагмент (TSX)' },
-  { id: 'audio', label: 'Озвучка (TTS)' },
-  { id: 'analysis', label: 'Анализ контента' },
-]
-
-const SkillEditor = ({ skill, onUpdate, onDelete }: { skill: Skill, onUpdate: (s: Partial<Skill>) => void, onDelete: () => void }) => {
-  const [isExpanded, setIsExpanded] = useState(false)
-
-  const toggleProcess = (pt: ProcessType) => {
-    const applies = skill.applyTo || []
-    if (applies.includes(pt)) onUpdate({ applyTo: applies.filter(x => x !== pt) })
-    else onUpdate({ applyTo: [...applies, pt] })
-  }
-
-  return (
-    <div className="bg-surface-container-lowest border border-white/10 rounded-xl overflow-hidden">
-      <div className="p-4 flex items-start justify-between cursor-pointer hover:bg-white/5 transition-colors" onClick={() => setIsExpanded(!isExpanded)}>
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-white">{skill.title}</span>
-            {skill.isCustom && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Custom</span>}
-          </div>
-          <span className="text-xs text-on-surface-variant line-clamp-1">{skill.description || 'Нет описания'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 mr-4 hidden md:flex">
-            {PROCESS_TYPES.map(pt => (
-              <span key={pt.id} title={pt.label} className={`w-2 h-2 rounded-full ${(skill.applyTo || []).includes(pt.id) ? 'bg-success' : 'bg-surface-container-highest'}`} />
-            ))}
-          </div>
-          <Button variant="ghost" className="p-1 text-on-surface-variant hover:text-white" onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded) }}>
-            <ChevronDown size={18} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-          </Button>
-        </div>
-      </div>
-
-      {isExpanded && (
-        <div className="p-4 border-t border-white/5 flex flex-col gap-4 bg-black/20">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FieldGroup label="Название скилла">
-              <Input value={skill.title} onChange={e => onUpdate({ title: e.target.value })} disabled={!skill.isCustom} className="text-xs" />
-            </FieldGroup>
-            <FieldGroup label="Описание">
-              <Input value={skill.description} onChange={e => onUpdate({ description: e.target.value })} disabled={!skill.isCustom} className="text-xs" />
-            </FieldGroup>
-          </div>
-
-          <FieldGroup label="Применять к процессам">
-            <div className="flex flex-wrap gap-2">
-              {PROCESS_TYPES.map(pt => {
-                const isActive = (skill.applyTo || []).includes(pt.id)
-                return (
-                  <button key={pt.id} onClick={() => toggleProcess(pt.id)} className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${isActive ? 'bg-success/20 border-success/40 text-success' : 'bg-surface-container border-white/10 text-on-surface-variant hover:text-white'}`}>
-                    {pt.label}
-                  </button>
-                )
-              })}
-            </div>
-          </FieldGroup>
-
-          <FieldGroup label="Контент (Markdown)">
-            <textarea
-              className="w-full h-48 bg-surface-container-lowest border border-white/10 rounded-lg p-3 text-xs font-mono text-on-surface resize-y focus:outline-none focus:border-primary/50 custom-scrollbar"
-              value={skill.content}
-              onChange={e => onUpdate({ content: e.target.value })}
-              disabled={!skill.isCustom}
-              spellCheck={false}
-            />
-          </FieldGroup>
-
-          {skill.isCustom && (
-            <div className="flex justify-end">
-              <Button variant="dashed" onClick={onDelete} className="text-error border-error/30 hover:bg-error/10 text-xs py-1.5 h-auto">
-                <Trash2 size={16} className="mr-2" /> Удалить скилл
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, categoryKey: keyof GlobalPromptSettings, rows: number }) => {
   const { globalPrompts, setGlobalPrompts } = useSettingsStore()
@@ -145,7 +59,6 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
     audioSilenceThreshold, setAudioSilenceThreshold,
     audioWpmMin, setAudioWpmMin,
     whisperModel, setWhisperModel,
-    skills, setSkills, addCustomSkill, updateSkill, deleteSkill
   } = useSettingsStore()
 
   const showNotification = useNotificationStore(s => s.showNotification)
@@ -156,7 +69,6 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
   const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
   const [hfPullUrl, setHfPullUrl] = useState('')
-  const [syncingSkills, setSyncingSkills] = useState(false)
 
   useEffect(() => {
     fetch(`${API}/api/v1/system/hardware`).then(r => r.ok && r.json()).then(setHardware).catch(() => {})
@@ -170,30 +82,6 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
     } catch { showNotification('Ошибка скачивания модели', 'error') }
     setTimeout(() => setPulling(null), 2000)
   }, [showNotification])
-
-  const handleSyncSkills = useCallback(async () => {
-    setSyncingSkills(true)
-    try {
-      const res = await fetch(`${API}/api/v1/system/remotion-skills-sync`, { method: 'POST' })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
-        const currentSkills = useSettingsStore.getState().skills || []
-        const newSkills = [...currentSkills]
-        data.skills.forEach((fs: { id: string; title: string; description: string; content: string }) => {
-          const existingIdx = newSkills.findIndex(s => s.id === fs.id)
-          if (existingIdx >= 0) {
-            newSkills[existingIdx] = { ...newSkills[existingIdx], title: fs.title, description: fs.description, content: fs.content }
-          } else {
-            newSkills.push({ ...fs, isCustom: false, applyTo: ['scene', 'fragment', 'project'] as ProcessType[] })
-          }
-        })
-        setSkills(newSkills)
-        showNotification(`Синхронизировано скиллов: ${data.skills.length}`, 'success')
-      }
-      else throw new Error()
-    } catch { showNotification('Ошибка синхронизации скиллов', 'error') }
-    setSyncingSkills(false)
-  }, [showNotification, setSkills])
 
   return (
     <div className="flex flex-col h-dvh w-full bg-background animate-in fade-in duration-300">
@@ -411,23 +299,12 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
               <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-white">Скиллы (Навыки ИИ)</h3>
-                  <Button variant="secondary" icon={LoaderCircle} onClick={handleSyncSkills} disabled={syncingSkills}>
-                    {syncingSkills ? 'Синхронизация...' : 'Обновить с GitHub'}
-                  </Button>
                 </div>
                 <p className="text-xs text-on-surface-variant bg-surface-container-lowest/50 border border-white/5 p-4 rounded-xl leading-relaxed font-mono">
-                  Скиллы — это инструкции и правила, которые добавляются к промптам для улучшения качества генерации.
-                  Вы можете создавать свои скиллы и назначать их для разных процессов (сценарий, рендер, анализ и т.д.).
+                  Скиллы — это инструкции и правила из SQLite БД, которые добавляются к промптам для улучшения качества генерации.
+                  Правки сохраняются сразу в базу и применяются ко всем генерациям без перезапуска.
                 </p>
-
-                <div className="flex flex-col gap-4">
-                  {skills.map(s => (
-                    <SkillEditor key={s.id} skill={s} onUpdate={(updates) => updateSkill(s.id, updates)} onDelete={() => deleteSkill(s.id)} />
-                  ))}
-                  <Button variant="dashed" onClick={() => addCustomSkill({ id: crypto.randomUUID(), title: 'Новый скилл', description: '', content: '', isCustom: true, applyTo: [] })} className="w-full py-4 text-primary border-primary/30 hover:bg-primary/10">
-                    <Plus size={18} className="mr-2" /> Добавить свой скилл
-                  </Button>
-                </div>
+                <SkillsSettingsView />
               </div>
             )}
 

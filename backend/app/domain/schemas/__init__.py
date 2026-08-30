@@ -45,7 +45,32 @@ from app.domain.schemas.render import (
     VideoConcatRequest,
     ExportRequest,
 )
-from app.domain.schemas.system import PullRequest
+from app.domain.schemas.system import (
+    PullRequest,
+    SkillCreateRequest,
+    SkillItem,
+    SkillListResponse,
+    SkillStage,
+    SkillUpdateRequest,
+)
+from app.domain.schemas.widgets import (
+    CustomWidgetCreateRequest,
+    CustomWidgetUpdateRequest,
+    GenerateCustomWidgetAiRequest,
+    PropType,
+    WidgetCatalogResponse,
+    WidgetCategory,
+    WidgetCreationPromptResponse,
+    WidgetCreationPromptUpdateRequest,
+    WidgetDetailResponse,
+    WidgetDocsResponse,
+    WidgetMetadata,
+    WidgetPackageExport,
+    WidgetPackageImportRequest,
+    WidgetPackageImportResponse,
+    WidgetPropDefinition,
+    WidgetPromptUpdateRequest,
+)
 from app.domain.schemas.youtube import (
     AgentReq,
     AnalyzeChannelReq,
@@ -68,15 +93,6 @@ from app.domain.schemas.youtube import (
     CommentGoldmineReport,
     CommentGoldmineVideoEntry,
     DeepTrendAnalysis,
-)
-from app.domain.schemas.widgets import (
-    WidgetCategory,
-    PropType,
-    WidgetPropDefinition,
-    WidgetMetadata,
-    WidgetCatalogResponse,
-    WidgetDetailResponse,
-    WidgetDocsResponse,
 )
 
 __all__ = [
@@ -123,6 +139,11 @@ __all__ = [
     "SuggestCompetitorsReq",
     "AnalyzeChannelReq",
     "PullRequest",
+    "SkillStage",
+    "SkillItem",
+    "SkillListResponse",
+    "SkillCreateRequest",
+    "SkillUpdateRequest",
     "EarlySignalItem",
     "ViralVideoResult",
     "PsychologyProfile",
@@ -136,7 +157,16 @@ __all__ = [
     "PropType",
     "WidgetPropDefinition",
     "WidgetMetadata",
+    "CustomWidgetCreateRequest",
+    "CustomWidgetUpdateRequest",
+    "GenerateCustomWidgetAiRequest",
+    "WidgetPackageExport",
+    "WidgetPackageImportRequest",
+    "WidgetPackageImportResponse",
     "WidgetCatalogResponse",
     "WidgetDetailResponse",
     "WidgetDocsResponse",
+    "WidgetPromptUpdateRequest",
+    "WidgetCreationPromptResponse",
+    "WidgetCreationPromptUpdateRequest",
 ]

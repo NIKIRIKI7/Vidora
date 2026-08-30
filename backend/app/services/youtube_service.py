@@ -17,7 +17,10 @@ from app.domain.schemas.youtube import (
     PromptReq,
     SuggestCompetitorsReq,
 )
+from app.domain.skills.models import SkillStage
+from app.domain.skills.prompt_builder import build_prompt_from_db_skills
 from app.infrastructure.ai.llm.gateway import LLMGateway
+from app.infrastructure.skills.repository import SqliteSkillsRepository
 from app.infrastructure.storage.path_resolver import PathResolver
 from app.infrastructure.youtube.dag_pipeline import DeepTrendDAGPipeline
 from app.infrastructure.youtube.engine_resolver import resolve_youtube_engine
@@ -41,9 +44,21 @@ from app.infrastructure.youtube.trend_analyzer import AIKeywordExpander
 
 
 class YouTubeService:
-    def __init__(self, llm_gateway: Optional[LLMGateway] = None):
+    def __init__(
+        self,
+        llm_gateway: Optional[LLMGateway] = None,
+        skills_repo: Optional[SqliteSkillsRepository] = None,
+    ):
         self.llm_gateway = llm_gateway or LLMGateway()
+        self.skills_repo = skills_repo
         self.thumb_engine = ThumbnailPromptEngine()
+
+    async def _skills_context(self, stage: SkillStage) -> str:
+        """Единый источник: собирает активные скилы стадии из БД (без двойной склейки)."""
+        if not self.skills_repo:
+            return ""
+        skills = await self.skills_repo.list_all(stage=stage, is_active=True)
+        return build_prompt_from_db_skills(skills, stage=stage)
 
     @staticmethod
     def _extract_json(raw_text: str) -> Dict[str, Any]:
@@ -257,8 +272,9 @@ class YouTubeService:
             f"You are a YouTube niche expert. Suggest the top 10 most relevant, active competitor channels in niche: '{req.niche}' ({lang_name}). "
             f"Return ONLY valid JSON: {{\"channels\": [\"ChannelName1\", \"ChannelName2\"]}}."
         )
-        if req.skills_text:
-            prompt += f"\n\n{req.skills_text}"
+        skills_context = await self._skills_context(SkillStage.HOOK_ANALYSIS)
+        if skills_context:
+            prompt += f"\n\n{skills_context}"
 
         try:
             res = await gateway.generate_text(prompt=prompt, engine=engine, json_mode=True, max_tokens=300)
@@ -274,8 +290,9 @@ class YouTubeService:
 
         system_prompt = HOOK_ANALYZER_SYSTEM_PROMPT_EN if lang_code == "en" else HOOK_ANALYZER_SYSTEM_PROMPT_RU
         user_prompt = f"Transcript Opening (first 30-45s):\n{sample}\nTarget Language: {lang_name}"
-        if req.skills_text:
-            user_prompt += f"\n\nContext:\n{req.skills_text}"
+        skills_context = await self._skills_context(SkillStage.HOOK_ANALYSIS)
+        if skills_context:
+            user_prompt += f"\n\nContext:\n{skills_context}"
 
         try:
             res = await gateway.generate_text(
@@ -325,6 +342,9 @@ class YouTubeService:
         system_prompt = SCRIPTWRITER_SYSTEM_PROMPT.replace("{{VOICE_RULES}}", voice_rules).replace(
             "{{LANGUAGE}}", lang_name
         ).replace("{CUR_YEAR}", str(cur_year))
+        skills_context = await self._skills_context(SkillStage.SCRIPT_DRAFTING)
+        if skills_context:
+            system_prompt += f"\n\n---\nSTAGE GUIDELINES ({SkillStage.SCRIPT_DRAFTING.value}):\n{skills_context}"
 
         try:
             raw_script = await gateway.generate_text(

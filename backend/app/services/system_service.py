@@ -1,4 +1,4 @@
-"""Сервис системной информации, логов, ревизий и синхронизации Remotion Skills."""
+"""Сервис системной информации, логов, ревизий и управления скилами из SQLite."""
 
 import subprocess
 import sys
@@ -7,16 +7,23 @@ from typing import Any, Dict, List, Optional
 import psutil
 import torch
 
-from app.core.logging import get_all_logs, add_log
+from app.core.logging import add_log, get_all_logs
 from app.domain.schemas.code import SaveRevisionRequest
 from app.domain.schemas.system import PullRequest
+from app.domain.skills.models import SkillCreate, SkillItem, SkillStage, SkillUpdate
+from app.infrastructure.db.bootstrap import get_seed_skill
+from app.infrastructure.skills.repository import SqliteSkillsRepository
 from app.infrastructure.storage.code_history_repo import CodeHistoryRepository
-from app.infrastructure.system.skills import sync_remotion_skills
 
 
 class SystemService:
-    def __init__(self, history_repo: Optional[CodeHistoryRepository] = None):
+    def __init__(
+        self,
+        history_repo: Optional[CodeHistoryRepository] = None,
+        skills_repo: Optional[SqliteSkillsRepository] = None,
+    ):
         self.history_repo = history_repo or CodeHistoryRepository()
+        self.skills_repo = skills_repo
 
     def get_hardware_info(self) -> Dict[str, Any]:
         try:
@@ -45,7 +52,7 @@ class SystemService:
         return self.history_repo.list_revisions(project_id, scene_id)
 
     def get_revision_code(
-            self, project_id: str, scene_id: str, revision_id: str
+        self, project_id: str, scene_id: str, revision_id: str
     ) -> Optional[str]:
         return self.history_repo.get_revision_code(project_id, scene_id, revision_id)
 
@@ -56,8 +63,51 @@ class SystemService:
         add_log("INFO", "CODE_SAVE", f"Сохранена ревизия {meta['revision_id']} для {req.scene_id}")
         return meta
 
-    def sync_skills(self) -> Dict[str, Any]:
-        return sync_remotion_skills()
+    async def list_skills(
+        self, process: Optional[str] = None, stage: Optional[str] = None
+    ) -> List[SkillItem]:
+        stage_enum = None
+        if stage and stage in SkillStage._value2member_map_:
+            stage_enum = SkillStage(stage)
+        elif process and process in SkillStage._value2member_map_:
+            stage_enum = SkillStage(process)
+        return await self.skills_repo.list_all(stage=stage_enum)
+
+    async def get_skill(self, skill_id: str) -> Optional[SkillItem]:
+        return await self.skills_repo.get_by_id(skill_id)
+
+    async def create_skill(self, skill_data: Dict[str, Any]) -> SkillItem:
+        return await self.skills_repo.create(SkillCreate.model_validate(skill_data))
+
+    async def update_skill(self, skill_id: str, patch_data: Dict[str, Any]) -> Optional[SkillItem]:
+        return await self.skills_repo.update(skill_id, SkillUpdate.model_validate(patch_data))
+
+    async def delete_skill(self, skill_id: str) -> bool:
+        return await self.skills_repo.delete(skill_id)
+
+    async def reset_skill(self, skill_id: str) -> Optional[SkillItem]:
+        # Сброс к системной версии из seed (полный текст промпта), без затирания других скилов
+        seed_item = get_seed_skill(skill_id)
+        if not seed_item:
+            return None
+        existing = await self.skills_repo.get_by_id(skill_id)
+        if not existing:
+            return None
+        return await self.skills_repo.update(
+            skill_id,
+            SkillUpdate(
+                prompt=seed_item["prompt"],
+                name=seed_item["name"],
+                description=seed_item.get("description", ""),
+                is_custom=False,
+                is_active=True,
+                priority=seed_item.get("priority", existing.priority),
+            ),
+        )
+
+    async def sync_skills(self) -> Dict[str, Any]:
+        skills = await self.skills_repo.list_all()
+        return {"status": "ok", "skills": skills}
 
     def pull_model(self, req: PullRequest) -> None:
         if req.engine == "ollama":

@@ -4,7 +4,8 @@ import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic } from '
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution, type IdeaFormat, type VideoResult } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { API, formatTimecode } from '@shared/lib'
-import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
+import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt } from '@entities/project'
+import { useSkillsStore } from '@features/settings'
 
 interface Props {
   idea?: IdeaFormat
@@ -71,7 +72,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
       .replace(/\{\{DURATION\}\}/g, genDuration)
       .replace(/\{\{WORDS_COUNT\}\}/g, wordsCount.toString())
       .replace(/\{\{SCENARIO_RULES\}\}/g, injectedRules)
-      + getSkillsForProcess('scenario');
+      + useSkillsStore.getState().buildPromptContextForStage('script_drafting');
   }
 
   const copyText = async (text: string): Promise<boolean> => {

@@ -6,6 +6,7 @@ import { AudioHubView } from '@widgets/audio-hub'
 import { MotionStudioView } from '@widgets/motion-studio'
 import { DashboardView } from '@widgets/dashboard'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
+import { useSkillsStore } from '@features/settings'
 import { Spinner } from '@shared/ui'
 import { API } from '@shared/lib'
 import { CircleCheckBig, TriangleAlert, Info, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
@@ -79,6 +80,11 @@ export const MainPage = () => {
 
   const { notification } = useNotificationStore()
   const activeProject = projects.find(p => p.name === activeProjectId)
+
+  useEffect(() => {
+    // Подтягиваем свежие скилы из SQLite при старте интерфейса (единый источник для генерации промптов)
+    useSkillsStore.getState().fetchSkills().catch(() => {})
+  }, [])
 
   useEffect(() => {
     const ping = async () => {

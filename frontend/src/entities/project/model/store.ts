@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type PersistOptions } from 'zustand/middleware'
-import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory, Skill, ProcessType, TaskType } from './types'
-import { REMOTION_SKILLS } from '@shared/config'
+import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory, TaskType } from './types'
 
 // ponytail: откладываем запись в localStorage — ввод текста сценария не дёргает main thread на каждый кейстроук.
 // Копия пишется раз в `delay` мс после последнего изменения; getItem всегда читает актуальное значение.
@@ -27,19 +26,6 @@ const createDebouncedStorage = (delay = 400) => {
       localStorage.removeItem(name)
     }
   }
-}
-
-const DEFAULT_SKILLS: Skill[] = REMOTION_SKILLS.map(s => ({
-  ...s,
-  isCustom: false,
-  applyTo: s.applyTo ?? ['scene', 'fragment', 'project'] as ProcessType[]
-}))
-
-export const getSkillsForProcess = (process: ProcessType): string => {
-  const skills = useSettingsStore.getState().skills || []
-  const applicable = skills.filter(s => (s.applyTo || []).includes(process))
-  if (applicable.length === 0) return ''
-  return '\n\n---\n## APPLIED SKILLS / ПРИМЕНЕННЫЕ СКИЛЛЫ\n' + applicable.map(s => `### ${s.title}\n${s.content}`).join('\n\n')
 }
 
 interface ProjectStore {
@@ -398,12 +384,6 @@ interface SettingsStore {
   whisperModel: string
   setWhisperModel: (v: string) => void
 
-  skills: Skill[]
-  setSkills: (skills: Skill[]) => void
-  addCustomSkill: (skill: Skill) => void
-  updateSkill: (id: string, skill: Partial<Skill>) => void
-  deleteSkill: (id: string) => void
-
   uiPreferences: {
     showSceneSidebar: boolean
     showInspector: boolean
@@ -461,12 +441,6 @@ export const useSettingsStore = create<SettingsStore>()(
       whisperModel: 'small',
       setWhisperModel: (v) => set({ whisperModel: v }),
 
-      skills: DEFAULT_SKILLS,
-      setSkills: (skills) => set({ skills }),
-      addCustomSkill: (skill) => set(s => ({ skills: [...s.skills, skill] })),
-      updateSkill: (id, skill) => set(s => ({ skills: s.skills.map(x => x.id === id ? { ...x, ...skill } : x) })),
-      deleteSkill: (id) => set(s => ({ skills: s.skills.filter(x => x.id !== id) })),
-
       uiPreferences: DEFAULT_UI_PREFS,
       setUiPreferences: (p) => set((s) => ({ uiPreferences: { ...s.uiPreferences, ...p } })),
     }),
@@ -502,16 +476,6 @@ export const useSettingsStore = create<SettingsStore>()(
           }
         }
 
-        let mergedSkills = current.skills
-        if (persistedObj?.skills && Array.isArray(persistedObj.skills)) {
-          const persistedIds = new Set((persistedObj.skills as Skill[]).map(s => s.id))
-          mergedSkills = [
-            ...(persistedObj.skills as Skill[]),
-            ...current.skills.filter(s => !persistedIds.has(s.id)),
-          ]
-        }
-
-        // Миграция: старый глобальный aiMode -> гранулярные taskModes
         let migratedTaskModes = current.taskModes
         if (persistedObj?.taskModes) {
           migratedTaskModes = { ...current.taskModes, ...persistedObj.taskModes }
@@ -533,7 +497,6 @@ export const useSettingsStore = create<SettingsStore>()(
           cloudEngines: migratedCloudEngines,
           localEngines: migratedLocalEngines,
           globalVoices: persistedObj?.globalVoices || [],
-          skills: mergedSkills,
           uiPreferences: { ...DEFAULT_UI_PREFS, ...persistedObj?.uiPreferences },
         }
       },

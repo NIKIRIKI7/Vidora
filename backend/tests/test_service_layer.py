@@ -1,5 +1,7 @@
 """Самопроверка сервисного слоя и DI-контейнера."""
 
+import asyncio
+
 from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 
@@ -42,7 +44,7 @@ def test_di_container_wires_services():
 
 def test_codegen_build_prompt():
     svc = CodeGenService()
-    system, user = svc.build_prompt("s1", "сделай титул", {"name": "P"})
+    system, user = asyncio.run(svc.build_prompt("s1", "сделай титул", {"name": "P"}))
     assert "Remotion" in system and "```tsx" in system
     assert "s1" in user and "сделай титул" in user
 

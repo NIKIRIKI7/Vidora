@@ -125,7 +125,6 @@ class HookReq(BaseModel):
     engine: Optional[str] = "auto"
     language: Optional[str] = "ru"
     api_keys: Dict[str, Any] = Field(default_factory=dict)
-    skills_text: str = ""
 
 
 class DraftReq(BaseModel):
@@ -161,7 +160,6 @@ class SuggestCompetitorsReq(BaseModel):
     engine: Optional[str] = "auto"
     language: Optional[str] = "ru"
     api_keys: Dict[str, Any] = Field(default_factory=dict)
-    skills_text: str = ""
 
 
 class AnalyzeChannelReq(BaseModel):

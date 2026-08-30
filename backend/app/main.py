@@ -10,9 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.error_handlers import register_exception_handlers
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
+from app.core.database import AsyncSessionFactory, Base, engine
 from app.core.gpu import GPUManager
 from app.core.logging import add_log
 from app.core.ws import ws_manager
+from app.infrastructure.db.bootstrap import bootstrap_database
+from app.infrastructure.remotion.widgets_registry import WidgetRegistry
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -21,9 +24,21 @@ if sys.platform == "win32":
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     add_log("INFO", "SYSTEM", f"Сервер Vidora запущен на http://{settings.HOST}:{settings.PORT}")
+    try:
+        # 1. Создание структуры таблиц по ORM-моделям
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        # 2. Наполнение БД промптами из data/seeds + миграция legacy
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                await bootstrap_database(session)
+        WidgetRegistry.sync_filesystem()
+    except Exception as e:
+        add_log("WARN", "SYSTEM", f"Сбой авто-синхронизации: {e}")
     yield
     add_log("INFO", "SYSTEM", "Остановка сервера, очистка VRAM...")
     GPUManager.clean_memory()
+    await engine.dispose()
 
 
 app = FastAPI(title="Vidora API", version="0.2.0", lifespan=lifespan)

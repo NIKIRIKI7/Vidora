@@ -13,6 +13,7 @@ from app.core.logging import add_log
 from app.core.ws import ws_manager
 from app.domain.schemas.render import RenderRequest, VideoConcatRequest, ExportRequest
 from app.infrastructure.media.ducking import mix_voice_and_music_ducking
+from app.infrastructure.remotion.widgets_registry import WidgetRegistry
 from app.infrastructure.media.ffmpeg import AsyncFFmpegRunner
 from app.infrastructure.remotion.asset_collector import prepare_remotion_public_assets
 from app.infrastructure.remotion.runner import RemotionRunner
@@ -68,6 +69,8 @@ class RenderService:
 
         add_log("INFO", "RENDER", f"Старт рендера [{task_id}] (Target: {req.target_id})")
         try:
+            WidgetRegistry.sync_filesystem()
+
             scene_file = settings.REMOTION_DIR / "src" / "scenes" / "current.tsx"
             if req.tsx_code:
                 self.write_scene_file(req.tsx_code)

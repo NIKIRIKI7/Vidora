@@ -70,6 +70,15 @@ class CustomWidgetUpdateRequest(BaseModel):
     tags: Optional[List[str]] = None
 
 
+class GenerateCustomWidgetAiRequest(BaseModel):
+    prompt: str = Field(..., description="Описание виджета, визуальной метафоры и поведения")
+    skill_id: Optional[str] = Field(default="custom_widget_creator", description="ID скила для применения")
+    stage: Optional[str] = Field(default="widget_creation", description="Этап применения промпта")
+    engine: Optional[str] = Field(default=None, description="LLM модель для генерации")
+    category: Optional[WidgetCategory] = Field(default=WidgetCategory.CUSTOM, description="Категория виджета")
+    api_keys: Optional[Dict[str, Any]] = Field(default_factory=dict, description="API ключи провайдеров")
+
+
 class WidgetPackageExport(BaseModel):
     vidora_schema_version: str = "1.0"
     exported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -107,3 +116,20 @@ class WidgetDocsResponse(BaseModel):
     status: str = "ok"
     markdown: str
     total_widgets: int
+
+
+class WidgetPromptUpdateRequest(BaseModel):
+    example_snippet: Optional[str] = Field(None, description="Эталонный TSX вызов виджета для LLM")
+    description: Optional[str] = Field(None, description="Описание логики и назначения виджета")
+    tags: Optional[List[str]] = Field(None, description="Теги виджета")
+
+
+class WidgetCreationPromptResponse(BaseModel):
+    status: str = "ok"
+    prompt: str = Field(..., description="Текущий системный промпт создания виджетов")
+    skill_id: str = "custom_widget_creator"
+    is_custom: bool = False
+
+
+class WidgetCreationPromptUpdateRequest(BaseModel):
+    prompt: str = Field(..., description="Новый текст системного промпта для создания виджетов")

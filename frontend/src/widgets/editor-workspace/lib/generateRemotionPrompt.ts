@@ -1,5 +1,7 @@
-import { useSettingsStore, getActivePrompt, getSkillsForProcess } from '@entities/project'
+import { useSettingsStore, getActivePrompt } from '@entities/project'
 import type { ProjectSettings, Scene, SceneFragment, VideoFormat, Resolution } from '@entities/project'
+import { useSkillsStore } from '@features/settings'
+import type { SkillStage } from '@features/settings'
 import { resolveBRollVideoSrc } from './bRollSrc'
 
 const getDims = (res: Resolution, fmt: VideoFormat) => {
@@ -7,6 +9,11 @@ const getDims = (res: Resolution, fmt: VideoFormat) => {
   const long = map[res]
   const short = long * (9 / 16)
   return fmt === '16:9' ? { width: long, height: short } : { width: short, height: long }
+}
+
+const getSkillsContext = (stage: SkillStage): string => {
+  const store = useSkillsStore.getState()
+  return store.buildPromptContextForStage(stage)
 }
 
 const getBaseVars = (project: ProjectSettings) => {
@@ -123,7 +130,7 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
     ? `\n\n> ВАЖНО ДЛЯ МОНТАЖА: В этой сцене вы должны использовать <Audio src={...} startFrom={Math.round(${scene.audioOffset} * fps)} /> потому что аудиофайл является общим для всего проекта, и эта сцена начинается на ${scene.audioOffset} секунде общего файла.`
     : '';
 
-  return promptBody + bRollRules + audioOffsetInstruction + getSkillsForProcess('scene');
+  return promptBody + bRollRules + audioOffsetInstruction + getSkillsContext('scene_generation');
 }
 
 export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, fragment: SceneFragment): string => {
@@ -144,7 +151,7 @@ export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, f
     SCENE_TITLE: scene.title,
     VISUAL_NOTE: visualPrompt,
     TEXT: fragment.text || '',
-  }) + getSkillsForProcess('fragment')
+  }) + getSkillsContext('fragment')
 }
 
 export const generateProjectPrompt = (project: ProjectSettings): string => {
@@ -164,5 +171,5 @@ export const generateProjectPrompt = (project: ProjectSettings): string => {
   return replaceVars(project.promptOverrides?.project || getActivePrompt(globalPrompts.project), {
     ...getBaseVars(project),
     SCENES_LIST: scenesList
-  }) + getSkillsForProcess('project')
+  }) + getSkillsContext('project')
 }
