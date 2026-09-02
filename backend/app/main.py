@@ -13,8 +13,12 @@ from app.core.config import settings
 from app.core.database import AsyncSessionFactory, Base, engine
 from app.core.gpu import GPUManager
 from app.core.logging import add_log
+from app.core.process_supervisor import ProcessSupervisor
 from app.core.ws import ws_manager
+from app.infrastructure.ai.tts.factory import TTSProviderFactory
 from app.infrastructure.db.bootstrap import bootstrap_database
+from app.infrastructure.remotion.runner import RemotionRunner
+from app.infrastructure.youtube.http_client import DeepTrendHTTPPool
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -22,6 +26,8 @@ if sys.platform == "win32":
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- STARTUP: Job Object + добивание сирот прошлого аварийного инстанса
+    ProcessSupervisor.reconcile_startup()
     add_log("INFO", "SYSTEM", f"Сервер Vidora запущен на http://{settings.HOST}:{settings.PORT}")
     try:
         # 1. Создание структуры таблиц по ORM-моделям
@@ -34,9 +40,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         add_log("WARN", "SYSTEM", f"Сбой авто-синхронизации: {e}")
     yield
-    add_log("INFO", "SYSTEM", "Остановка сервера, очистка VRAM...")
+
+    # --- SHUTDOWN
+    add_log("INFO", "SYSTEM", "Остановка сервера: фоновые задачи, воркеры, очистка VRAM...")
+
+    # 1. Отменяем активные рендеры Remotion (graceful -> tree-kill)
+    for task_id in list(RemotionRunner._active_renders.keys()):
+        RemotionRunner.cancel(task_id)
+
+    # 2. Выгружаем все TTS/LLM-провайдеры (шлют shutdown-пакет воркерам)
+    TTSProviderFactory.unload_all()
+
+    # 3. Пристреливаем оставшиеся подпроцессы супервизором
+    ProcessSupervisor.shutdown_all(timeout=3.0)
+
+    # 4. Закрываем глобальный пул HTTP/2 клиентов (keep-alive соединения)
+    await DeepTrendHTTPPool.close()
+
+    # 5. Остаточная очистка VRAM основного процесса
     GPUManager.clean_memory()
+
+    # 6. Закрываем пул соединений с БД
     await engine.dispose()
+    add_log("INFO", "SYSTEM", "Все ресурсы и VRAM освобождены.")
 
 
 app = FastAPI(title="Vidora API", version="0.2.0", lifespan=lifespan)

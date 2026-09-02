@@ -17,6 +17,7 @@ import numpy as np
 
 from app.core.config import settings
 from app.core.gpu import GPUManager
+from app.core.process_supervisor import ProcessSupervisor
 from app.infrastructure.youtube.circuit_cache import DeepTrendCircuitCache
 from app.infrastructure.youtube.http_client import DeepTrendHTTPPool
 from app.infrastructure.youtube.innertube import InnertubeClient
@@ -75,12 +76,14 @@ class WhisperTranscriber:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                 )
+                ProcessSupervisor.register(yt_proc, name="ytdlp_extract")
                 ff_proc = subprocess.Popen(
                     ["ffmpeg", "-y", "-loglevel", "error", "-i", "pipe:0", "-vn", "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"],
                     stdin=yt_proc.stdout,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                 )
+                ProcessSupervisor.register(ff_proc, name="ytdlp_ffmpeg_pcm")
                 raw_audio, _ = ff_proc.communicate(timeout=timeout)
                 try:
                     yt_proc.wait(timeout=5.0)
@@ -96,6 +99,8 @@ class WhisperTranscriber:
                             p.kill()
                         except Exception:
                             pass
+                ProcessSupervisor.unregister(ff_proc) if ff_proc else None
+                ProcessSupervisor.unregister(yt_proc) if yt_proc else None
 
         raw_audio = await asyncio.to_thread(_extract_sync)
         if not raw_audio or len(raw_audio) < 32000:
@@ -160,6 +165,7 @@ class WhisperTranscriber:
                 return None
 
             def _decode_sync(content: bytes) -> Optional[bytes]:
+                process = None
                 try:
                     process = subprocess.Popen(
                         ["ffmpeg", "-y", "-err_detect", "ignore_err", "-f", "webm", "-i", "pipe:0", "-vn", "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"],
@@ -167,10 +173,14 @@ class WhisperTranscriber:
                         stdout=subprocess.PIPE,
                         stderr=subprocess.DEVNULL,
                     )
+                    ProcessSupervisor.register(process, name="ytdlp_byterange_ffmpeg")
                     stdout, _ = process.communicate(input=content, timeout=timeout)
                     return stdout
                 except Exception:
                     return None
+                finally:
+                    if process is not None:
+                        ProcessSupervisor.unregister(process)
 
             stdout = await asyncio.to_thread(_decode_sync, res.content)
             return _pcm16_to_float32(stdout) if stdout else None

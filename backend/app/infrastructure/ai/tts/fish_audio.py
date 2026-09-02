@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 
 from app.core.config import settings
+from app.core.process_supervisor import ProcessSupervisor
 from app.infrastructure.ai.tts.base import BaseTTSProvider
 from app.utils.audio_utils import to_s2_text
 
@@ -117,6 +118,7 @@ class FishAudioS2Provider(BaseTTSProvider):
         with open(cfg_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False)
         cls._proc = subprocess.Popen([exe, "--config", cfg_path])
+        ProcessSupervisor.register(cls._proc, name="FishAudioS2_audiocpp")
         cls._base_url = f"http://127.0.0.1:{port}"
         deadline = time.time() + 600
         while time.time() < deadline:
@@ -129,6 +131,8 @@ class FishAudioS2Provider(BaseTTSProvider):
             except httpx.HTTPError:
                 pass
             time.sleep(1.0)
+        ProcessSupervisor.stop_process(cls._proc, timeout=4.0)
+        cls._proc = None
         raise RuntimeError("[FishAudioS2] audiocpp_server не поднялся за 10 минут")
 
     @classmethod
@@ -136,12 +140,8 @@ class FishAudioS2Provider(BaseTTSProvider):
         proc = cls._proc
         cls._proc = None
         cls._base_url = None
-        if proc and proc.poll() is None:
-            try:
-                proc.terminate()
-                proc.wait(timeout=10)
-            except Exception:
-                proc.kill()
+        if proc:
+            ProcessSupervisor.stop_process(proc, timeout=4.0)
 
     async def generate_tts(self, text: str, voice_model: str, **kwargs) -> None:
         loop = asyncio.get_running_loop()

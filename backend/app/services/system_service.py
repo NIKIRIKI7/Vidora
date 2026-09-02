@@ -8,6 +8,7 @@ import psutil
 import torch
 
 from app.core.logging import add_log, get_all_logs
+from app.core.process_supervisor import ProcessSupervisor
 from app.domain.schemas.code import SaveRevisionRequest
 from app.domain.schemas.system import PullRequest
 from app.domain.skills.models import SkillCreate, SkillItem, SkillStage, SkillUpdate
@@ -110,8 +111,12 @@ class SystemService:
         return {"status": "ok", "skills": skills}
 
     def pull_model(self, req: PullRequest) -> None:
+        def _spawn(cmd, name: str) -> None:
+            proc = subprocess.Popen(cmd)
+            ProcessSupervisor.register(proc, name=name)
+
         if req.engine == "ollama":
-            subprocess.Popen(["ollama", "pull", "qwen2.5-coder"])
+            _spawn(["ollama", "pull", "qwen2.5-coder"], "ModelDownload_ollama")
         elif req.engine == "silero":
             torch.hub.load(
                 repo_or_dir="snakers4/silero-models",
@@ -121,8 +126,9 @@ class SystemService:
             )
         elif "/" in req.engine:
             try:
-                subprocess.Popen(["huggingface-cli", "download", req.engine])
+                _spawn(["huggingface-cli", "download", req.engine], f"ModelDownload_{req.engine}")
             except FileNotFoundError:
-                subprocess.Popen([sys.executable, "-m", "huggingface_hub", "download", req.engine])
+                _spawn([sys.executable, "-m", "huggingface_hub", "download", req.engine],
+                       f"ModelDownload_{req.engine}")
         else:
-            subprocess.Popen(["ollama", "pull", req.engine])
+            _spawn(["ollama", "pull", req.engine], f"ModelDownload_{req.engine}")

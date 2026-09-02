@@ -1,39 +1,18 @@
-from enum import Enum
-from typing import Any, Dict, List, Optional
+"""Схемы системного API.
+
+Единый источник истины по скилам — доменные модели app.domain.skills.models.
+Здесь SkillItem/SkillStage только реэкспортируются (Single Source of Truth), без дублирования.
+"""
+
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
-
-class SkillStage(str, Enum):
-    SCENE_GENERATION = "scene_generation"
-    PROJECT = "project"
-    FRAGMENT = "fragment"
-    TTS = "tts"
-    SCRIPT_DRAFTING = "script_drafting"
-    HOOK_ANALYSIS = "hook_analysis"
-    GENERAL = "general"
+from app.domain.skills.models import SkillItem, SkillStage  # noqa: F401
 
 
 class PullRequest(BaseModel):
     engine: str
-
-
-class SkillItem(BaseModel):
-    id: str = Field(..., description="Уникальный идентификатор скила")
-    title: str = Field(..., description="Название скила")
-    category: str = Field(default="general", description="Категория скила (motion, text, audio, styling)")
-    stage: str = Field(
-        default=SkillStage.SCENE_GENERATION.value,
-        description="Этап пайплайна, на котором активируется скил",
-    )
-    processes: List[str] = Field(
-        default_factory=lambda: ["scene", "project"],
-        description="Список ID процессов пайплайна для совместимости",
-    )
-    priority: int = Field(default=4, ge=1, le=5, description="Приоритет (1–5)")
-    enabled: bool = Field(default=True, description="Активен ли скил")
-    is_custom: bool = Field(default=False, description="Флаг пользовательского редактирования")
-    description: str = Field(..., description="Краткое описание назначения")
-    content: str = Field(..., description="Полный текст системного промпта")
 
 
 class SkillListResponse(BaseModel):

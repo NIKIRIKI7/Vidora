@@ -12,6 +12,7 @@ from app.domain.schemas.render import ExportRequest, RenderRequest, VideoConcatR
 from app.infrastructure.remotion.runner import RemotionRunner
 from app.infrastructure.storage.path_resolver import PathResolver
 from app.services.render_service import RenderService
+from app.services.render_task_manager import RenderTaskManager
 
 router = APIRouter(prefix="/render", tags=["Render Pipeline"])
 
@@ -23,13 +24,26 @@ async def start_render(
         service: RenderService = Depends(get_render_service),
 ) -> dict:
     task_id = f"render_{os.urandom(4).hex()}"
+    RenderTaskManager.set_status(
+        task_id, "queued", 0, target_id=req.target_id, target=req.target
+    )
     bg.add_task(service.execute_render_pipeline, task_id, req)
     return {"task_id": task_id}
+
+
+@router.get("/status/{task_id}")
+async def render_status(task_id: str) -> dict:
+    status = RenderTaskManager.get(task_id)
+    if not status:
+        raise ResourceNotFoundError(f"Задача рендера не найдена или истёк TTL: {task_id}")
+    return status
 
 
 @router.post("/cancel/{task_id}")
 async def cancel_render(task_id: str) -> dict:
     cancelled = RemotionRunner.cancel(task_id)
+    if cancelled:
+        RenderTaskManager.set_status(task_id, "cancelled", 100)
     return {"status": "ok" if cancelled else "not_found"}
 
 

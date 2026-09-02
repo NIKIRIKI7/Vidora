@@ -1,6 +1,7 @@
-"""Модуль forced-alignment таймингов фрагментов через WhisperX."""
+"""Модуль word-level распознавания (faster-whisper) и выравнивания таймингов фрагментов."""
 
 import difflib
+import gc
 import time
 from typing import Any, Dict, List, Optional
 
@@ -12,28 +13,106 @@ from app.utils.audio_utils import normalize_words
 class WhisperModelCache:
     _model = None
     _model_name: Optional[str] = None
+    _engine: Optional[str] = None
     _last_used: float = 0.0
 
     @classmethod
     def get_model(cls, model_name: str):
-        import whisperx, torch
-
         cls._last_used = time.time()
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        compute_type = "float16" if device == "cuda" else "int8"
-
         if cls._model is not None and cls._model_name == model_name:
-            return cls._model
+            return cls._model, cls._engine
 
         cls.unload()
         cls._model_name = model_name
-        cls._model = whisperx.load_model(
-            model_name,
-            device=device,
-            compute_type=compute_type,
-            download_root=str(settings.AI_MODELS_DIR),
-        )
-        return cls._model
+
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
+
+        # Приоритет 1: faster-whisper (CTranslate2 — стандарт проекта, чистые wheels под Windows)
+        try:
+            from faster_whisper import WhisperModel
+            cls._model = WhisperModel(
+                model_name,
+                device=device,
+                compute_type=compute_type,
+                download_root=str(settings.AI_MODELS_DIR),
+            )
+            cls._engine = "faster-whisper"
+            return cls._model, cls._engine
+        except ImportError:
+            pass
+
+        # Приоритет 2: whisperx (только если случайно установлен в окружении)
+        try:
+            import whisperx
+            cls._model = whisperx.load_model(
+                model_name,
+                device=device,
+                compute_type=compute_type,
+                download_root=str(settings.AI_MODELS_DIR),
+            )
+            cls._engine = "whisperx"
+            return cls._model, cls._engine
+        except ImportError:
+            raise ImportError(
+                "Движок транскрипции не найден. Установите faster-whisper: pip install faster-whisper"
+            )
+
+    @classmethod
+    def transcribe_words(
+        cls, audio_path: str, model_name: str = "small", language: str = "ru"
+    ) -> List[Dict[str, Any]]:
+        """Возвращает слова с таймингами [{'word', 'start', 'end'}]."""
+        model, engine = cls.get_model(model_name)
+        cls.touch()
+        reco: List[Dict[str, Any]] = []
+
+        if engine == "faster-whisper":
+            segments, _ = model.transcribe(
+                str(audio_path),
+                word_timestamps=True,
+                language=language,
+                vad_filter=True,
+            )
+            for seg in segments:
+                if hasattr(seg, "words") and seg.words:
+                    for w in seg.words:
+                        if w.start is not None and w.end is not None:
+                            reco.append({"word": w.word, "start": float(w.start), "end": float(w.end)})
+        elif engine == "whisperx":
+            import whisperx
+            audio_arr = whisperx.load_audio(str(audio_path))
+            res = model.transcribe(audio_arr, batch_size=8, language=language)
+            for seg in res.get("segments", []):
+                for w in seg.get("words", []):
+                    if "start" in w and "end" in w:
+                        reco.append({"word": w.get("word", ""), "start": float(w["start"]), "end": float(w["end"])})
+
+        return reco
+
+    @classmethod
+    def transcribe_text(
+        cls, audio_path: str, model_name: str = "small", language: str = "ru"
+    ) -> str:
+        """Возвращает сплошной текст транскрипции аудиофайла."""
+        model, engine = cls.get_model(model_name)
+        cls.touch()
+
+        if engine == "faster-whisper":
+            segments, _ = model.transcribe(
+                str(audio_path),
+                language=language,
+                vad_filter=True,
+            )
+            return " ".join(seg.text.strip() for seg in segments if seg.text).strip()
+        elif engine == "whisperx":
+            import whisperx
+            audio_arr = whisperx.load_audio(str(audio_path))
+            res = model.transcribe(audio_arr, batch_size=8, language=language)
+            return " ".join(seg.get("text", "").strip() for seg in res.get("segments", [])).strip()
+
+        return ""
 
     @classmethod
     def touch(cls) -> None:
@@ -43,14 +122,16 @@ class WhisperModelCache:
     def unload(cls) -> None:
         if cls._model is not None:
             del cls._model
-            cls._model = None
-            cls._model_name = None
-            import gc
+        cls._model = None
+        cls._model_name = None
+        cls._engine = None
+        gc.collect()
+        try:
             import torch
-
-            gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+        except ImportError:
+            pass
 
 
 def align_fragments_globally(

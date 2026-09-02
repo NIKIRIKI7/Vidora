@@ -1,4 +1,4 @@
-"""Сервис синтеза речи, выравнивания таймингов (WhisperX) и постобработки аудио."""
+"""Сервис синтеза речи, выравнивания таймингов (faster-whisper) и постобработки аудио."""
 
 import asyncio
 import os
@@ -14,7 +14,11 @@ from app.core.config import settings
 from app.core.gpu import GPUManager
 from app.core.logging import add_log
 from app.core.ws import ws_manager
-from app.domain.exceptions import ResourceNotFoundError, VidoraException
+from app.domain.exceptions import (
+    ProviderExecutionError,
+    ResourceNotFoundError,
+    VidoraException,
+)
 from app.domain.schemas.audio import (
     AudioGenerationRequest,
     AudioSyncRequest,
@@ -172,16 +176,11 @@ class AudioService:
 
         try:
             def _align_sync():
-                import whisperx
-                model = WhisperModelCache.get_model(request.whisper_model)
-                audio_arr = whisperx.load_audio(str(audio_path))
-                res = model.transcribe(audio_arr, batch_size=8, language="ru")
-                reco = [
-                    w for seg in res.get("segments", [])
-                    for w in seg.get("words", [])
-                    if "start" in w and "end" in w
-                ]
-                WhisperModelCache.touch()
+                reco = WhisperModelCache.transcribe_words(
+                    str(audio_path),
+                    model_name=request.whisper_model,
+                    language="ru",
+                )
                 return align_fragments_globally(request.fragments, reco, audio_dur)
 
             timings = await asyncio.to_thread(_align_sync)
@@ -329,12 +328,14 @@ class AudioService:
             raise ResourceNotFoundError(f"Файл не найден: {audio_path_str}")
 
         def _transcribe():
-            import whisperx
-            model = WhisperModelCache.get_model(whisper_model)
-            audio = whisperx.load_audio(str(resolved))
-            res = model.transcribe(audio, batch_size=8, language="ru")
-            WhisperModelCache.touch()
-            return " ".join([seg["text"].strip() for seg in res.get("segments", [])]).strip()
+            try:
+                return WhisperModelCache.transcribe_text(
+                    str(resolved),
+                    model_name=whisper_model,
+                    language="ru",
+                )
+            except Exception as e:
+                raise ProviderExecutionError(f"Ошибка транскрипции Whisper: {e}")
 
         return await asyncio.to_thread(_transcribe)
 

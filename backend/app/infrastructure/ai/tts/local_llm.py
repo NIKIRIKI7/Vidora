@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.process_supervisor import ProcessSupervisor
 from app.infrastructure.ai.tts.base import BaseTTSProvider
 from app.utils.audio_utils import clean_voice_tags
 
@@ -57,13 +58,12 @@ class LocalLLMTTSProvider(BaseTTSProvider):
     @classmethod
     def unload_model(cls):
         for key, proc in list(cls._procs.items()):
-            if proc and proc.poll() is None:
-                try:
-                    proc.stdin.write('{"shutdown": true}\n')
-                    proc.stdin.flush()
-                    proc.wait(timeout=5)
-                except Exception:
-                    proc.kill()
+            if proc:
+                ProcessSupervisor.stop_process(
+                    proc,
+                    shutdown_cmd='{"shutdown": true}\n',
+                    timeout=3.0,
+                )
         cls._procs.clear()
 
     def _get_worker_proc(self):
@@ -80,7 +80,14 @@ class LocalLLMTTSProvider(BaseTTSProvider):
         )
         line = new_proc.stdout.readline().strip()
         if line != "READY":
+            ProcessSupervisor.stop_process(new_proc, timeout=1.0)
             raise RuntimeError(f"[{self.engine}] Worker failed to start: {line}")
+
+        ProcessSupervisor.register(
+            new_proc,
+            name=f"LocalLLM_TTS_{self.engine}",
+            shutdown_cmd='{"shutdown": true}\n',
+        )
         self._procs[key] = new_proc
         return new_proc
 

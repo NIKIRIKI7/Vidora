@@ -1,10 +1,12 @@
 fastapi>=0.115.0
 uvicorn>=0.32.0
+websockets
 sqlalchemy>=2.0.0
 aiosqlite>=0.20.0
 alembic>=1.13.0
 python-multipart>=0.0.12
 python-dotenv>=1.0.0
+pydantic-settings>=2.0.0
 openai>=1.40.0
 llama-cpp-python
 yt-dlp

@@ -1,18 +1,45 @@
 import os
 import re
 from pathlib import Path
+from typing import Optional
+
 from app.core.config import settings
 
 
-def sanitize_tsx_for_missing_assets(tsx_code: str) -> str:
+def namespace_static_file_paths(tsx_code: str, task_id: str) -> str:
+    """Префиксует все staticFile-пути префиксом jobs/{task_id}/ для изоляции ассетов задачи."""
+    if not tsx_code or not task_id:
+        return tsx_code
+
+    prefix = f"jobs/{task_id}"
+
+    def _repl(match):
+        raw = match.group(1).strip()
+        clean = raw.lstrip("/\\")
+        if not clean or clean.startswith(f"jobs/"):
+            return match.group(0)
+        return f'staticFile("{prefix}/{clean}")'
+
+    return re.sub(
+        r"staticFile\(\s*['\"]([^'\"]+)['\"]\s*\)",
+        _repl,
+        tsx_code,
+        flags=re.DOTALL,
+    )
+
+
+def sanitize_tsx_for_missing_assets(
+    tsx_code: str, public_dir: Optional[Path] = None
+) -> str:
     """
     1. Заменяет несуществующие локальные видео/ассеты на безопасный моушн-плейсхолдер.
+    public_dir — корень public-директории Remotion (учитывает namespacing по задачам).
     """
     if not tsx_code:
         return tsx_code
 
     sanitized = tsx_code
-    remo_public_dir = settings.REMOTION_DIR / "public"
+    remo_public_dir = public_dir or (settings.REMOTION_DIR / "public")
 
     # 1. Защита от отсутствующих B-Roll файлов
     def replace_missing(match):
@@ -37,5 +64,5 @@ def sanitize_tsx_for_missing_assets(tsx_code: str) -> str:
 
     pattern_video = r'<Video[^>]*src=\{\s*staticFile\(\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}[^>]*\/>'
     sanitized = re.sub(pattern_video, replace_missing, sanitized, flags=re.DOTALL)
-    
+
     return sanitized

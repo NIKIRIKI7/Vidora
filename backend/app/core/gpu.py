@@ -1,11 +1,13 @@
 """Межпроцессный и асинхронный менеджер захвата GPU и очистки VRAM."""
 
-import os
-import gc
-import time
 import asyncio
-from pathlib import Path
+import gc
+import os
+import threading
+import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Optional
 
 from app.core.config import settings
 
@@ -13,24 +15,48 @@ from app.core.config import settings
 class GPUManager:
     """Управляет эксклюзивным доступом к видеокарте между всеми процессами сервера.
 
-    Двухуровневый мьютекс: asyncio.Lock координирует корутины внутри процесса,
-    атомарный lock-файл (O_CREAT|O_EXCL) блокирует доступ между процессами Uvicorn.
+    Синхронизация разнесена на три независимых контура:
+    1. Межпроцессный (OS): атомарный lock-файл (O_CREAT|O_EXCL) блокирует другие процессы.
+    2. Внутри цикла событий: ленивый asyncio.Lock, привязанный к текущему running loop.
+       При смене цикла (pytest, рестарт воркера, смена политики Proactor) локер пересоздаётся.
+    3. Межпоточный: threading.Lock защищает класс-состояние и очистку VRAM из пулов потоков.
+
+    Ни один asyncio-примитив не создаётся на этапе import — это устраняет
+    "attached to a different loop" при смене политики event loop.
     """
 
-    _async_lock = asyncio.Lock()
     _lock_file: Path = settings.DATA_STORAGE_DIR / "vidora_gpu.lock"
+
+    _async_lock: Optional[asyncio.Lock] = None
+    _loop: Optional[asyncio.AbstractEventLoop] = None
+    _thread_lock = threading.Lock()
 
     @classmethod
     def clean_memory(cls) -> None:
-        """Принудительная очистка VRAM и вызов сборщика мусора."""
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
-        except ImportError:
-            pass
-        gc.collect()
+        """Принудительная очистка VRAM и вызов сборщика мусора (потокобезопасно)."""
+        with cls._thread_lock:
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+            except ImportError:
+                pass
+            gc.collect()
+
+    @classmethod
+    def _get_async_lock(cls) -> asyncio.Lock:
+        """Лениво возвращает asyncio.Lock, привязанный к текущему running loop.
+
+        Если loop сменился (новый тест pytest, реинициализация цикла) —
+        старый локер безопасно отбрасывается и создаётся под актуальный loop.
+        """
+        current_loop = asyncio.get_running_loop()
+        with cls._thread_lock:
+            if cls._async_lock is None or cls._loop is not current_loop:
+                cls._async_lock = asyncio.Lock()
+                cls._loop = current_loop
+            return cls._async_lock
 
     @classmethod
     def _acquire_file_lock(cls) -> bool:
@@ -99,14 +125,15 @@ class GPUManager:
     @classmethod
     async def acquire_gpu(cls, timeout: float = 180.0) -> None:
         """Захватывает GPU: внутри процесса asyncio, между процессами — lock-файл."""
-        await cls._async_lock.acquire()
+        lock = cls._get_async_lock()
+        await lock.acquire()
         start_time = time.time()
 
         while True:
             if cls._acquire_file_lock():
                 break
             if time.time() - start_time > timeout:
-                cls._async_lock.release()
+                lock.release()
                 raise TimeoutError(f"Превышено время ожидания захвата GPU ({timeout}s)")
             await asyncio.sleep(0.1)
 
@@ -114,13 +141,40 @@ class GPUManager:
 
     @classmethod
     def release_gpu(cls) -> None:
-        """Освобождает GPU замок для всех процессов и очищает память."""
+        """Освобождает GPU замок для всех процессов и очищает память.
+
+        Безопасен при вызове из корутины, из пула потоков (run_in_executor)
+        и после завершения event loop (тесты): release доставляется в цикл
+        через call_soon_threadsafe, когда текущий поток не владеет циклом.
+        """
         try:
             cls.clean_memory()
         finally:
             cls._release_file_lock()
-            if cls._async_lock.locked():
-                cls._async_lock.release()
+
+            with cls._thread_lock:
+                lock = cls._async_lock
+                loop = cls._loop
+                cls._async_lock = None
+                cls._loop = None
+
+            if lock is None or not lock.locked():
+                return
+
+            try:
+                current_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                current_loop = None
+
+            if current_loop is loop and loop is not None and loop.is_running():
+                lock.release()
+            elif loop is not None and loop.is_running():
+                loop.call_soon_threadsafe(lock.release)
+            else:
+                try:
+                    lock.release()
+                except RuntimeError:
+                    pass
 
     @classmethod
     @asynccontextmanager

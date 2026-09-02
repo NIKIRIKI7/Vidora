@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.config import settings
+from app.core.process_supervisor import ProcessSupervisor
 from app.domain.exceptions import ProviderExecutionError
 from app.infrastructure.ai.tts.base import BaseTTSProvider
 from app.utils.audio_utils import extract_instruct_tag, clean_voice_tags
@@ -88,13 +89,12 @@ class CosyVoiceProvider(BaseTTSProvider):
     def unload_model(cls) -> None:
         proc = cls._proc
         cls._proc = None
-        if proc and proc.poll() is None:
-            try:
-                proc.stdin.write('{"shutdown": true}\n')
-                proc.stdin.flush()
-                proc.wait(timeout=5)
-            except Exception:
-                proc.kill()
+        if proc:
+            ProcessSupervisor.stop_process(
+                proc,
+                shutdown_cmd='{"shutdown": true}\n',
+                timeout=4.0,
+            )
 
     @classmethod
     def _get_worker(cls) -> subprocess.Popen:
@@ -119,12 +119,23 @@ class CosyVoiceProvider(BaseTTSProvider):
             bufsize=1,
             env=env,
         )
+        ProcessSupervisor.register(
+            cls._proc,
+            name="CosyVoice_Worker",
+            shutdown_cmd='{"shutdown": true}\n',
+        )
 
         while True:
             line = cls._proc.stdout.readline().strip()
             if line == "READY":
                 break
             if not line:
+                ProcessSupervisor.stop_process(
+                    cls._proc,
+                    shutdown_cmd='{"shutdown": true}\n',
+                    timeout=2.0,
+                )
+                cls._proc = None
                 raise ProviderExecutionError("CosyVoice worker аварийно завершился при старте")
 
         return cls._proc
