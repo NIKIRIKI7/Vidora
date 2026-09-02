@@ -63,7 +63,7 @@ def save_revision(
 @router.get("/skills", response_model=List[SkillItem])
 async def get_skills(
     process: Optional[str] = Query(None, description="Фильтр по процессу/стадии пайплайна"),
-    stage: Optional[SkillStage] = Query(None, description="Фильтр по стадии (widget_creation, scene_generation и т.д.)"),
+    stage: Optional[SkillStage] = Query(None, description="Фильтр по стадии (scene_generation, tts и т.д.)"),
     service: SystemService = Depends(get_system_service),
 ) -> List[SkillItem]:
     skills_data = await service.list_skills(process=process, stage=stage.value if stage else None)

@@ -3,7 +3,6 @@ import { EditorWorkspace, YoutubeIdeasView } from '@widgets/editor-workspace'
 import { ScenarioBuilder } from '@widgets/scenario-builder'
 import { GlobalSettingsView } from '@widgets/global-settings'
 import { AudioHubView } from '@widgets/audio-hub'
-import { MotionStudioView } from '@widgets/motion-studio'
 import { DashboardView } from '@widgets/dashboard'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { useSkillsStore } from '@features/settings'
@@ -11,7 +10,7 @@ import { Spinner } from '@shared/ui'
 import { API } from '@shared/lib'
 import { CircleCheckBig, TriangleAlert, Info, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 
-type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub' | 'studio'
+type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
 
 const NotificationToast = ({ notification }: { notification: { message: string; type: 'success' | 'error' | 'info'; details?: string } }) => {
   const [showDetails, setShowDetails] = useState(false)
@@ -157,8 +156,6 @@ export const MainPage = () => {
         />
       ) : view === 'audio-hub' ? (
         <AudioHubView onBack={() => setView('hub')} />
-      ) : view === 'studio' ? (
-        <MotionStudioView onBack={() => setView('hub')} />
       ) : (
         <DashboardView
           onOpenTrends={() => setView('ideas')}

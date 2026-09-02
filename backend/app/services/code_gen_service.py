@@ -1,25 +1,15 @@
 """Сервис генерации и версионирования Remotion TSX компонентов."""
 
-import json
-import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from app.core.logging import add_log
-from app.domain.exceptions import ProviderExecutionError, ResourceNotFoundError, ValidationDomainError
+from app.domain.exceptions import ProviderExecutionError, ResourceNotFoundError
 from app.domain.schemas.code import CodeGenerationRequest, SaveRevisionRequest
-from app.domain.schemas.widgets import (
-    CustomWidgetCreateRequest,
-    GenerateCustomWidgetAiRequest,
-    WidgetCategory,
-    WidgetMetadata,
-    WidgetPackageExport,
-)
 from app.domain.skills.models import SkillStage
 from app.domain.skills.prompt_builder import build_prompt_from_db_skills
 from app.infrastructure.ai.llm.gateway import LLMGateway
 from app.infrastructure.ai.llm.tsx_parser import extract_tsx
-from app.infrastructure.remotion.widgets_registry import WidgetRegistry
 from app.infrastructure.skills.repository import SqliteSkillsRepository
 from app.infrastructure.storage.code_history_repo import CodeHistoryRepository
 from app.infrastructure.storage.path_resolver import PathResolver
@@ -42,7 +32,6 @@ class CodeGenService:
         user_prompt: str,
         project_data: Optional[Dict[str, Any]],
     ) -> Tuple[str, str]:
-        widgets_context = WidgetRegistry.generate_llm_system_prompt_context()
         if self.skills_repo:
             skills = await self.skills_repo.list_all(
                 stage=SkillStage.SCENE_GENERATION, is_active=True
@@ -53,7 +42,6 @@ class CodeGenService:
         system_prompt = (
             "You are an Elite Remotion React TSX Motion Graphics Generator.\n"
             f"{skills_context}\n\n"
-            f"{widgets_context}\n\n"
             "CRITICAL: Output ONLY valid, compile-ready TSX code inside a single ```tsx ... ``` markdown block. "
             "Never write introductory comments or explanations."
         )
@@ -112,78 +100,6 @@ class CodeGenService:
             raise ProviderExecutionError("Не удалось извлечь TSX блок из ответа модели")
         return tsx_code
 
-    async def generate_ai_custom_widget(
-        self, req: GenerateCustomWidgetAiRequest
-    ) -> WidgetMetadata:
-        gateway = LLMGateway(req.api_keys) if req.api_keys else self.llm_gateway
-        if self.skills_repo:
-            skills = await self.skills_repo.list_all(is_active=True)
-            stage_enum = (
-                SkillStage(req.stage)
-                if req.stage and req.stage in SkillStage._value2member_map_
-                else SkillStage.WIDGET_CREATION
-            )
-            skill_ctx = build_prompt_from_db_skills(
-                skills,
-                stage=stage_enum,
-                specific_skill_id=req.skill_id or "custom_widget_creator",
-            )
-        else:
-            skill_ctx = ""
-
-        system_prompt = (
-            f"{skill_ctx}\n\n"
-            "CRITICAL FORMAT REQUIREMENT:\n"
-            "Output ONLY valid JSON matching the WidgetPackageExport schema with 1 widget in the 'widgets' array. "
-            "No preambles, no conversational filler."
-        )
-
-        user_prompt = (
-            f"DESIGN & ANIMATION SPECIFICATION:\n{req.prompt.strip()}\n\n"
-            f"Category: {req.category.value if req.category else 'custom'}\n"
-            "Ensure full 3-phase dynamics (Entrance, Sustain loop, Outro) and 100% parameterization."
-        )
-
-        raw_response = await gateway.generate_text(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            engine=req.engine or "gemma3:4b",
-            json_mode=True,
-            max_tokens=4096,
-        )
-        if not raw_response:
-            raise ProviderExecutionError("LLM не вернула результат для генерации виджета")
-
-        clean_json = raw_response.strip()
-        match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean_json, re.DOTALL)
-        if match:
-            clean_json = match.group(1).strip()
-        start = clean_json.find("{")
-        end = clean_json.rfind("}")
-        if start != -1 and end > start:
-            clean_json = clean_json[start : end + 1]
-
-        try:
-            parsed = json.loads(clean_json)
-        except Exception as e:
-            raise ValidationDomainError(f"Сбой парсинга JSON ответа модели: {e}\nОтвет: {clean_json[:200]}")
-
-        target_widget_dict = None
-        if "widgets" in parsed and isinstance(parsed["widgets"], list) and len(parsed["widgets"]) > 0:
-            target_widget_dict = parsed["widgets"][0]
-        elif "id" in parsed and "tsx_code" in parsed:
-            target_widget_dict = parsed
-        else:
-            raise ValidationDomainError("JSON от модели не содержит схемы виджета или массив 'widgets'.")
-
-        create_req = CustomWidgetCreateRequest.model_validate(target_widget_dict)
-        if req.category:
-            create_req.category = req.category
-
-        created_meta = WidgetRegistry.create_custom_widget(create_req)
-        add_log("INFO", "CODE_GEN", f"AI успешно создал кастомный виджет '{created_meta.id}'")
-        return created_meta
-
     def save_code_to_project(
         self,
         project_path: str,
@@ -226,12 +142,3 @@ class CodeGenService:
             tsx_code=req.tsx_code,
             prompt=req.prompt,
         )
-
-    def get_widget_catalog(self) -> List[WidgetMetadata]:
-        return WidgetRegistry.get_all_widgets()
-
-    def get_widget_detail(self, widget_id: str) -> Optional[WidgetMetadata]:
-        return WidgetRegistry.get_widget(widget_id)
-
-    def get_widgets_documentation(self) -> str:
-        return WidgetRegistry.generate_markdown_documentation()

@@ -15,7 +15,6 @@ from app.core.gpu import GPUManager
 from app.core.logging import add_log
 from app.core.ws import ws_manager
 from app.infrastructure.db.bootstrap import bootstrap_database
-from app.infrastructure.remotion.widgets_registry import WidgetRegistry
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -28,11 +27,10 @@ async def lifespan(app: FastAPI):
         # 1. Создание структуры таблиц по ORM-моделям
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        # 2. Наполнение БД промптами из data/seeds + миграция legacy
+        # 2. Идемпотентная синхронизация скилов со skills_seed.json (seed + дозаливка + санитизация)
         async with AsyncSessionFactory() as session:
             async with session.begin():
                 await bootstrap_database(session)
-        WidgetRegistry.sync_filesystem()
     except Exception as e:
         add_log("WARN", "SYSTEM", f"Сбой авто-синхронизации: {e}")
     yield

@@ -8,7 +8,6 @@ import {
   useDashboardStore,
 } from '@features/dashboard'
 import type { StudioModuleId } from '@features/dashboard'
-import { MotionStudioView } from '@widgets/motion-studio'
 
 interface Props {
   onOpenTrends: () => void
@@ -17,21 +16,16 @@ interface Props {
 }
 
 export const DashboardView: React.FC<Props> = ({ onOpenTrends, onOpenScript, onOpenAudio }) => {
-  const { currentView, fetchDashboardData, setCurrentView } = useDashboardStore()
+  const { fetchDashboardData } = useDashboardStore()
 
   useEffect(() => {
     fetchDashboardData()
   }, [fetchDashboardData])
 
-  if (currentView === 'motion_studio') {
-    return <MotionStudioView onBack={() => setCurrentView('dashboard')} />
-  }
-
   const handleModuleNavigate = (module: StudioModuleId) => {
     if (module === 'trend_agent') onOpenTrends()
     else if (module === 'script_lab') onOpenScript()
     else if (module === 'voice_lab') onOpenAudio()
-    else if (module === 'motion_studio') setCurrentView('motion_studio')
   }
 
   return (
@@ -41,7 +35,7 @@ export const DashboardView: React.FC<Props> = ({ onOpenTrends, onOpenScript, onO
 
       {/* Основной контент студии */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-10">
-        {/* 2. Студийный Launchpad: Создание проекта + 4 модуля */}
+        {/* 2. Студийный Launchpad: Создание проекта + 3 модуля */}
         <StudioLaunchpad onNavigate={handleModuleNavigate} />
 
         {/* 3. Центр проектов: фильтры, поиск, карточки */}

@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SkillStage(str, Enum):
     SCENE_GENERATION = "scene_generation"
-    WIDGET_CREATION = "widget_creation"
     PROJECT = "project"
     FRAGMENT = "fragment"
     TTS = "tts"

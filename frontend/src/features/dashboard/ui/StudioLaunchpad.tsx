@@ -5,20 +5,19 @@ import {
   Mic,
   Monitor,
   Smartphone,
-  Sparkles,
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useDashboardStore } from '../model/useDashboardStore'
 
-export type StudioModuleId = 'trend_agent' | 'script_lab' | 'voice_lab' | 'motion_studio'
+export type StudioModuleId = 'trend_agent' | 'script_lab' | 'voice_lab'
 
 interface Props {
   onNavigate?: (module: StudioModuleId) => void
 }
 
 export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
-  const { openModal, setCurrentView } = useDashboardStore()
+  const { openModal } = useDashboardStore()
 
   const MODULES: {
     id: StudioModuleId
@@ -64,17 +63,6 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
       tagColor: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
       onClick: () => (onNavigate ? onNavigate('voice_lab') : openModal('voice_lab')),
     },
-    {
-      id: 'motion_studio',
-      name: 'Motion Studio',
-      badge: 'Виджеты',
-      description: 'Интерактивная песочница Remotion-компонентов, настройка пропсов и экспорт/импорт.',
-      icon: Sparkles,
-      iconColor: 'text-sky-400',
-      bgGlow: 'hover:border-sky-500/40 hover:shadow-sky-500/10',
-      tagColor: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
-      onClick: () => setCurrentView('motion_studio'),
-    },
   ]
 
   return (
@@ -112,7 +100,7 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {MODULES.map((mod) => {
           const Icon = mod.icon
           return (

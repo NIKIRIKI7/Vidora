@@ -4,13 +4,13 @@ from pydantic import BaseModel, Field
 
 
 class SkillStage(str, Enum):
-    WIDGET_CREATION = "widget_creation"
     SCENE_GENERATION = "scene_generation"
-    FRAGMENT_STYLING = "fragment_styling"
-    TTS_DIRECTING = "tts_directing"
+    PROJECT = "project"
+    FRAGMENT = "fragment"
+    TTS = "tts"
     SCRIPT_DRAFTING = "script_drafting"
     HOOK_ANALYSIS = "hook_analysis"
-    PROJECT_ASSEMBLY = "project_assembly"
+    GENERAL = "general"
 
 
 class PullRequest(BaseModel):

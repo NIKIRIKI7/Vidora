@@ -2,7 +2,6 @@ import { API } from '@shared/lib'
 
 export type SkillStage =
   | 'scene_generation'
-  | 'widget_creation'
   | 'project'
   | 'fragment'
   | 'tts'
