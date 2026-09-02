@@ -4,14 +4,30 @@ import type { FPS, ProjectSettings } from '@entities/project'
 import { dashboardApi } from '../api/dashboardApi'
 import type { GlobalSettings, HardwareInfo, ProjectCreatePayload, ProjectItem } from '../types'
 
+const calculateProjectDuration = (p: ProjectSettings): number => {
+  let totalSec = 0
+  for (const s of p.scenes) {
+    const syncedMax = Math.max(...(s.fragments || []).map((f) => f.endTime || 0), 0)
+    if (syncedMax > 0) {
+      totalSec += syncedMax
+    } else {
+      totalSec += (s.fragments || []).reduce(
+        (acc, f) => acc + Math.max((f.text || '').split(/\s+/).filter(Boolean).length / 2.5, 3.0),
+        0
+      )
+    }
+  }
+  return Math.round(totalSec)
+}
+
 const toProjectItem = (p: ProjectSettings): ProjectItem => ({
   id: p.name,
   name: p.name,
   format: p.format,
   scene_count: p.scenes.length,
-  duration_sec: p.scenes.reduce((acc, s) => acc + (s.fragments?.length || 0) * 5, 0),
+  duration_sec: calculateProjectDuration(p),
   updated_at: new Date().toISOString(),
-  has_audio: p.scenes.some((s) => (s.fragments || []).some((f) => !!f.audioFileName)),
+  has_audio: p.scenes.some((s) => (s.fragments || []).some((f) => Boolean(f.audioFileName))),
   status: 'draft',
 })
 
@@ -27,7 +43,20 @@ const buildRealProject = (payload: ProjectCreatePayload): ProjectSettings => ({
     colors: payload.colors,
     typography: { heading: 'Inter', body: 'Geist' },
   },
-  scenes: [],
+  scenes: [
+    {
+      id: crypto.randomUUID(),
+      title: 'Сцена 1',
+      timecode: '00:00:00',
+      fragments: [
+        {
+          id: crypto.randomUUID(),
+          visualNote: 'A-roll: Описание первого кадра',
+          text: 'Текст первой сцены...',
+        },
+      ],
+    },
+  ],
   rawMarkdown: '',
   audioMode: 'scene',
   audioProcessing: { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false },
@@ -42,7 +71,7 @@ interface DashboardState {
   formatFilter: 'all' | '16:9' | '9:16'
   activeModal: DashboardModal | null
   selectedFormatForNew: '16:9' | '9:16'
-  currentView: 'dashboard' | 'motion_studio' | 'project_editor'
+  currentView: 'dashboard' | 'project_editor'
   activeProjectId: string | null
   settings: GlobalSettings
   isLoading: boolean
@@ -52,7 +81,7 @@ interface DashboardState {
   setFormatFilter: (filter: 'all' | '16:9' | '9:16') => void
   openModal: (modal: DashboardModal, defaultFormat?: '16:9' | '9:16') => void
   closeModal: () => void
-  setCurrentView: (view: 'dashboard' | 'motion_studio' | 'project_editor') => void
+  setCurrentView: (view: 'dashboard' | 'project_editor') => void
   openProject: (projectId: string) => void
   createProject: (payload: ProjectCreatePayload) => ProjectItem
   deleteProject: (projectId: string) => void
@@ -60,7 +89,7 @@ interface DashboardState {
   saveSettings: (settings: GlobalSettings) => void
 }
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
+export const useDashboardStore = create<DashboardState>((set) => ({
   hardware: null,
   projects: [],
   searchQuery: '',
@@ -74,10 +103,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   fetchDashboardData: async () => {
     set({ isLoading: true })
+    localStorage.removeItem('vidora_projects_meta')
+
     const hardware = await dashboardApi.getHardwareInfo()
-    const real = useProjectStore.getState().projects
-    const projects = real.length > 0 ? real.map(toProjectItem) : dashboardApi.getSavedProjects()
+    const realProjects = useProjectStore.getState().projects
+    const projects = realProjects.map(toProjectItem)
     const settings = dashboardApi.getSettings()
+
     set({ hardware, projects, settings, isLoading: false })
   },
 
@@ -90,28 +122,33 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   openProject: (projectId: string) => {
     const real = useProjectStore.getState().projects.find((p) => p.name === projectId)
     if (real) {
-      useProjectStore.getState().setActiveProject(projectId)
+      useProjectStore.getState().setActiveProject(real.name)
+      set({ activeProjectId: real.name, currentView: 'project_editor' })
     }
-    set({ activeProjectId: projectId, currentView: 'project_editor' })
   },
 
   createProject: (payload: ProjectCreatePayload) => {
-    const created = dashboardApi.createProject(payload)
-    useProjectStore.getState().addProject(buildRealProject(payload))
-    useProjectStore.getState().setActiveProject(payload.name)
+    const newProj = buildRealProject(payload)
+    useProjectStore.getState().addProject(newProj)
+    useProjectStore.getState().setActiveProject(newProj.name)
+
+    const updatedProjects = useProjectStore.getState().projects.map(toProjectItem)
+    const createdItem = toProjectItem(newProj)
+
     set({
-      projects: dashboardApi.getSavedProjects(),
+      projects: updatedProjects,
       activeModal: null,
-      activeProjectId: created.id,
+      activeProjectId: newProj.name,
       currentView: 'project_editor',
     })
-    return created
+
+    return createdItem
   },
 
   deleteProject: (projectId: string) => {
-    dashboardApi.deleteProject(projectId)
     useProjectStore.getState().deleteProject(projectId)
-    set({ projects: dashboardApi.getSavedProjects() })
+    const updatedProjects = useProjectStore.getState().projects.map(toProjectItem)
+    set({ projects: updatedProjects })
   },
 
   duplicateProject: (projectId: string) => {
@@ -123,25 +160,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         scenes: JSON.parse(JSON.stringify(real.scenes)) as ProjectSettings['scenes'],
       }
       useProjectStore.getState().addProject(copy)
-    } else {
-      const project = get().projects.find((p) => p.id === projectId)
-      if (!project) return
-      dashboardApi.createProject({
-        name: `${project.name} (Копия)`,
-        format: project.format,
-        fps: 30,
-        animationStyle: 'cinematic_smooth',
-        colors: {
-          primary: '#38bdf8',
-          secondary: '#818cf8',
-          background: '#020617',
-          surface: '#0f172a',
-          accent: '#f43f5e',
-          text: '#f8fafc',
-        },
-      })
+      const updatedProjects = useProjectStore.getState().projects.map(toProjectItem)
+      set({ projects: updatedProjects })
     }
-    set({ projects: dashboardApi.getSavedProjects() })
   },
 
   saveSettings: (settings: GlobalSettings) => {
