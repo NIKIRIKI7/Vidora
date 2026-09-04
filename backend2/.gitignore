@@ -1,0 +1,31 @@
+# ===== .NET / build =====
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.userprefs
+
+# ===== Тесты =====
+TestResults/
+
+# ===== Рантайм-артефакты (SQLite, логи, стейт) =====
+data_storage/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.jsonl
+*.log
+
+# ===== Локальные CLI-бинарники (yt-dlp и т.п.) =====
+tools/
+
+# ===== Python venvs =====
+.venv*/
+venv*/
+
+# ===== Редакторы / IDE =====
+.vs/
+.vscode/
+.idea/

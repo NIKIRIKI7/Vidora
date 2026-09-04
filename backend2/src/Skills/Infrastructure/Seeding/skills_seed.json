@@ -1,0 +1,47 @@
+[
+  {
+    "id": "skill-remotion-scene-engine",
+    "name": "Remotion TSX Scene Core Standards",
+    "description": "Строгие стандарты сборки React/Remotion компонентов: spring, interpolate, safe areas и шрифтовая иерархия",
+    "stage": "scene_generation",
+    "content": "RULES FOR REMOTION SCENE GENERATION:\n1. Root Element: Absolute fullscreen container `<div className=\"absolute inset-0 overflow-hidden flex flex-col items-center justify-center\" style={{ backgroundColor: montage.colors.background }}>`.\n2. Timing & Frame Rate: Never hardcode frames! Always calculate from `useCurrentFrame()` and `useVideoConfig()`. For 30fps, 1s = 30 frames.\n3. Spring Physics: Use `spring({ fps, frame, config: { damping: 12, mass: 0.5, stiffness: 100 } })` for entering elements.\n4. Clamping: When interpolating transforms, ALWAYS set `{ extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }` to prevent element drift.\n5. Shorts Safe Area: Keep crucial text inside vertical margins [top: 15%, bottom: 20%] to avoid overlap with TikTok/YouTube UI buttons.\n6. No External Fetch: Scenes must be strictly deterministic and renderable offline. All media must reference props or local IDs.",
+    "priority": 100,
+    "tags": ["remotion", "react", "physics", "shorts"]
+  },
+  {
+    "id": "skill-kinetic-typography",
+    "name": "Kinetic Typography & Text Staggering",
+    "description": "Правила анимирования текстовых блоков и пословных субтитров",
+    "stage": "scene_generation",
+    "content": "KINETIC TYPOGRAPHY GUIDELINES:\n1. Reveal Style: Animate words with a staggered entry (delay = index * 3 frames).\n2. Contrast: Primary text must use `montage.colors.primary` or `#ffffff` with subtle dropshadow `drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]`.\n3. Key Term Highlighting: Key punchy words must receive `montage.colors.accent`.\n4. Scale Pop: Accompany text entry with a slight overshoot scale `interpolate(progress, [0, 0.7, 1], [0.8, 1.05, 1])`.",
+    "priority": 90,
+    "tags": ["typography", "animation", "text"]
+  },
+  {
+    "id": "skill-hook-retention-psychology",
+    "name": "Hook Analysis & 3-Second Retention",
+    "description": "Психологические триггеры хука: разрыв шаблона, открытые петли и динамика кадра",
+    "stage": "hook_analysis",
+    "content": "HOOK ANALYSIS EVALUATION CRITERIA:\n1. Pattern Interrupt: Does the opening sentence challenge a common belief or highlight an anomaly within the first 1.5 seconds?\n2. Curiosity Gap: Establish an unresolved question that can only be answered by watching until the end.\n3. Visual Velocity: A new graphic element, punch-in zoom (1.15x), or b-roll cut must occur within frame 0 to frame 45.\n4. Audio Clarity: Immediate vocal delivery with zero introductory silence.",
+    "priority": 100,
+    "tags": ["retention", "hook", "psychology"]
+  },
+  {
+    "id": "skill-shortform-pacing-structure",
+    "name": "Short-Form Viral Pacing & Scene Slicing",
+    "description": "Разбиение сценария на микрофрагменты по 1.5-3 секунды",
+    "stage": "script_drafting",
+    "content": "SCRIPT PACING RULES:\n1. Scene Duration: No visual scene should exceed 3.2 seconds without a visual transformation.\n2. Fragment Density: Each scene fragment represents exactly one spoken thought (6-12 words).\n3. Visual Notes: Each fragment must specify a concrete visual action (`[VisualNote: Chart plunges downward in neon red]`).\n4. Seamless Loop: The final sentence must syntactically or thematically lead directly into the opening hook sentence.",
+    "priority": 100,
+    "tags": ["script", "pacing", "storytelling"]
+  },
+  {
+    "id": "skill-trend-blue-ocean-mining",
+    "name": "DeepTrend Blue Ocean Detection",
+    "description": "Алгоритм обнаружения вирального потенциала темы с низким уровнем конкуренции",
+    "stage": "trend_research",
+    "content": "BLUE OCEAN OPPORTUNITY CRITERIA:\n1. Velocity Outlier: Channel videos with VPH (Views Per Hour) > 3x the channel median subscriber count.\n2. Comment Gap: Identify recurring questions in top comments containing phrases like 'How did you...', 'What about...', 'Can you explain...'.\n3. Competition Saturation: Discard topics where more than 5 channels with >1M subscribers posted videos in the past 14 days.",
+    "priority": 100,
+    "tags": ["research", "trends", "analytics"]
+  }
+]
