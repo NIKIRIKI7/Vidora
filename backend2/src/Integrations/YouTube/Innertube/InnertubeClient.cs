@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -47,7 +48,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
         var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
-
         string? searchParams = daysBack switch
         {
             > 0 and <= 1 => "EgQIAhAB",
@@ -71,7 +71,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
                 }
             }
         };
-
         if (!string.IsNullOrEmpty(searchParams))
         {
             payload["params"] = searchParams;
@@ -101,7 +100,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             {
                 if (!section.TryGetProperty("itemSectionRenderer", out var itemSection)) continue;
                 if (!itemSection.TryGetProperty("contents", out var items)) continue;
-
                 foreach (var item in items.EnumerateArray())
                 {
                     if (!item.TryGetProperty("videoRenderer", out var vr)) continue;
@@ -152,7 +150,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         {
             using var response = await _httpClient.SendAsync(request, cts.Token);
             if (!response.IsSuccessStatusCode) return [];
-
             await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
 
@@ -160,48 +157,12 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             if (!doc.RootElement.TryGetProperty("contents", out var contents)) return results;
             if (!contents.TryGetProperty("twoColumnWatchNextResults", out var watchNext)) return results;
             if (!watchNext.TryGetProperty("secondaryResults", out var sec)) return results;
-
             JsonElement secondaryResultsContainer = sec.TryGetProperty("secondaryResults", out var sr) ? sr : sec;
             if (!secondaryResultsContainer.TryGetProperty("results", out var items)) return results;
 
             foreach (var item in items.EnumerateArray())
             {
-                if (!item.TryGetProperty("compactVideoRenderer", out var cvr)) continue;
-                if (!cvr.TryGetProperty("videoId", out var vidProp)) continue;
-                var vId = vidProp.GetString();
-                if (string.IsNullOrEmpty(vId)) continue;
-
-                var title = ExtractJsonText(cvr, "title");
-                var viewsText = ExtractJsonText(cvr, "viewCountText");
-                var lengthText = ExtractJsonText(cvr, "lengthText");
-                var pubText = ExtractJsonText(cvr, "publishedTimeText");
-
-                var channelTitle = "";
-                var channelId = "";
-                if (cvr.TryGetProperty("shortBylineText", out var sbt) && sbt.TryGetProperty("runs", out var sbtr) && sbtr.GetArrayLength() > 0)
-                {
-                    channelTitle = sbtr[0].GetProperty("text").GetString() ?? "";
-                    if (sbtr[0].TryGetProperty("navigationEndpoint", out var nav) &&
-                        nav.TryGetProperty("browseEndpoint", out var be))
-                    {
-                        channelId = be.TryGetProperty("browseId", out var bid) ? bid.GetString() ?? "" : "";
-                    }
-                }
-
-                int durSec = ParseDurationToSeconds(lengthText);
-                results.Add(new InnerTubeVideoItem(
-                    VideoId: vId,
-                    Title: title,
-                    ChannelTitle: channelTitle,
-                    ChannelId: string.IsNullOrEmpty(channelId) ? channelTitle : channelId,
-                    ViewCount: ParseCount(viewsText),
-                    DurationSeconds: durSec,
-                    IsShort: durSec is > 0 and <= 180,
-                    PublishedText: pubText,
-                    Url: $"https://youtu.be/{vId}",
-                    ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg"));
-
-                if (results.Count >= maxResults) break;
+                ExtractItemsRecursive(item, results, maxResults);
             }
             return results;
         }
@@ -210,6 +171,95 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             _logger.LogDebug(ex, "[InnerTube] Related videos fetch failed for {VideoId}", videoId);
             return [];
         }
+    }
+
+    private void ExtractItemsRecursive(JsonElement element, List<InnerTubeVideoItem> results, int maxResults)
+    {
+        if (results.Count >= maxResults) return;
+
+        if (element.TryGetProperty("compactVideoRenderer", out var cvr))
+        {
+            var parsed = ParseCompactVideoRenderer(cvr);
+            if (parsed != null) results.Add(parsed);
+            return;
+        }
+
+        if (element.TryGetProperty("videoRenderer", out var vr))
+        {
+            var parsed = ParseVideoRenderer(vr);
+            if (parsed != null) results.Add(parsed);
+            return;
+        }
+
+        if (element.TryGetProperty("itemSectionRenderer", out var isr) &&
+            isr.TryGetProperty("contents", out var isrContents))
+        {
+            foreach (var child in isrContents.EnumerateArray())
+            {
+                ExtractItemsRecursive(child, results, maxResults);
+            }
+        }
+
+        if (element.TryGetProperty("richItemRenderer", out var rir) &&
+            rir.TryGetProperty("content", out var rirContent))
+        {
+            ExtractItemsRecursive(rirContent, results, maxResults);
+        }
+    }
+
+    private InnerTubeVideoItem? ParseCompactVideoRenderer(JsonElement cvr)
+    {
+        if (!cvr.TryGetProperty("videoId", out var vidProp)) return null;
+        var vId = vidProp.GetString();
+        if (string.IsNullOrEmpty(vId)) return null;
+
+        var title = ExtractJsonText(cvr, "title");
+        var viewsText = ExtractJsonText(cvr, "viewCountText");
+        var lengthText = ExtractJsonText(cvr, "lengthText");
+        var pubText = ExtractJsonText(cvr, "publishedTimeText");
+        var channelTitle = "";
+        var channelId = "";
+        if (cvr.TryGetProperty("shortBylineText", out var sbt) && sbt.TryGetProperty("runs", out var sbtr) && sbtr.GetArrayLength() > 0)
+        {
+            channelTitle = sbtr[0].GetProperty("text").GetString() ?? "";
+            if (sbtr[0].TryGetProperty("navigationEndpoint", out var nav) &&
+                nav.TryGetProperty("browseEndpoint", out var be))
+            {
+                channelId = be.TryGetProperty("browseId", out var bid) ? bid.GetString() ?? "" : "";
+            }
+        }
+        int durSec = ParseDurationToSeconds(lengthText);
+
+        bool isVerified = false;
+        long subscriberCount = 0L;
+        if (cvr.TryGetProperty("ownerBadges", out var ob) && ob.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var badge in ob.EnumerateArray())
+            {
+                if (badge.TryGetProperty("metadataBadgeRenderer", out var mbr) &&
+                    mbr.TryGetProperty("style", out var styleProp) &&
+                    (styleProp.GetString()?.Contains("VERIFIED") ?? false))
+                {
+                    isVerified = true;
+                    subscriberCount = 100_000L;
+                    break;
+                }
+            }
+        }
+
+        return new InnerTubeVideoItem(
+            VideoId: vId,
+            Title: title,
+            ChannelTitle: channelTitle,
+            ChannelId: string.IsNullOrEmpty(channelId) ? channelTitle : channelId,
+            ViewCount: ParseCount(viewsText),
+            DurationSeconds: durSec,
+            IsShort: durSec is > 0 and <= 180,
+            PublishedText: pubText,
+            Url: $"https://youtu.be/{vId}",
+            ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg",
+            SubscriberCount: subscriberCount,
+            IsVerified: isVerified);
     }
 
     public async Task<IReadOnlyList<InnerTubeVideoItem>> GetTrendingVideosAsync(string lang = "en", CancellationToken ct = default)
@@ -237,7 +287,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         {
             using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode) return [];
-
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
@@ -254,24 +303,9 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             {
                 if (!sec.TryGetProperty("itemSectionRenderer", out var isr)) continue;
                 if (!isr.TryGetProperty("contents", out var isrContents)) continue;
-
                 foreach (var item in isrContents.EnumerateArray())
                 {
-                    if (item.TryGetProperty("shelfRenderer", out var shelf) && shelf.TryGetProperty("content", out var shelfContent))
-                    {
-                        if (shelfContent.TryGetProperty("expandedShelfContentsRenderer", out var escr) && escr.TryGetProperty("items", out var shelfItems))
-                        {
-                            foreach (var sItem in shelfItems.EnumerateArray())
-                            {
-                                if (sItem.TryGetProperty("videoRenderer", out var vr))
-                                {
-                                    var parsed = ParseVideoRenderer(vr);
-                                    if (parsed != null) list.Add(parsed);
-                                }
-                            }
-                        }
-                    }
-                    else if (item.TryGetProperty("videoRenderer", out var vr))
+                    if (item.TryGetProperty("videoRenderer", out var vr))
                     {
                         var parsed = ParseVideoRenderer(vr);
                         if (parsed != null) list.Add(parsed);
@@ -287,9 +321,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         }
     }
 
-    /// <summary>
-    /// Парсинг ГЛАВНОЙ СТРАНИЦЫ YouTube (FEwhat_to_watch)
-    /// </summary>
     public async Task<IReadOnlyList<InnerTubeVideoItem>> GetHomeFeedVideosAsync(string lang = "en", CancellationToken ct = default)
     {
         var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
@@ -315,7 +346,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         {
             using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode) return [];
-
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
@@ -337,31 +367,65 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
                     var parsed = ParseVideoRenderer(vr);
                     if (parsed != null) list.Add(parsed);
                 }
-                else if (item.TryGetProperty("richSectionRenderer", out var rsr) &&
-                         rsr.TryGetProperty("content", out var rsrContent) &&
-                         rsrContent.TryGetProperty("richShelfRenderer", out var rshelf) &&
-                         rshelf.TryGetProperty("items", out var shelfItems))
-                {
-                    foreach (var sItem in shelfItems.EnumerateArray())
-                    {
-                        if (sItem.TryGetProperty("richItemRenderer", out var sRir) &&
-                            sRir.TryGetProperty("content", out var sContent) &&
-                            sContent.TryGetProperty("videoRenderer", out var sVr))
-                        {
-                            var parsed = ParseVideoRenderer(sVr);
-                            if (parsed != null) list.Add(parsed);
-                        }
-                    }
-                }
             }
-
-            _logger.LogInformation("[InnerTube] Получено {Count} роликов с главной страницы YouTube", list.Count);
             return list;
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "[InnerTube] Не удалось загрузить главную страницу YouTube");
+            _logger.LogDebug(ex, "[InnerTube] Home feed fetch failed");
             return [];
+        }
+    }
+
+    public async Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith("UC")) return 0;
+
+        var payload = new
+        {
+            browseId = channelId,
+            context = new
+            {
+                client = new
+                {
+                    hl = "en",
+                    gl = "US",
+                    clientName = "WEB",
+                    clientVersion = "2.20240825.01.00"
+                }
+            }
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/browse?key={PublicInternalKey}");
+        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return 0;
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("header", out var header))
+            {
+                if (header.TryGetProperty("c4TabbedHeaderRenderer", out var c4) &&
+                    c4.TryGetProperty("subscriberCountText", out var sct))
+                {
+                    var text = ExtractJsonText(c4, "subscriberCountText");
+                    return ParseCount(text);
+                }
+                var headerStr = header.ToString();
+                var match = Regex.Match(headerStr, @"""subscriberCountText"":\s*\{""simpleText""\s*:\s*""([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)""");
+                if (match.Success) return ParseCount(match.Groups[1].Value);
+                var match2 = Regex.Match(headerStr, @"([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)");
+                if (match2.Success) return ParseCount(match2.Groups[1].Value);
+            }
+            return 0;
+        }
+        catch
+        {
+            return 0;
         }
     }
 
@@ -415,7 +479,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
                 }
                 if (targetUrl != null) break;
             }
-
             targetUrl ??= tracks[0].TryGetProperty("baseUrl", out var bu) ? bu.GetString() : null;
             if (string.IsNullOrEmpty(targetUrl)) return null;
 
@@ -435,7 +498,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
                     }
                 }
             }
-
             var clean = CleanSpacesRegex().Replace(sb.ToString(), " ").Trim();
             return clean.Length > 40 ? clean : null;
         }
@@ -451,12 +513,10 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         if (!vr.TryGetProperty("videoId", out var vidProp)) return null;
         var vId = vidProp.GetString();
         if (string.IsNullOrEmpty(vId)) return null;
-
         var title = ExtractJsonText(vr, "title");
         var viewsText = ExtractJsonText(vr, "viewCountText");
         var lengthText = ExtractJsonText(vr, "lengthText");
         var pubText = ExtractJsonText(vr, "publishedTimeText");
-
         var channelTitle = "";
         var channelId = "";
         if (vr.TryGetProperty("ownerText", out var ot) && ot.TryGetProperty("runs", out var otr) && otr.GetArrayLength() > 0)
@@ -468,8 +528,8 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
                 channelId = be.TryGetProperty("browseId", out var bid) ? bid.GetString() ?? "" : "";
             }
         }
+        int durSec = ParseDurationToSeconds(lengthText);
 
-        // Определение верификации канала по ownerBadges
         bool isVerified = false;
         if (vr.TryGetProperty("ownerBadges", out var ob) && ob.ValueKind == JsonValueKind.Array)
         {
@@ -488,10 +548,6 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             }
         }
 
-        // Если канал верифицирован, у него заведомо больше 100 000 подписчиков
-        long initialSubs = isVerified ? 100_000L : 0L;
-
-        int durSec = ParseDurationToSeconds(lengthText);
         return new InnerTubeVideoItem(
             VideoId: vId,
             Title: title,
@@ -503,7 +559,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             PublishedText: pubText,
             Url: $"https://youtu.be/{vId}",
             ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg",
-            SubscriberCount: initialSubs,
+            SubscriberCount: isVerified ? 100_000L : 0L,
             IsVerified: isVerified);
     }
 
@@ -527,13 +583,12 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
     public static long ParseCount(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return 0;
-        var clean = raw.ToLowerInvariant().Replace("views", "").Replace("просмотров", "").Replace("просмотра", "").Replace("просмотр", "").Replace(" ", "").Trim();
+        var clean = raw.ToLowerInvariant().Replace("views", "").Replace("subscribers", "").Replace("подписчиков", "").Replace("подписчика", "").Replace("подписчик", "").Replace(" ", "").Trim();
         double mult = 1.0;
         if (clean.EndsWith('k') || clean.EndsWith('к')) { mult = 1_000; clean = clean[..^1]; }
         else if (clean.EndsWith('m') || clean.EndsWith('м')) { mult = 1_000_000; clean = clean[..^1]; }
         else if (clean.EndsWith('b') || clean.EndsWith('б')) { mult = 1_000_000_000; clean = clean[..^1]; }
-
-        if (double.TryParse(clean.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var val))
+        if (double.TryParse(clean.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var val))
             return (long)(val * mult);
         return 0;
     }
@@ -554,56 +609,4 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex CleanSpacesRegex();
-
-    public async Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith("UC")) return 0;
-
-        var payload = new
-        {
-            browseId = channelId,
-            context = new
-            {
-                client = new
-                {
-                    hl = "en",
-                    gl = "US",
-                    clientName = "WEB",
-                    clientVersion = "2.20240825.01.00"
-                }
-            }
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/browse?key={PublicInternalKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-        try
-        {
-            using var response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return 0;
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("header", out var header))
-            {
-                if (header.TryGetProperty("c4TabbedHeaderRenderer", out var c4) &&
-                    c4.TryGetProperty("subscriberCountText", out var sct))
-                {
-                    var text = sct.ValueKind == JsonValueKind.String
-                        ? sct.GetString() ?? ""
-                        : sct.TryGetProperty("simpleText", out var st) ? st.GetString() ?? "" : "";
-                    return ParseCount(text);
-                }
-                var headerStr = header.ToString();
-                var match = Regex.Match(headerStr, @"([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)");
-                if (match.Success) return ParseCount(match.Groups[1].Value);
-            }
-            return 0;
-        }
-        catch
-        {
-            return 0;
-        }
-    }
 }

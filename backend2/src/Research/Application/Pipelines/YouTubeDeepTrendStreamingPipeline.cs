@@ -61,17 +61,10 @@ public sealed class YouTubeDeepTrendStreamingPipeline
     }
 
     public async IAsyncEnumerable<string> ExecuteDagStreamAsync(
-        string query, string lang = "ru", int daysBack = 14,
-        long minSubs = 1000, long maxSubs = 90000, double minRatio = 1.5,
-        string videoType = "all", int ideasCount = 5,
-        string channelContext = "", string searchMode = "trending",
-        IReadOnlyList<string>? competitorChannels = null,
-        IReadOnlyList<string>? excludeVideoIds = null,
-        IReadOnlyList<string>? excludeQueries = null,
-        bool isExpandSearch = false,
+        DeepTrendExecutionOptions options,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var channel = Channel.CreateBounded<string>(new BoundedChannelOptions(350)
+        var channel = Channel.CreateBounded<string>(new BoundedChannelOptions(400)
         {
             SingleWriter = false, SingleReader = true
         });
@@ -85,26 +78,24 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         {
             try
             {
-                var effectiveQuery = Regex.Replace(query, @"[,;]+", " ").Trim();
+                var effectiveQuery = Regex.Replace(options.Query, @"[,;]+", " ").Trim();
                 effectiveQuery = Regex.Replace(effectiveQuery, @"\s+", " ");
-                if (lang.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(query, @"[\u0400-\u04FF]"))
+                if (options.Language.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(options.Query, @"[\u0400-\u04FF]"))
                 {
-                    effectiveQuery = SignalIngestor.ToEnglishTechQuery(query);
+                    effectiveQuery = SignalIngestor.ToEnglishTechQuery(options.Query);
                 }
 
-                var startLog = isExpandSearch
-                    ? $"[DeepTrend] ⚡ Расширенный поиск: генерация НОВЫХ запросов на базе трендов (исключено {excludeVideoIds?.Count ?? 0} видео)..."
-                    : $"Запуск DeepTrend конвейера [{lang.ToUpper()}] | Фильтр: {daysBack} дн., сабы {minSubs}-{maxSubs}, ratio >{minRatio}x | Тема: '{effectiveQuery}'";
-                await EmitLog(EmitAsync, startLog);
+                var formatTitle = options.VideoType == "short" ? "Shorts (<=60s)" : options.VideoType == "long" ? "Длинные (>60s)" : "Все";
+                await EmitLog(EmitAsync, $"[DeepTrend] Поиск: '{effectiveQuery}' | за {options.DaysBack} дн. | Сабы: {options.MinSubs:N0} - {options.MaxSubs:N0} | Ratio >{options.MinRatio:F1}x | {formatTitle} | Язык: {options.Language.ToUpper()}");
 
                 // 1. Google Trends первичный сбор
                 IReadOnlyList<EarlySignal> earlySignals = [];
-                if (!isExpandSearch)
+                if (!options.IsExpandSearch)
                 {
                     await EmitLog(EmitAsync, "Сбор живых трендов (Google Trends / YouTube Autocomplete / Habr / Reddit)...");
                     try
                     {
-                        earlySignals = await _signalIngestor.CollectEarlySignalsAsync(query, lang, ct);
+                        earlySignals = await _signalIngestor.CollectEarlySignalsAsync(options.Query, options.Language, ct);
                         if (earlySignals.Count > 0)
                         {
                             var signalsDto = earlySignals.Select(s => new
@@ -135,38 +126,32 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     }
                 }
 
-                // 2. Формируем поисковые запросы: ПРЯМОЙ ШИРОКИЙ ЗАПРОС + ПОДБОРКИ ИИ
-                await EmitLog(EmitAsync, isExpandSearch
-                    ? "ИИ формирует альтернативные, неиспользованные поисковые фразы под YouTube..."
-                    : "Подготовка поисковой матрицы: прямой широкий запрос + вариации ИИ на базе трендов...");
-
-                var topTrendsKeywords = earlySignals.Take(10).Select(s => s.Topic).ToList();
-                var aiSearchQueries = await GenerateDiverseShortYouTubeQueriesWithAiAsync(
-                    effectiveQuery, topTrendsKeywords, lang, daysBack, excludeQueries, isExpandSearch, ct);
-
-                // === ГАРАНТИРОВАННЫЙ ПРЯМОЙ ПОИСК ПО ШИРОКОМУ ЗАПРОСУ ===
+                // 2. Формируем прямой широкий запрос + ИИ-подборку
                 var curYear = DateTime.UtcNow.Year;
-                var isRu = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase);
+                var isRu = options.Language.StartsWith("ru", StringComparison.OrdinalIgnoreCase);
                 var broadDirectQueries = new List<string>
                 {
-                    effectiveQuery,                             // Прямой широкий запрос
-                    $"{effectiveQuery} {curYear}",              // Свежие за текущий год
+                    effectiveQuery,
+                    $"{effectiveQuery} {curYear}",
                     isRu ? $"{effectiveQuery} обзор" : $"{effectiveQuery} review",
                     isRu ? $"{effectiveQuery} топ" : $"{effectiveQuery} best"
                 };
 
-                // Объединяем: сначала прямой широкий запрос, затем деконструированные фразы ИИ
+                var topTrendsKeywords = earlySignals.Take(10).Select(s => s.Topic).ToList();
+                var aiSearchQueries = await GenerateDiverseShortYouTubeQueriesWithAiAsync(
+                    effectiveQuery, topTrendsKeywords, options.Language, options.DaysBack, options.ExcludeQueries, options.IsExpandSearch, ct);
+
                 var searchQueries = broadDirectQueries
                     .Concat(aiSearchQueries)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
                 await EmitLog(EmitAsync, $"Сформировано {searchQueries.Count} запросов (включая прямой '{effectiveQuery}'): {string.Join(" • ", searchQueries.Take(6))}...");
+                await EmitAsync(JsonSerializer.Serialize(new { type = "queries_executed", queries = searchQueries }));
 
                 var candidatePool = new List<RawVideoSearchResult>();
-                var seenVideoIds = new HashSet<string>(excludeVideoIds ?? [], StringComparer.OrdinalIgnoreCase);
+                var seenVideoIds = new HashSet<string>(options.ExcludeVideoIds, StringComparer.OrdinalIgnoreCase);
 
-                // Smart Seed Priority: приоритетная очередь семян по VPH
                 var seedPriorities = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
                 var processedSeeds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -192,24 +177,24 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     return top;
                 }
 
-                // 3. Выполняем поиск по начальным запросам
+                // 3. Сканирование YouTube
                 foreach (var sq in searchQueries)
                 {
                     if (ct.IsCancellationRequested) break;
                     try
                     {
-                        var found = await _ytIngestor.SearchTopicCandidatesAsync(sq, 25, daysBack, lang, ct);
+                        var found = await _ytIngestor.SearchTopicCandidatesAsync(sq, 25, options.DaysBack, options.Language, ct);
                         foreach (var v in found)
                         {
                             if (seenVideoIds.Add(v.VideoId))
                             {
                                 candidatePool.Add(v);
                                 var m = _momentumEngine.CalculateMomentum(v.ViewCount, v.PublishedAt, v.SubscriberCount);
-                                double priority = (m.IsRocket ? 1000 : 0) + m.ViewsPerHour;
-                                EnqueueSeed(v.VideoId, priority);
+                                double p = (m.IsRocket ? 1000 : 0) + m.ViewsPerHour;
+                                EnqueueSeed(v.VideoId, p);
                             }
                         }
-                        if (candidatePool.Count >= 80) break;
+                        if (candidatePool.Count >= 250) break;
                     }
                     catch (Exception ex)
                     {
@@ -217,15 +202,18 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     }
                 }
 
-                var cutoffDate = daysBack > 0 ? DateTimeOffset.UtcNow.AddDays(-daysBack) : DateTimeOffset.MinValue;
+                var cutoffDate = options.DaysBack > 0 ? DateTimeOffset.UtcNow.AddDays(-options.DaysBack) : DateTimeOffset.MinValue;
                 var discoveredVideos = new List<Dictionary<string, object>>();
                 var channelSubsCache = new ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
                 int totalEvaluated = candidatePool.Count;
 
-                // Оцениваем начальный пул
+                // 4. Оценка кандидатов первичного поиска
                 foreach (var c in candidatePool)
                 {
-                    var (passed, item) = await EvaluateAndTryAddVideoAsync(c, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, channelSubsCache, ct);
+                    var (passed, item) = await EvaluateAndTryAddVideoAsync(
+                        c, cutoffDate, options.DaysBack, options.MinSubs, options.MaxSubs, options.MinRatio,
+                        options.VideoType, options.Language, discoveredVideos, channelSubsCache, ct);
+
                     if (passed && item != null)
                     {
                         await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = item }));
@@ -233,51 +221,84 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                 }
 
                 int round = 0;
-                int targetOutliers = Math.Max(ideasCount * 2, 12);
+                int targetOutliers = Math.Max(options.IdeasCount * 2, 12);
                 bool hasTriggeredGoogleTrendsPivot = false;
+                int consecutiveStagnantRounds = 0;
 
-                // 4. Цикл рекомендаций с приоритетом и детекцией стагнации
+                // 5. Цикл рекомендаций с детекцией стагнации после 2 раундов
                 while (discoveredVideos.Count < targetOutliers && totalEvaluated < 350 && !ct.IsCancellationRequested)
                 {
                     round++;
+                    int prevDiscoveredCount = discoveredVideos.Count;
 
-                    // === ПРОВЕРКА: ЕСЛИ ЗА 2 ПРОХОДА НАЙДЕНО МАЛО ВИДЕО -> ПИВОТ ЧЕРЕЗ GOOGLE TRENDS ===
+                    // В expand-режиме: пропускаем широкие запросы, сразу берём свежие Google Trends
+                    if (options.IsExpandSearch && round == 1)
+                    {
+                        await EmitLog(EmitAsync, "🔄 [Expand] Пропускаем широкие запросы, загружаем свежие Google Trends...", "info");
+                        var freshTrends = await _signalIngestor.FetchGoogleTrendsKeywordsAsync(effectiveQuery, options.Language, ct);
+                        var bestFoundTitles = discoveredVideos.Take(5).Select(v => (string)v["title"]).ToList();
+                        var expandQueries = await GeneratePivotQueriesFromGoogleTrendsAsync(
+                            effectiveQuery, freshTrends, bestFoundTitles, options.Language,
+                            options.ExcludeQueries.Concat(searchQueries).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), ct);
+
+                        await EmitLog(EmitAsync, $"[Expand ИИ] Сформированы свежие запросы: {string.Join(" • ", expandQueries.Take(5))}...", "info");
+                        await EmitAsync(JsonSerializer.Serialize(new { type = "queries_executed", queries = expandQueries }));
+
+                        foreach (var pq in expandQueries.Take(10))
+                        {
+                            if (ct.IsCancellationRequested) break;
+                            try
+                            {
+                                var foundNew = await _ytIngestor.SearchTopicCandidatesAsync(pq, 25, options.DaysBack, options.Language, ct);
+                                foreach (var v in foundNew)
+                                {
+                                    totalEvaluated++;
+                                    if (!seenVideoIds.Add(v.VideoId)) continue;
+                                    candidatePool.Add(v);
+                                    var m = _momentumEngine.CalculateMomentum(v.ViewCount, v.PublishedAt, v.SubscriberCount);
+                                    EnqueueSeed(v.VideoId, (m.IsRocket ? 1500 : 0) + m.ViewsPerHour * 1.5);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogDebug(ex, "Expand search failed: {Query}", pq);
+                            }
+                        }
+                    }
+
+                    // Пивот через Google Trends при низкой отдаче за 2 прохода
                     if (round >= 2 && discoveredVideos.Count < Math.Min(6, targetOutliers) && !hasTriggeredGoogleTrendsPivot)
                     {
                         hasTriggeredGoogleTrendsPivot = true;
-                        await EmitLog(EmitAsync, $"⚡ [Адаптивный пивот] За 2 прохода найдено лишь {discoveredVideos.Count} аномалий. Запрашиваем новые тренды из Google Trends...", "warning");
+                        await EmitLog(EmitAsync, $"⚡ [Адаптивный пивот] За 2 прохода найдено {discoveredVideos.Count} аномалий. Запрашиваем новые данные Google Trends...", "warning");
 
-                        // 1. Собираем живые подсказки из Google Trends
-                        var freshTrends = await _signalIngestor.FetchGoogleTrendsKeywordsAsync(effectiveQuery, lang, ct);
-
-                        // 2. Генерируем совершенно новые ключевые слова на базе трендов через LLM
+                        var freshTrends = await _signalIngestor.FetchGoogleTrendsKeywordsAsync(effectiveQuery, options.Language, ct);
                         var bestFoundTitles = discoveredVideos.Take(5).Select(v => (string)v["title"]).ToList();
                         var pivotQueries = await GeneratePivotQueriesFromGoogleTrendsAsync(
-                            effectiveQuery, freshTrends, bestFoundTitles, lang, excludeQueries, ct);
+                            effectiveQuery, freshTrends, bestFoundTitles, options.Language, options.ExcludeQueries, ct);
 
                         await EmitLog(EmitAsync, $"[Google Trends ИИ] Сформированы новые векторы поиска: {string.Join(" • ", pivotQueries.Take(5))}...", "info");
 
-                        // 3. Выполняем поиск по этим свежим запросам
                         foreach (var pq in pivotQueries.Take(8))
                         {
                             if (ct.IsCancellationRequested) break;
                             try
                             {
-                                var foundNew = await _ytIngestor.SearchTopicCandidatesAsync(pq, 25, daysBack, lang, ct);
+                                var foundNew = await _ytIngestor.SearchTopicCandidatesAsync(pq, 25, options.DaysBack, options.Language, ct);
                                 foreach (var v in foundNew)
                                 {
                                     totalEvaluated++;
                                     if (!seenVideoIds.Add(v.VideoId)) continue;
                                     var m = _momentumEngine.CalculateMomentum(v.ViewCount, v.PublishedAt, v.SubscriberCount);
+                                    EnqueueSeed(v.VideoId, (m.IsRocket ? 1500 : 0) + m.ViewsPerHour * 1.5);
 
-                                    // Приоритетные семена в голову очереди рекомендаций
-                                    double p = (m.IsRocket ? 1500 : 0) + m.ViewsPerHour * 1.5;
-                                    EnqueueSeed(v.VideoId, p);
+                                    var (pPassed, pItem) = await EvaluateAndTryAddVideoAsync(
+                                        v, cutoffDate, options.DaysBack, options.MinSubs, options.MaxSubs, options.MinRatio,
+                                        options.VideoType, options.Language, discoveredVideos, channelSubsCache, ct);
 
-                                    var (passed, item) = await EvaluateAndTryAddVideoAsync(v, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, channelSubsCache, ct);
-                                    if (passed && item != null)
+                                    if (pPassed && pItem != null)
                                     {
-                                        await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = item }));
+                                        await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = pItem }));
                                     }
                                 }
                             }
@@ -286,17 +307,14 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                                 _logger.LogDebug(ex, "Pivot search failed: {Query}", pq);
                             }
                         }
-
-                        await EmitLog(EmitAsync, $"[Пивот завершен] База кандидатов расширена, переходим к топовым рекомендациям новых лидеров.", "success");
                     }
 
-                    // Выбираем 5 лучших семян с самым высоким VPH
                     var currentBatch = DequeueTopSeeds(5);
                     if (currentBatch.Count == 0) break;
 
                     await EmitLog(EmitAsync, $"[Рекомендации: Проход {round}] Анализ рекомендаций топ-роликов (проверено: {totalEvaluated}, отобрано: {discoveredVideos.Count})...");
 
-                    var crawlTasks = currentBatch.Select(id => _ytIngestor.GetRelatedCandidatesAsync(id, 25, daysBack, lang, ct)).ToList();
+                    var crawlTasks = currentBatch.Select(id => _ytIngestor.GetRelatedCandidatesAsync(id, 25, options.DaysBack, options.Language, ct)).ToList();
                     var batchResults = await Task.WhenAll(crawlTasks);
                     int newFoundInRound = 0;
 
@@ -308,25 +326,37 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                             if (!seenVideoIds.Add(c.VideoId)) continue;
 
                             var m = _momentumEngine.CalculateMomentum(c.ViewCount, c.PublishedAt, c.SubscriberCount);
-                            double p = (m.IsRocket ? 1200 : 0) + m.ViewsPerHour;
-                            EnqueueSeed(c.VideoId, p);
+                            EnqueueSeed(c.VideoId, (m.IsRocket ? 1200 : 0) + m.ViewsPerHour);
 
-                            var (passed, item) = await EvaluateAndTryAddVideoAsync(c, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, channelSubsCache, ct);
-                            if (passed && item != null)
+                            var (rPassed, rItem) = await EvaluateAndTryAddVideoAsync(
+                                c, cutoffDate, options.DaysBack, options.MinSubs, options.MaxSubs, options.MinRatio,
+                                options.VideoType, options.Language, discoveredVideos, channelSubsCache, ct);
+
+                            if (rPassed && rItem != null)
                             {
                                 newFoundInRound++;
-                                await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = item }));
+                                await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = rItem }));
                             }
                         }
                     }
 
                     if (newFoundInRound > 0)
                     {
-                        await EmitLog(EmitAsync, $"Проход {round}: обнаружено +{newFoundInRound} новых растущих видео в рекомендациях!");
+                        consecutiveStagnantRounds = 0;
+                        await EmitLog(EmitAsync, $"Проход {round}: обнаружено +{newFoundInRound} новых видео в рекомендациях!");
+                    }
+                    else
+                    {
+                        consecutiveStagnantRounds++;
+                        if (consecutiveStagnantRounds >= 2)
+                        {
+                            await EmitLog(EmitAsync, $"⚠️ [Стагнация] {consecutiveStagnantRounds} проходов без новых видео. Прекращаем цикл рекомендаций.", "warning");
+                            break;
+                        }
                     }
                 }
 
-                // 5. Отдаем результат
+                // 6. Формирование результатов
                 if (discoveredVideos.Count > 0)
                 {
                     discoveredVideos.Sort((a, b) => ((int)b["vph"]).CompareTo((int)a["vph"]));
@@ -335,14 +365,14 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                 }
                 else
                 {
-                    await EmitLog(EmitAsync, "По заданным критериям новых видео не найдено. Попробуйте увеличить интервал дней или смягчить фильтр подписчиков.", "warning");
+                    await EmitLog(EmitAsync, "По заданным критериям видео не найдены. Попробуйте смягчить фильтр подписчиков или увеличить количество дней.", "warning");
                 }
 
                 await EmitAsync(JsonSerializer.Serialize(new { type = "done" }));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[DeepTrend Streaming] Search failure");
+                _logger.LogError(ex, "[DeepTrend Streaming] Pipeline failure");
                 await EmitLog(EmitAsync, $"Ошибка: {ex.Message}", "error");
             }
             finally
@@ -357,9 +387,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         }
     }
 
-    /// <summary>
-    /// Строгая оценка и фильтрация ролика по критериям пользователя (подписчики, ratio, дни, тип видео)
-    /// </summary>
     private async Task<(bool Passed, Dictionary<string, object>? Item)> EvaluateAndTryAddVideoAsync(
         RawVideoSearchResult c,
         DateTimeOffset cutoffDate,
@@ -373,19 +400,19 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         ConcurrentDictionary<string, long> channelSubsCache,
         CancellationToken ct)
     {
-        // 1. Фильтр свежести (days_back)
+        // 1. Свежесть
         if (daysBack > 0)
         {
             if (c.PublishedAt > DateTimeOffset.MinValue && c.PublishedAt < cutoffDate) return (false, null);
             if (c.PublishedAt == DateTimeOffset.MinValue && daysBack <= 7) return (false, null);
         }
 
-        // 2. Фильтр формата видео (Shorts vs Long)
+        // 2. Формат видео
         bool isShort = c.DurationSeconds <= 60 && c.DurationSeconds > 0;
         if (videoType == "short" && !isShort) return (false, null);
         if (videoType == "long" && isShort) return (false, null);
 
-        // 3. Подгрузка РЕАЛЬНЫХ подписчиков канала
+        // 3. Подгрузка реального числа подписчиков
         long realSubs = c.SubscriberCount;
         if (realSubs <= 0 && !string.IsNullOrWhiteSpace(c.ChannelId) && _innerTubeClient != null)
         {
@@ -395,16 +422,12 @@ public sealed class YouTubeDeepTrendStreamingPipeline
             }
             else
             {
-                try
-                {
-                    realSubs = await _innerTubeClient.GetChannelSubscribersAsync(c.ChannelId, ct);
-                    if (realSubs > 0) channelSubsCache[c.ChannelId] = realSubs;
-                }
-                catch { }
+                realSubs = await _innerTubeClient.GetChannelSubscribersAsync(c.ChannelId, ct);
+                if (realSubs > 0) channelSubsCache[c.ChannelId] = realSubs;
             }
         }
 
-        // 4. ЖЕСТКИЙ ФИЛЬТР ПОДПИСЧИКОВ (НИКАКИХ ОБХОДОВ ПО VIEWCOUNT!)
+        // 4. СТРОГИЙ ФИЛЬТР ПОДПИСЧИКОВ (без обходов)
         if (realSubs > 0)
         {
             if (minSubs > 0 && realSubs < minSubs) return (false, null);
@@ -412,16 +435,18 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         }
         else if (c.ViewCount > maxSubs * 5 && maxSubs > 0)
         {
-            // Если сабы неизвестны, но просмотров уже > 450k на узкой теме — это почти наверняка канал-гигант
             return (false, null);
         }
 
-        // 5. ЖЕСТКИЙ ФИЛЬТР RATIO (Просмотры / Подписчики >= minRatio)
-        double ratio = realSubs > 0
-            ? Math.Round((double)c.ViewCount / realSubs, 2)
+        // 5. СТРОГИЙ ФИЛЬТР RATIO (Просмотры / Подписчики >= minRatio)
+        double ratio = realSubs > 0 
+            ? Math.Round((double)c.ViewCount / realSubs, 2) 
             : 0.0;
 
-        if (realSubs > 0 && ratio < minRatio) return (false, null);
+        if (realSubs > 0 && ratio < minRatio)
+        {
+            return (false, null);
+        }
 
         // 6. Минимальный порог просмотров
         if (c.ViewCount < 300) return (false, null);
@@ -431,11 +456,11 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         if (momentum.ViewsPerHour < 5 && ageHours > 48 && c.ViewCount < 3000) return (false, null);
 
         // 7. Фильтр языка
-        if (lang.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(c.Title, @"[\u0400-\u04FF]"))
+        if (lang.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(c.Title, @"[\u0400-\u04FF]")) 
             return (false, null);
 
-        var thumbUrl = !string.IsNullOrWhiteSpace(c.ThumbnailUrl)
-            ? c.ThumbnailUrl
+        var thumbUrl = !string.IsNullOrWhiteSpace(c.ThumbnailUrl) 
+            ? c.ThumbnailUrl 
             : $"https://i.ytimg.com/vi/{c.VideoId}/hqdefault.jpg";
 
         var item = new Dictionary<string, object>
@@ -467,9 +492,69 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         return (true, item);
     }
 
-    /// <summary>
-    /// Генерация адаптивных пивот-запросов на основе живых данных Google Trends, если за 2 круга мало находок
-    /// </summary>
+    private async Task<List<string>> GenerateDiverseShortYouTubeQueriesWithAiAsync(
+        string baseQuery, List<string> googleTrendsKeywords, string lang, int daysBack,
+        IReadOnlyList<string>? excludeQueries, bool isExpandSearch, CancellationToken ct)
+    {
+        var curYear = DateTime.UtcNow.Year;
+        var cleanTrends = googleTrendsKeywords
+            .Select(CleanToShortQuery)
+            .Where(k => k.Split(' ').Length is >= 1 and <= 4)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        var trendsBlock = cleanTrends.Count > 0 ? string.Join(", ", cleanTrends) : "нет явных сигналов";
+        var excludeBlock = (excludeQueries != null && excludeQueries.Count > 0)
+            ? $"\nУЖЕ ИСПОЛЬЗОВАННЫЕ ЗАПРОСЫ (НЕ ПОВТОРЯЙ ИХ):\n- {string.Join("\n- ", excludeQueries.Take(35))}\n"
+            : "";
+
+        var prompt = $$"""
+        Ты — ведущий аналитик YouTube и Google Trends в {{curYear}} году.
+        Ниша: "{{baseQuery}}". Язык: {{lang}}.
+        {{excludeBlock}}
+        Google Trends подсказки: {{trendsBlock}}
+
+        КЛЮЧЕВОЙ АЛГОРИТМ:
+        1. ШИРОКИЙ ЗАПРОС (1-2 слова, напр. "AI", "Python", "Крипта"):
+           - ЗАПРЕЩЕНО выдавать общие фразы ("ai 2026", "python tutorial").
+           - Деконструируй нишу на: конкретные инструменты года, баги/ошибки, прикладные связки автоматизации, сравнения A vs B.
+        2. УЗКИЙ ЗАПРОС (софт/баг/модель, напр. "Cursor vs Windsurf", "DeepSeek R1"):
+           - ЗАПРЕЩЕНО расширять запрос до абстрактных слов. Удерживай 100% фокус на инструменте!
+           - Ищи: сравнения с прямыми аналогами, ошибки и утечки, скрытые фичи, бенчмарки в проде.
+
+        ТРЕБОВАНИЯ:
+        - Ровно 12-16 фраз.
+        - Длина КАЖДОЙ фразы СТРОГО от 2 до 4 слов!
+        - Без знаков препинания и кавычек.
+
+        ВЕРНИ СТРОГО JSON:
+        {"queries": ["фраза 1", "фраза 2", "фраза 3", "фраза 4", "фраза 5", "фраза 6", "фраза 7", "фраза 8", "фраза 9", "фраза 10", "фраза 11", "фраза 12"]}
+        """;
+
+        try
+        {
+            var res = await _llmClient.GenerateJsonAsync<JsonElement>(
+                new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: isExpandSearch ? 0.75f : 0.45f, JsonMode: true), ct);
+
+            if (res.TryGetProperty("queries", out var qArr) && qArr.ValueKind == JsonValueKind.Array)
+            {
+                var generated = qArr.EnumerateArray()
+                    .Select(x => CleanToShortQuery(x.GetString() ?? ""))
+                    .Where(x => !string.IsNullOrWhiteSpace(x) && x.Split(' ').Length is >= 2 and <= 5)
+                    .ToList();
+
+                if (generated.Count >= 6) return generated.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "AI query generation fallback");
+        }
+
+        return FallbackQueries(baseQuery, cleanTrends, curYear, isExpandSearch);
+    }
+
     private async Task<List<string>> GeneratePivotQueriesFromGoogleTrendsAsync(
         string baseQuery,
         IReadOnlyList<string> googleTrends,
@@ -484,38 +569,16 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         var excludeSample = (excludeQueries != null && excludeQueries.Count > 0) ? string.Join(", ", excludeQueries.Take(25)) : "нет";
 
         var prompt = $$"""
-        Ты — senior growth-инженер YouTube.
-        Мы проводим глубокий анализ темы "{{baseQuery}}" (язык: {{lang}}).
-        Первые 2 круга стандартного поиска не принесли достаточного количества скрытых аномалий (выдача либо перенасыщена старьем, либо пуста).
+        Ты — senior growth-инженер YouTube в {{curYear}} году.
+        Тема: "{{baseQuery}}" (язык: {{lang}}). Первые 2 круга дали мало результатов.
+        СВЕЖИЕ ДАННЫЕ GOOGLE TRENDS: {{trendsSample}}
+        ЛУЧШИЕ ВИДЕО: {{bestTitlesSample}}
+        ИСКЛЮЧЕНИЯ: {{excludeSample}}
 
-        ЖИВЫЕ ДАННЫЕ GOOGLE TRENDS И YOUTUBE AUTOCOMPLETE (то, что люди вводят прямо сейчас):
-        {{trendsSample}}
-
-        РОЛИКИ, КОТОРЫЕ УЖЕ ПОКАЗАЛИ ХОРОШИЙ СТАРТОВЫЙ VPH:
-        - {{bestTitlesSample}}
-
-        СПИСОК ИСЧЕРПАННЫХ ЗАПРОСОВ (НЕ ПОВТОРЯЙ ИХ):
-        {{excludeSample}}
-
-        ================================================================================
-        СТРАТЕГИЯ АДАПТИВНОГО ПИВОТА (GOOGLE TRENDS PIVOT)
-        ================================================================================
-
-        Определи глубину запроса "{{baseQuery}}":
-        1. ЕСЛИ ТЕМА ШИРОКАЯ ("AI", "Python", "Crypto"):
-           - Стандартные запросы исчерпаны. Обопрись на Google Trends!
-           - Возьми самые узкие, специфические термины и связки из списка трендов выше.
-           - Сфокусируйся на: "почему не работает X", "альтернатива X", "настройка в проде", "сравнение A и B".
-
-        2. ЕСЛИ ТЕМА УЗКАЯ ("Cursor IDE", "DeepSeek R1", "Supabase auth"):
-           - Не уходи в общие фразы ни на миллиметр!
-           - Найди в Google Trends болевые точки именно этой технологии: ошибки версий, несовместимости, падения скорости, трюки с промптами, связки с другим софтом.
-
-        ТРЕБОВАНИЯ:
-        - 12–16 точных поисковых фраз.
-        - Длина строго от 2 до 4 слов на фразу.
-        - Без знаков препинания, кавычек и эмодзи.
-        - Язык: {{lang}}.
+        ЗАДАЧА:
+        На основе данных Google Trends сгенерируй 12–16 СВЕЖИХ запросов по 2–4 слова.
+        - Для широких тем: найди узкие специфические термины и связки из Google Trends.
+        - Для узких тем: найди болевые точки ("ошибка", "vs", "не работает", "в проде").
 
         ВЕРНИ СТРОГО JSON:
         {"queries": ["фраза 1", "фраза 2", "фраза 3", "фраза 4", "фраза 5", "фраза 6", "фраза 7", "фраза 8", "фраза 9", "фраза 10", "фраза 11", "фраза 12"]}
@@ -559,97 +622,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         return fallback;
     }
 
-    /// <summary>
-    /// Генерация начальной матрицы запросов с разделением на широкие и узкие темы
-    /// </summary>
-    private async Task<List<string>> GenerateDiverseShortYouTubeQueriesWithAiAsync(
-        string baseQuery, List<string> googleTrendsKeywords, string lang, int daysBack,
-        IReadOnlyList<string>? excludeQueries, bool isExpandSearch, CancellationToken ct)
-    {
-        var curYear = DateTime.UtcNow.Year;
-        var cleanTrends = googleTrendsKeywords
-            .Select(CleanToShortQuery)
-            .Where(k => k.Split(' ').Length is >= 1 and <= 4)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(8)
-            .ToList();
-
-        var trendsBlock = cleanTrends.Count > 0
-            ? string.Join(", ", cleanTrends)
-            : "нет явных сигналов";
-
-        var excludeBlock = (excludeQueries != null && excludeQueries.Count > 0)
-            ? $"\nУЖЕ ИСПОЛЬЗОВАННЫЕ ЗАПРОСЫ (СТРОГО НЕ ПОВТОРЯЙ ИХ И ИХ ПРЯМЫЕ СИНОНИМЫ!):\n- {string.Join("\n- ", excludeQueries.Take(25))}\n"
-            : "";
-
-        var prompt = $$"""
-        Ты — ведущий аналитик поисковых алгоритмов YouTube и Google Trends в {{curYear}} году.
-        Твоя задача — найти скрытые быстрорастущие вирусные аномалии (Outlier Videos) с высоким VPH от небольших и средних каналов по теме: "{{baseQuery}}".
-        Язык вывода: {{lang}}.
-        {{excludeBlock}}
-        СВЕЖИЕ ДАННЫЕ ИЗ GOOGLE TRENDS И ПОДСКАЗОК ПОЛЬЗОВАТЕЛЕЙ:
-        {{trendsBlock}}
-
-        ================================================================================
-        КЛЮЧЕВОЙ АЛГОРИТМ: ОПРЕДЕЛЕНИЕ ТИПА ЗАПРОСА (ШИРОКИЙ vs УЗКИЙ)
-        ================================================================================
-
-        ШАГ 1. ОПРЕДЕЛИ, К КАКОМУ ТИПУ ОТНОСИТСЯ ТЕМА "{{baseQuery}}":
-
-        🔴 ТИП А: ШИРОКИЙ ЗАПРОС (1-2 общих слова или масштабная ниша, например: "AI", "Python", "Крипта", "Дизайн", "Бизнес", "Программирование"):
-        - ПРОБЛЕМА: Если искать просто "{{baseQuery}} tutorial" или "{{baseQuery}} 2026", выдача забьется старыми видео каналов-миллионников с нулевой ценностью для новых идей.
-        - ПРАВИЛО: КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выдавать абстрактные запросы.
-        - РЕШЕНИЕ: ДЕКОНСТРУИРУЙ широкую нишу на 4 острых суб-вектора:
-          1. Конкретные новые инструменты/фреймворки года (не "ai tools", а конкретные библиотеки/модели из трендов).
-          2. Провокации и разрыв шаблона ("почему бросают", "зачем учить", "скрытые проблемы").
-          3. Практические сценарии автоматизации ("заменил отдел", "с нуля за вечер", "автоматизация рутины").
-          4. Лобовые сравнения двух конкретных лидеров ниши (Tool A vs Tool B).
-
-        🔵 ТИП Б: УЗКИЙ ЗАПРОС (Конкретный софт, модель, инструмент, связка, баг или узкая задача, например: "Cursor vs Windsurf", "DeepSeek R1 локально", "FastAPI background tasks", "Next.js 15 cache"):
-        - ПРОБЛЕМА: Модели часто начинают "размывать" узкий запрос в общие слова ("programming", "ai", "coding"). Это убивает релевантность!
-        - ПРАВИЛО: КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО расширять запрос до общих тем. Удерживай 100% фокус на объекте!
-        - РЕШЕНИЕ: КОПАЙ ВГЛУБЬ этого инструмента:
-          1. Прямые баттлы с главными альтернативами именно этого инструмента (Tool vs Rival).
-          2. Частые ошибки, утечки памяти, зависания, лимиты контекста ("не работает", "ошибка", "troubleshooting").
-          3. Скрытые фичи, трюки, хоткеи, тонкая настройка ("hidden features", "секреты", "лучшие плагины").
-          4. Реальный опыт в проде и стресс-тесты ("in production", "benchmark", "30 days review").
-
-        ================================================================================
-        СТРОГИЕ ТРЕБОВАНИЯ К ФОРМАТУ:
-        ================================================================================
-        - Сгенерируй ровно 12-16 РАЗНООБРАЗНЫХ фраз.
-        - Длина КАЖДОЙ фразы СТРОГО от 2 до 4 слов (идеальный размер поискового запроса YouTube).
-        - Никаких точек, запятых, слэшей, кавычек или вопросительных знаков.
-        - Только поисковые фразы, которые люди реально вводят в строку поиска.
-
-        ВЕРНИ СТРОГО ВАЛИДНЫЙ JSON:
-        {"queries": ["фраза 1", "фраза 2", "фраза 3", "фраза 4", "фраза 5", "фраза 6", "фраза 7", "фраза 8", "фраза 9", "фраза 10", "фраза 11", "фраза 12"]}
-        """;
-
-        try
-        {
-            var res = await _llmClient.GenerateJsonAsync<JsonElement>(
-                new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: isExpandSearch ? 0.65f : 0.45f, JsonMode: true), ct);
-
-            if (res.TryGetProperty("queries", out var qArr) && qArr.ValueKind == JsonValueKind.Array)
-            {
-                var generated = qArr.EnumerateArray()
-                    .Select(x => CleanToShortQuery(x.GetString() ?? ""))
-                    .Where(x => !string.IsNullOrWhiteSpace(x) && x.Split(' ').Length is >= 2 and <= 5)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                if (generated.Count >= 6) return generated;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "AI query generation fallback");
-        }
-
-        return FallbackQueries(baseQuery, cleanTrends, curYear, isExpandSearch);
-    }
-
     private static List<string> FallbackQueries(string baseQuery, List<string> cleanTrends, int curYear, bool isExpandSearch)
     {
         var words = baseQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -662,26 +634,36 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         if (isNarrow)
         {
             var fullTerm = $"{w1} {w2}";
-            fallback.Add($"{fullTerm} review");
-            fallback.Add($"{fullTerm} vs");
-            fallback.Add($"{fullTerm} mistakes");
-            fallback.Add($"{fullTerm} tutorial");
-            fallback.Add($"{fullTerm} in production");
-            fallback.Add($"{fullTerm} {curYear}");
-            fallback.Add($"how to use {fullTerm}");
-            fallback.Add($"{fullTerm} hidden features");
+            if (isExpandSearch)
+            {
+                fallback.Add($"{fullTerm} roadmap {curYear}");
+                fallback.Add($"{fullTerm} architecture deep dive");
+                fallback.Add($"{fullTerm} benchmark production");
+                fallback.Add($"{fullTerm} hidden features");
+                fallback.Add($"{fullTerm} advanced patterns");
+                fallback.Add($"{fullTerm} vs alternative");
+            }
+            else
+            {
+                fallback.Add($"{fullTerm} review");
+                fallback.Add($"{fullTerm} vs");
+                fallback.Add($"{fullTerm} mistakes");
+                fallback.Add($"{fullTerm} tutorial");
+                fallback.Add($"{fullTerm} in production");
+                fallback.Add($"{fullTerm} {curYear}");
+            }
         }
         else
         {
             if (cleanTrends.Count > 0) fallback.AddRange(cleanTrends);
             if (isExpandSearch)
             {
-                fallback.Add($"{w1} advanced guide");
-                fallback.Add($"{w1} in production");
-                fallback.Add($"{w1} architecture");
-                fallback.Add($"{w1} mistakes {curYear}");
-                fallback.Add($"stop using {w1}");
+                fallback.Add($"{w1} roadmap {curYear}");
+                fallback.Add($"{w1} architecture deep dive");
+                fallback.Add($"{w1} benchmark production");
                 fallback.Add($"{w1} hidden features");
+                fallback.Add($"{w1} advanced patterns");
+                fallback.Add($"{w1} vs alternative");
             }
             else
             {
@@ -689,7 +671,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                 fallback.Add($"{w1} tools {curYear}");
                 fallback.Add($"{w1} review");
                 fallback.Add($"{w1} tutorial");
-                fallback.Add($"{w1} vs {w2}");
             }
         }
 
@@ -704,81 +685,30 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         return string.Join(" ", words.Take(4));
     }
 
-    private async Task<object> SynthesizeViralIdeasAsync(
-        string query, string lang, List<Dictionary<string, object>> videos,
-        List<object> blueOceans, int ideasCount, string channelContext,
-        CancellationToken ct)
-    {
-        var curYear = DateTime.UtcNow.Year;
-        var skillBundle = await _skillsCatalog.GetSkillBundleForStageAsync(
-            SkillStage.TrendResearch, 3000, "Generate high-retention viral concepts.", ct);
-
-        var topVids = string.Join("\n", videos.Take(6).Select(v => $"- {v["title"]} (Views: {v["views"]}, VPH: {v["vph"]}, Ratio: x{v["ratio"]})"));
-        var contextBlock = !string.IsNullOrWhiteSpace(channelContext) ? $"Channel Specific Context: {channelContext}\n" : "";
-
-        var userPrompt = $$"""
-Topic: '{{query}}'
-Current Year: {{curYear}}
-Language: {{lang}}
-Target Ideas Count: {{ideasCount}}
-{{contextBlock}}
-Top Outlier Videos (Real Viral Hits with High Views-Per-Hour):
-{{topVids}}
-Generate strictly {{ideasCount}} high-CTR, psychological video ideas that outperform the competition.
-Return strictly JSON matching:
-{
-  "psychology": { "viewer_fear": "...", "viewer_aspiration": "...", "skepticism_barrier": "..." },
-  "ideas": [
-    { "concept_id": "A", "angle_type": "Contrarian", "titles": ["..."], "thumbnail_visual": "...", "thumbnail_overlay": "...", "description": "...", "psychological_hook": "..." }
-  ],
-  "best_concept_script": {
-    "hook_0_5s": { "spoken": "...", "visual_cues": "..." },
-    "stakes_5_20s": { "spoken": "...", "visual_cues": "..." },
-    "open_loop_20_45s": { "spoken": "...", "visual_cues": "..." }
-  },
-  "seo": { "primary_keyword": "{{query}}", "description_above_fold": "...", "description_body": "...", "timestamps": [], "tags": ["{{query}}"], "pinned_comment": "..." }
-}
-""";
-        try
-        {
-            var res = await _llmClient.GenerateTextAsync(
-                new LlmPromptSpec([new LlmPromptMessage("system", skillBundle.SystemPrompt), new LlmPromptMessage("user", userPrompt)],
-                    Temperature: 0.4f, JsonMode: true), ct);
-            using var doc = JsonDocument.Parse(res);
-            return doc.RootElement.Clone();
-        }
-        catch
-        {
-            return new
-            {
-                psychology = new { viewer_fear = "Страх отстать от технологий", viewer_aspiration = "Автоматизация рутины и рост дохода", skepticism_barrier = "Усталость от кликбейта" },
-                ideas = Enumerable.Range(1, ideasCount).Select(i => new
-                {
-                    concept_id = $"Concept_{i}",
-                    angle_type = "High-CTR Hook",
-                    titles = new[] { $"{query}: Главный прорыв #{i} ({curYear})" },
-                    thumbnail_visual = "Минималистичный контрастный фокусный элемент",
-                    thumbnail_overlay = "СМОТРИ",
-                    description = $"Глубокий разбор темы {query} с практическими выводами.",
-                    psychological_hook = "Разрыв шаблона в первые 3 секунды"
-                }).ToArray(),
-                blue_ocean_gaps = blueOceans
-            };
-        }
-    }
-
-    private static double CalculateJaccardWords(string a, string b)
-    {
-        var wA = a.ToLowerInvariant().Split([' ', ',', '.', ':', '-', '/'], StringSplitOptions.RemoveEmptyEntries).ToHashSet();
-        var wB = b.ToLowerInvariant().Split([' ', ',', '.', ':', '-', '/'], StringSplitOptions.RemoveEmptyEntries).ToHashSet();
-        if (wA.Count == 0 || wB.Count == 0) return 0.0;
-        int intersect = wA.Intersect(wB).Count();
-        int union = wA.Union(wB).Count();
-        return union == 0 ? 0.0 : (double)intersect / union;
-    }
-
     private static async Task EmitLog(Func<string, Task> emit, string message, string status = "info")
     {
         await emit(JsonSerializer.Serialize(new { type = "log", message, status }));
     }
+}
+
+public sealed record DeepTrendExecutionOptions
+{
+    public required string Query { get; init; }
+    public string Language { get; init; } = "ru";
+    public int DaysBack { get; init; } = 30;
+    public long MinSubs { get; init; } = 1000;
+    public long MaxSubs { get; init; } = 90000;
+    public double MinRatio { get; init; } = 1.5;
+    public string SearchMode { get; init; } = "trending";
+    public string SearchEngine { get; init; } = "auto";
+    public string VideoType { get; init; } = "all";
+    public int IdeasCount { get; init; } = 5;
+    public string ChannelContext { get; init; } = "";
+    public IReadOnlyList<string> CompetitorChannels { get; init; } = [];
+    public IReadOnlyList<string> ExcludeVideoIds { get; init; } = [];
+    public IReadOnlyList<string> ExcludeQueries { get; init; } = [];
+    public bool IsExpandSearch { get; init; } = false;
+    public string? YouTubeApiKey { get; init; }
+    public string? LlmEngine { get; init; }
+    public JsonElement? ApiKeys { get; init; }
 }
