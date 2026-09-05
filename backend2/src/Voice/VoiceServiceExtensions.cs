@@ -29,6 +29,7 @@ public static class VoiceServiceExtensions
         services.AddDbContext<VoiceDbContext>(options => options.UseSqlite(connectionString));
 
         services.AddScoped<ITtsJobRepository, EfTtsJobRepository>();
+        services.AddScoped<ISpeakerProfileRepository, EfSpeakerProfileRepository>();
 
         // Движки TTS
         services.AddScoped<ITtsEngineProvider, OmniVoiceTtsProvider>();
@@ -43,6 +44,13 @@ public static class VoiceServiceExtensions
         services.AddScoped<IForcedAlignmentProvider, NativeFallbackAlignmentProvider>();
         services.AddScoped<AlignmentProviderRegistry>();
 
+        // Voice Design и Cloning
+        services.AddScoped<IVoiceDesignProvider, OmniVoiceDesignProvider>();
+        services.AddScoped<IVoiceCloneProvider, OmniVoiceCloneProvider>();
+        services.AddScoped<IVoiceCloneProvider, MiniMaxCloneProvider>();
+        services.AddScoped<VoiceDesignProviderRegistry>();
+        services.AddScoped<VoiceCloneProviderRegistry>();
+
         // DSP и обработка звука
         services.AddSingleton<IAudioDuckingService, FfmpegAudioDuckingService>();
 
@@ -51,7 +59,7 @@ public static class VoiceServiceExtensions
 
         // Главный фасад
         services.AddScoped<IVoiceModule, VoiceModule>();
-        services.AddHostedService<VoiceDatabaseHostedService>();
+        // services.AddHostedService<VoiceDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 
         return services;
     }

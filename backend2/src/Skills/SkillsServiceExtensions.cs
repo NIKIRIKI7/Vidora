@@ -47,7 +47,7 @@ public static class SkillsServiceExtensions
 
         // 5. Сидинг при старте
         services.AddScoped<SkillsSeeder>();
-        services.AddHostedService<SkillsSeederHostedService>();
+        // services.AddHostedService<SkillsSeederHostedService>(); // migrated to CLI: dotnet run -- --migrate
 
         return services;
     }

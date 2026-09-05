@@ -41,7 +41,7 @@ public static class SystemServiceExtensions
 
         // Сидинг и миграции
         services.AddScoped<SystemDatabaseSeeder>();
-        services.AddHostedService<SystemDatabaseHostedService>();
+        // services.AddHostedService<SystemDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
         services.AddHostedService<ModelDiscoveryService>();
 
         // Модуль и сервисы мониторинга

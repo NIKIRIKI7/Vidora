@@ -5,34 +5,18 @@ public sealed class YouTubeOptions
     public const string SectionName = "YouTube";
 
     /// <summary>
-    /// Путь к интерпретатору python из созданного venv yt_scrapper.
-    /// Если не указан, разрешается автоматически относительно каталога tools/.
+    /// Официальный API-ключ Google/YouTube Data API v3 (опционально).
+    /// Если задан — используется для прямого обращения к API.
+    /// Если пуст или квота исчерпана — автоматически включается fallback на yt-dlp.
     /// </summary>
+    public string? ApiKey { get; set; }
+
     public string? PythonExecutablePath { get; set; }
-
-    /// <summary>
-    /// Путь к Python-скрипту враппера yt_metadata.py.
-    /// </summary>
     public string? YtMetadataScriptPath { get; set; }
-
-    /// <summary>
-    /// Путь к бинарнику yt-dlp.
-    /// </summary>
     public string? YtDlpExecutablePath { get; set; }
-
-    /// <summary>
-    /// Временная директория для сохранения скачиваемых медиафайлов.
-    /// </summary>
     public string DownloadDirectory { get; set; } = "data_storage/temp/youtube";
-
-    /// <summary>
-    /// Таймаут на скрапинг метаданных в секундах.
-    /// </summary>
     public int ScrapeTimeoutSeconds { get; set; } = 30;
-
-    /// <summary>
-    /// Таймаут на скачивание медиа в секундах.
-    /// </summary>
+    public int SearchTimeoutSeconds { get; set; } = 60;
     public int DownloadTimeoutSeconds { get; set; } = 600;
 
     public string ResolvePythonExecutable()
@@ -46,11 +30,11 @@ public sealed class YouTubeOptions
             ? [
                 Path.Combine("tools", "yt_scrapper", "Scripts", "python.exe"),
                 Path.Combine("tools", "yt_scrapper", "python.exe")
-              ]
+            ]
             : [
                 Path.Combine("tools", "yt_scrapper", "bin", "python"),
                 Path.Combine("tools", "yt_scrapper", "bin", "python3")
-              ];
+            ];
 
         foreach (var relativePath in candidateSubPaths)
         {
@@ -97,7 +81,6 @@ public sealed class YouTubeOptions
         }
 
         string executableName = OperatingSystem.IsWindows() ? "yt-dlp.exe" : "yt-dlp";
-
         string[] candidateSubPaths =
         [
             Path.Combine("tools", executableName),

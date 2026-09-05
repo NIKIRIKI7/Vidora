@@ -78,3 +78,23 @@ public sealed record MusicTrackDto(
     [property: JsonPropertyName("duration_seconds")] double DurationSeconds,
     [property: JsonPropertyName("file_path")] string FilePath,
     [property: JsonPropertyName("tempo_bpm")] int TempoBpm);
+
+public sealed record ProcessBrollCommand(
+    string SourcePath,
+    string ProjectPath,
+    string FilenamePrefix,
+    string TargetFormat,
+    string TargetResolution,
+    int Fps,
+    string FitMode,
+    double? TargetDuration,
+    bool LoopIfShorter,
+    bool KeepAudio,
+    bool ExtractAudio);
+
+public sealed record ProcessBrollResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("filename")] string Filename,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("duration")] double Duration,
+    [property: JsonPropertyName("extracted_audio_path")] string? ExtractedAudioPath);

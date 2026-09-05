@@ -25,7 +25,7 @@ public static class MediaServiceExtensions
         services.AddSingleton<IBrollNormalizer, FfmpegBrollNormalizer>();
         services.AddSingleton<IMusicCatalogProvider, LocalMusicCatalogProvider>();
         services.AddScoped<IMediaModule, MediaModule>();
-        services.AddHostedService<MediaDatabaseHostedService>();
+        // services.AddHostedService<MediaDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 
         return services;
     }

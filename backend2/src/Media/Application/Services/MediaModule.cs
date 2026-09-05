@@ -195,6 +195,35 @@ public sealed class MediaModule : IMediaModule
         _logger.LogInformation("[MediaModule] Ассет удален: {AssetId}", assetId);
     }
 
+    public async Task<ProcessBrollResponse> ProcessBrollAsync(ProcessBrollCommand command, CancellationToken ct = default)
+    {
+        var safeSource = _pathResolver.ResolveSafePath(command.SourcePath);
+        var targetDir = _storageService.ResolveSafeDirectory(Path.Combine(command.ProjectPath, "assets", "b-roll"));
+        var targetFileName = $"{command.FilenamePrefix}_{Guid.NewGuid():N[..6]}.mp4";
+        var safeDest = Path.Combine(targetDir, targetFileName);
+
+        var isVertical = command.TargetFormat == "9:16";
+        var dims = isVertical ? new MediaDimensions(1080, 1920) : new MediaDimensions(1920, 1080);
+
+        var normalizedPath = await _normalizer.NormalizeVideoAsync(
+            safeSource,
+            safeDest,
+            dims,
+            command.Fps,
+            ct);
+
+        var fileInfo = new FileInfo(normalizedPath);
+        var duration = command.TargetDuration ?? 3.0;
+
+        string? extractedAudio = null;
+        if (command.ExtractAudio)
+        {
+            extractedAudio = Path.ChangeExtension(safeDest, ".wav");
+        }
+
+        return new ProcessBrollResponse("ok", targetFileName, normalizedPath, duration, extractedAudio);
+    }
+
     private static MediaAssetDto MapToDto(MediaAsset entity) => new()
     {
         Id = entity.Id.Value,

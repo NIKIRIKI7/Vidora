@@ -49,3 +49,11 @@ public sealed record AiModelDto(
     [property: JsonPropertyName("error_message")] string? ErrorMessage,
     [property: JsonPropertyName("version")] string Version,
     [property: JsonPropertyName("is_required")] bool IsRequired);
+
+public sealed record SystemLogEntryDto(
+    [property: JsonPropertyName("timestamp")] DateTimeOffset Timestamp,
+    [property: JsonPropertyName("level")] string Level,
+    [property: JsonPropertyName("category")] string Category,
+    [property: JsonPropertyName("event_id")] int EventId,
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("exception")] object? Exception);

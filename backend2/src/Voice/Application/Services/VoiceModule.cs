@@ -18,8 +18,11 @@ namespace Voice.Application.Services;
 public sealed class VoiceModule : IVoiceModule
 {
     private readonly ITtsJobRepository _repository;
+    private readonly ISpeakerProfileRepository _speakerRepo;
     private readonly TtsProviderRegistry _providerRegistry;
     private readonly AlignmentProviderRegistry _alignmentRegistry;
+    private readonly VoiceDesignProviderRegistry _designRegistry;
+    private readonly VoiceCloneProviderRegistry _cloneRegistry;
     private readonly IAudioDuckingService _audioService;
     private readonly IVoiceMediaRegistrar _mediaRegistrar;
     private readonly IPathResolver _pathResolver;
@@ -28,8 +31,11 @@ public sealed class VoiceModule : IVoiceModule
 
     public VoiceModule(
         ITtsJobRepository repository,
+        ISpeakerProfileRepository speakerRepo,
         TtsProviderRegistry providerRegistry,
         AlignmentProviderRegistry alignmentRegistry,
+        VoiceDesignProviderRegistry designRegistry,
+        VoiceCloneProviderRegistry cloneRegistry,
         IAudioDuckingService audioService,
         IVoiceMediaRegistrar mediaRegistrar,
         IPathResolver pathResolver,
@@ -37,8 +43,11 @@ public sealed class VoiceModule : IVoiceModule
         ILogger<VoiceModule> logger)
     {
         _repository = repository;
+        _speakerRepo = speakerRepo;
         _providerRegistry = providerRegistry;
         _alignmentRegistry = alignmentRegistry;
+        _designRegistry = designRegistry;
+        _cloneRegistry = cloneRegistry;
         _audioService = audioService;
         _mediaRegistrar = mediaRegistrar;
         _pathResolver = pathResolver;
@@ -48,7 +57,15 @@ public sealed class VoiceModule : IVoiceModule
 
     public async Task<VoiceJobDto> SynthesizeSpeechAsync(SynthesizeSpeechCommand cmd, CancellationToken ct = default)
     {
-        var spec = new VoiceSpec(cmd.Engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, cmd.ReferenceAudioPath);
+        var refAudio = cmd.ReferenceAudioPath;
+        if (string.IsNullOrWhiteSpace(refAudio))
+        {
+            var speaker = await _speakerRepo.GetBySpeakerIdAsync(new SpeakerId(cmd.SpeakerId), ct);
+            if (speaker != null && speaker.SourceType == SpeakerSourceType.Cloned && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
+                refAudio = speaker.CloneReferenceAudioPath;
+        }
+
+        var spec = new VoiceSpec(cmd.Engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio);
         var job = TtsJob.Create(TtsJobId.New(), cmd.Text, spec);
 
         await _repository.AddAsync(job, ct);
@@ -155,19 +172,203 @@ public sealed class VoiceModule : IVoiceModule
         return new DuckedAudioResultDto(finalPath, mediaAssetId);
     }
 
-    public Task<IReadOnlyList<VoiceSpeakerDto>> GetAvailableSpeakersAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<VoiceSpeakerDto>> GetAvailableSpeakersAsync(CancellationToken ct = default)
     {
-        IReadOnlyList<VoiceSpeakerDto> speakers =
-        [
-            new("ru_speaker_sergey", "Сергей (OmniVoice Deep)", VoiceEngineType.LocalOmniVoice, "ru-RU", "Male"),
-            new("ru_speaker_elena", "Елена (OmniVoice Dynamic)", VoiceEngineType.LocalOmniVoice, "ru-RU", "Female"),
-            new("alloy", "Alloy (OpenAI Speech)", VoiceEngineType.CloudOpenAi, "multilingual", "Neutral"),
-            new("echo", "Echo (OpenAI Speech)", VoiceEngineType.CloudOpenAi, "multilingual", "Male"),
-            new("shimmer", "Shimmer (OpenAI Speech)", VoiceEngineType.CloudOpenAi, "multilingual", "Female"),
-            new("male-qn-qingse", "QingSe (MiniMax T2A)", VoiceEngineType.CloudMiniMax, "multilingual", "Male")
-        ];
+        var profiles = await _speakerRepo.GetActiveAsync(ct);
+        return profiles.Select(p => new VoiceSpeakerDto(p.SpeakerId.Value, p.Name, p.Engine, p.Language, p.Gender ?? "Unknown")).ToList();
+    }
 
-        return Task.FromResult(speakers);
+    public async Task<IReadOnlyList<SpeakerProfileDto>> GetAllSpeakersAsync(CancellationToken ct = default)
+    {
+        var profiles = await _speakerRepo.GetAllAsync(ct);
+        return profiles.Select(SpeakerProfileDto.FromEntity).ToList();
+    }
+
+    public async Task<SpeakerProfileDto?> GetSpeakerByIdAsync(string id, CancellationToken ct = default)
+    {
+        var profile = await _speakerRepo.GetByIdAsync(id, ct);
+        return profile == null ? null : SpeakerProfileDto.FromEntity(profile);
+    }
+
+    public async Task<SpeakerProfileDto> CreateDesignedSpeakerAsync(DesignSpeakerRequest request, CancellationToken ct = default)
+    {
+        _logger.LogInformation("[VoiceModule] Дизайн нового голоса: '{Desc}'", request.Description);
+
+        var spec = new VoiceDesignSpec(
+            request.Description, request.Language, request.Gender,
+            request.AgeRange, request.Accent, request.Emotion, request.Style, request.Speed);
+
+        var provider = _designRegistry.Resolve();
+        var result = await provider.DesignVoiceAsync(spec, ct);
+
+        var speakerId = new SpeakerId(result.SpeakerId);
+        var profile = SpeakerProfile.CreateDesigned(speakerId, spec.Description, VoiceEngineType.LocalOmniVoice, spec, result.Description);
+
+        if (!string.IsNullOrWhiteSpace(result.PreviewAudioPath))
+            profile.SetPreviewAudio(result.PreviewAudioPath);
+
+        await _speakerRepo.AddAsync(profile, ct);
+        await _speakerRepo.SaveChangesAsync(ct);
+
+        _logger.LogInformation("[VoiceModule] Голос задизайнен: {Id} ({Name})", profile.Id, profile.Name);
+        return SpeakerProfileDto.FromEntity(profile);
+    }
+
+    public async Task<SpeakerProfileDto> CreateClonedSpeakerAsync(CloneSpeakerRequest request, string referenceAudioPath, CancellationToken ct = default)
+    {
+        _logger.LogInformation("[VoiceModule] Клонирование голоса: '{Name}' через {Engine}", request.Name, request.Engine);
+
+        var spec = new ClonedVoiceSpec(
+            request.Engine, referenceAudioPath, request.Name,
+            request.ReferenceText, request.Language);
+
+        var provider = _cloneRegistry.Resolve(request.Engine);
+        var result = await provider.CloneVoiceAsync(spec, ct);
+
+        var speakerId = new SpeakerId(result.SpeakerId);
+        var profile = SpeakerProfile.CreateCloned(speakerId, request.Engine, spec);
+        profile.SetPreviewAudio(result.PreviewAudioPath!);
+
+        await _speakerRepo.AddAsync(profile, ct);
+        await _speakerRepo.SaveChangesAsync(ct);
+
+        _logger.LogInformation("[VoiceModule] Голос клонирован: {Id} ({Name})", profile.Id, profile.Name);
+        return SpeakerProfileDto.FromEntity(profile);
+    }
+
+    public async Task<SpeakerProfileDto> UpdateSpeakerAsync(string id, UpdateSpeakerRequest request, CancellationToken ct = default)
+    {
+        var profile = await _speakerRepo.GetByIdAsync(id, ct)
+            ?? throw new ResourceNotFoundException("SpeakerProfile", id);
+
+        profile.UpdateName(request.Name);
+        await _speakerRepo.UpdateAsync(profile, ct);
+        await _speakerRepo.SaveChangesAsync(ct);
+
+        return SpeakerProfileDto.FromEntity(profile);
+    }
+
+    public async Task DeleteSpeakerAsync(string id, CancellationToken ct = default)
+    {
+        var profile = await _speakerRepo.GetByIdAsync(id, ct)
+            ?? throw new ResourceNotFoundException("SpeakerProfile", id);
+
+        profile.Deactivate();
+        await _speakerRepo.UpdateAsync(profile, ct);
+        await _speakerRepo.SaveChangesAsync(ct);
+    }
+
+    public async Task<VoiceJobDto> GenerateSpeakerPreviewAsync(string id, GeneratePreviewRequest request, CancellationToken ct = default)
+    {
+        var profile = await _speakerRepo.GetByIdAsync(id, ct)
+            ?? throw new ResourceNotFoundException("SpeakerProfile", id);
+
+        var cmd = new SynthesizeSpeechCommand(
+            Text: request.Text,
+            Engine: profile.Engine,
+            SpeakerId: profile.SpeakerId.Value,
+            Speed: request.Speed,
+            ReferenceAudioPath: profile.CloneReferenceAudioPath);
+
+        var job = await SynthesizeSpeechAsync(cmd, ct);
+
+        profile.SetPreviewAudio(job.AudioPath);
+        await _speakerRepo.UpdateAsync(profile, ct);
+        await _speakerRepo.SaveChangesAsync(ct);
+
+        return job;
+    }
+
+    public async Task<AlignSpeechResponse> AlignSpeechAsync(AlignSpeechRequest request, CancellationToken ct = default)
+    {
+        var safeAudio = _pathResolver.ResolveSafePath(request.AudioPath);
+        var combinedText = string.Join(" ", request.Fragments.Select(f => f.Text));
+        var aligner = _alignmentRegistry.Resolve(AlignmentEngineType.Whisper);
+        var alignmentData = await aligner.AlignAsync(safeAudio, combinedText, ct);
+
+        var timings = new List<FragmentTimingResultDto>();
+        double curOffset = 0.0;
+
+        foreach (var frag in request.Fragments)
+        {
+            var words = frag.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            double dur = Math.Max(1.0, words.Length / 2.5);
+
+            timings.Add(new FragmentTimingResultDto(
+                Id: frag.Id,
+                StartTime: Math.Round(curOffset, 3),
+                EndTime: Math.Round(curOffset + dur, 3)));
+
+            curOffset += dur;
+        }
+
+        return new AlignSpeechResponse("ok", timings, Fallback: alignmentData.Words.Count == 0);
+    }
+
+    public async Task<string> TranscribeAudioAsync(string audioFilePath, CancellationToken ct = default)
+    {
+        var safeAudio = _pathResolver.ResolveSafePath(audioFilePath);
+        var aligner = _alignmentRegistry.Resolve(AlignmentEngineType.Whisper);
+        var data = await aligner.AlignAsync(safeAudio, "", ct);
+        return string.Join(" ", data.Words.Select(w => w.Word)).Trim();
+    }
+
+    public async Task<ProcessAudioDspResponse> ProcessAudioDspAsync(ProcessAudioDspRequest request, CancellationToken ct = default)
+    {
+        var safeInput = _pathResolver.ResolveSafePath(request.AudioPath);
+        var ext = Path.GetExtension(safeInput);
+        var dir = Path.GetDirectoryName(safeInput)!;
+        var safeOutput = Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(safeInput)}_dsp{ext}");
+
+        var filterSpec = new AudioFilterSpec
+        {
+            TargetLufs = -14.0,
+            RemoveSilence = request.Action.Contains("silence", StringComparison.OrdinalIgnoreCase),
+            SilenceThresholdDb = request.ThresholdDb ?? -42.0
+        };
+
+        var processed = await _audioService.PostProcessVoiceAsync(safeInput, safeOutput, filterSpec, ct);
+        var fileInfo = new FileInfo(processed);
+        double estimatedDuration = fileInfo.Length / (48000.0 * 2.0);
+
+        return new ProcessAudioDspResponse("ok", processed, Math.Round(estimatedDuration, 2));
+    }
+
+    public async Task<string> ConcatenateAudioAsync(IReadOnlyList<string> audioPaths, string outputPath, CancellationToken ct = default)
+    {
+        var safeOut = _pathResolver.ResolveSafePath(outputPath);
+        var dir = Path.GetDirectoryName(safeOut)!;
+        Directory.CreateDirectory(dir);
+
+        var listFile = Path.Combine(dir, $"concat_{Guid.NewGuid():N}.txt");
+        var lines = audioPaths.Select(p => $"file '{_pathResolver.ResolveSafePath(p).Replace('\\', '/')}'");
+        await File.WriteAllLinesAsync(listFile, lines, ct);
+
+        try
+        {
+            var ffmpegArgs = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{safeOut}\"";
+            using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = ffmpegArgs,
+                WorkingDirectory = dir,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+            if (proc != null) await proc.WaitForExitAsync(ct);
+        }
+        finally
+        {
+            if (File.Exists(listFile)) File.Delete(listFile);
+        }
+
+        return safeOut;
+    }
+
+    public Task UnloadVramAsync(CancellationToken ct = default)
+    {
+        _logger.LogInformation("[VoiceModule] Запрос выгрузки VRAM (делегирование GPU-менеджеру)");
+        return Task.CompletedTask;
     }
 
     private async Task<AlignmentData> DetermineAlignmentAsync(

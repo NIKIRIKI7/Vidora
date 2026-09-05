@@ -1,7 +1,12 @@
+using System.Text.Json;
+using Kernel.Ports;
+using MotionContext.Application.Services;
+using MotionContext.Contracts;
+using MotionContext.Domain.Ports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
-using MotionContext.Contracts;
 
 namespace Api.Endpoints.Motion;
 
@@ -98,6 +103,45 @@ public static class MotionEndpoints
         {
             await motion.CancelRenderAsync(jobId, ct);
             return Results.Ok(new { message = "Задача рендеринга отменена." });
+        });
+
+        // --- Compatibility aliases for frontend ---
+        endpoints.MapPost("/api/v1/code/generate", async (
+            [FromBody] JsonElement payload,
+            ILlmClient llm,
+            ILlmCodeExtractor extractor,
+            CancellationToken ct) =>
+        {
+            var prompt = payload.GetProperty("prompt").GetString()!;
+            var spec = new LlmPromptSpec(
+                Messages: [new LlmPromptMessage("user", prompt)],
+                Temperature: 0.2f,
+                MaxTokens: 4000);
+
+            var rawOutput = await llm.GenerateTextAsync(spec, ct);
+            var sanitized = extractor.ExtractAndSanitize(rawOutput);
+
+            return Results.Ok(new
+            {
+                status = "ok",
+                tsx_code = sanitized.SanitizedCode.Value
+            });
+        });
+
+        endpoints.MapPost("/api/v1/render/start", async (
+            [FromBody] JsonElement payload,
+            IMotionModule motion,
+            CancellationToken ct) =>
+        {
+            var targetId = payload.GetProperty("target_id").GetString()!;
+            var job = await motion.StartRenderAsync(targetId, new StartRenderRequest(null, null), ct);
+            return Results.Ok(new { status = "ok", task_id = job.Id });
+        });
+
+        endpoints.MapPost("/api/v1/render/cancel/{jobId}", async (string jobId, IMotionModule motion, CancellationToken ct) =>
+        {
+            await motion.CancelRenderAsync(jobId, ct);
+            return Results.Ok(new { status = "ok" });
         });
 
         return endpoints;

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Kernel.Events;
 using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Voice.Domain;
 using Voice.Domain.Entities;
 using Voice.Domain.ValueObjects;
 
@@ -10,6 +11,7 @@ namespace Voice.Infrastructure.Persistence;
 public class VoiceDbContext : SqliteDbContextBase
 {
     public DbSet<TtsJob> TtsJobs => Set<TtsJob>();
+    public DbSet<SpeakerProfile> SpeakerProfiles => Set<SpeakerProfile>();
 
     public VoiceDbContext(DbContextOptions<VoiceDbContext> options, IEventBus? eventBus = null)
         : base(options, eventBus) { }
@@ -64,6 +66,57 @@ public class VoiceDbContext : SqliteDbContextBase
 
             b.HasIndex(j => j.Status);
             b.HasIndex(j => j.CreatedAt);
+        });
+
+        modelBuilder.Entity<SpeakerProfile>(b =>
+        {
+            b.ToTable("voice_speaker_profiles");
+            b.HasKey(s => s.Id);
+            b.Ignore(s => s.DomainEvents);
+
+            b.Property(s => s.Id).HasMaxLength(80).IsRequired();
+
+            b.Property(s => s.SpeakerId)
+                .HasConversion(id => id.Value, str => new SpeakerId(str))
+                .HasMaxLength(SpeakerId.MaxLength)
+                .IsRequired();
+
+            b.Property(s => s.Name)
+                .HasMaxLength(SpeakerProfile.MaxNameLength)
+                .IsRequired();
+
+            b.Property(s => s.Description)
+                .HasMaxLength(SpeakerProfile.MaxDescriptionLength);
+
+            b.Property(s => s.SourceType)
+                .HasConversion<string>()
+                .HasMaxLength(16)
+                .IsRequired();
+
+            b.Property(s => s.Engine)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            b.Property(s => s.Language)
+                .HasMaxLength(16)
+                .IsRequired();
+
+            b.Property(s => s.Gender).HasMaxLength(16);
+
+            b.Property(s => s.IsDefault);
+            b.Property(s => s.IsActive);
+
+            b.Property(s => s.DesignedDescription).HasMaxLength(1000);
+            b.Property(s => s.CloneReferenceAudioPath).HasMaxLength(512);
+            b.Property(s => s.CloneReferenceText).HasMaxLength(2000);
+            b.Property(s => s.PreviewAudioPath).HasMaxLength(512);
+
+            b.Property(s => s.CreatedAt).IsRequired();
+            b.Property(s => s.UpdatedAt).IsRequired();
+
+            b.HasIndex(s => s.SourceType);
+            b.HasIndex(s => s.IsActive);
         });
     }
 }

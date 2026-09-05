@@ -9,4 +9,5 @@ public interface ISystemModule
     Task<IReadOnlyList<AiModelDto>> GetAiModelsAsync(CancellationToken ct = default);
     Task<AiModelDto> TriggerModelDownloadAsync(string modelId, CancellationToken ct = default);
     Task CleanSystemTempFilesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<SystemLogEntryDto>> GetRecentLogsAsync(int limit = 100, string? level = null, CancellationToken ct = default);
 }

@@ -1,8 +1,13 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using Kernel.Exceptions;
+using Kernel.Platform.Gpu;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Voice.Application.Commands;
+using Voice.Application.Contracts;
 using Voice.Application.Services;
 using Voice.Domain;
 using Voice.Domain.ValueObjects;
@@ -71,6 +76,142 @@ public static class VoiceEndpoints
         {
             var speakers = await voice.GetAvailableSpeakersAsync(ct);
             return Results.Ok(speakers);
+        });
+
+        var speakerGroup = group.MapGroup("/speakers/profiles").WithTags("Speaker Profiles");
+
+        speakerGroup.MapGet("/", async (IVoiceModule voice, CancellationToken ct) =>
+        {
+            var profiles = await voice.GetAllSpeakersAsync(ct);
+            return Results.Ok(profiles);
+        });
+
+        speakerGroup.MapGet("/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var profile = await voice.GetSpeakerByIdAsync(id, ct);
+            return profile is null ? Results.NotFound() : Results.Ok(profile);
+        });
+
+        speakerGroup.MapPost("/design", async (DesignSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var profile = await voice.CreateDesignedSpeakerAsync(request, ct);
+            return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
+        });
+
+        speakerGroup.MapPost("/clone", async (
+            [FromForm] string name,
+            [FromForm] VoiceEngineType engine,
+            [FromForm] string? referenceText,
+            [FromForm] string? language,
+            IFormFile referenceAudio,
+            IVoiceModule voice,
+            CancellationToken ct) =>
+        {
+            if (referenceAudio is null || referenceAudio.Length == 0)
+            {
+                throw new ValidationException("referenceAudio", "Аудиофайл референса обязателен.");
+            }
+
+            var tempPath = Path.Combine(Path.GetTempPath(), $"clone_ref_{Guid.NewGuid():N}{Path.GetExtension(referenceAudio.FileName)}");
+            await using (var fs = File.Create(tempPath))
+            {
+                await referenceAudio.CopyToAsync(fs, ct);
+            }
+
+            var request = new CloneSpeakerRequest(name, engine, referenceText, language);
+            var profile = await voice.CreateClonedSpeakerAsync(request, tempPath, ct);
+            return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
+        }).DisableAntiforgery();
+
+        speakerGroup.MapPut("/{id}", async (string id, UpdateSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var profile = await voice.UpdateSpeakerAsync(id, request, ct);
+            return Results.Ok(profile);
+        });
+
+        speakerGroup.MapDelete("/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
+        {
+            await voice.DeleteSpeakerAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        speakerGroup.MapPost("/{id}/preview", async (string id, GeneratePreviewRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var job = await voice.GenerateSpeakerPreviewAsync(id, request, ct);
+            return Results.Ok(job);
+        });
+
+        group.MapPost("/align", async (AlignSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var result = await voice.AlignSpeechAsync(request, ct);
+            return Results.Ok(result);
+        });
+
+        group.MapPost("/transcribe", async (TranscribeAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var text = await voice.TranscribeAudioAsync(request.AudioPath, ct);
+            return Results.Ok(new TranscribeAudioResponse("ok", text));
+        });
+
+        group.MapPost("/process-dsp", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var res = await voice.ProcessAudioDspAsync(request, ct);
+            return Results.Ok(res);
+        });
+
+        group.MapPost("/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var outPath = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct);
+            return Results.Ok(new { status = "ok", output_path = outPath });
+        });
+
+        group.MapPost("/vram/unload", async (IGpuManager gpu, CancellationToken ct) =>
+        {
+            await gpu.CleanMemoryAsync(ct);
+            return Results.Ok(new { status = "ok" });
+        });
+
+        // --- Compatibility aliases for frontend ---
+        endpoints.MapPost("/api/v1/audio/generate", async (SynthesizeSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var cmd = new SynthesizeSpeechCommand(
+                Text: request.Text,
+                Engine: request.Engine,
+                SpeakerId: request.SpeakerId,
+                AlignmentEngine: request.AlignmentEngine ?? AlignmentEngineType.Whisper,
+                Speed: request.Speed ?? 1.0,
+                Pitch: request.Pitch ?? 1.0,
+                ReferenceAudioPath: request.ReferenceAudioPath,
+                Filters: request.Filters);
+
+            var res = await voice.SynthesizeSpeechAsync(cmd, ct);
+            return Results.Ok(new
+            {
+                status = "ok",
+                audio_url = Path.GetFileName(res.AudioPath ?? "output.wav"),
+                duration = res.DurationSeconds ?? 2.0
+            });
+        });
+
+        endpoints.MapPost("/api/v1/audio/sync", async (AlignSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
+            Results.Ok(await voice.AlignSpeechAsync(request, ct)));
+
+        endpoints.MapPost("/api/v1/audio/process", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
+            Results.Ok(await voice.ProcessAudioDspAsync(request, ct)));
+
+        endpoints.MapPost("/api/v1/audio/process/advanced-silence", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
+            Results.Ok(await voice.ProcessAudioDspAsync(request with { Action = "silence" }, ct)));
+
+        endpoints.MapPost("/api/v1/audio/transcribe", async (TranscribeAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
+            Results.Ok(new TranscribeAudioResponse("ok", await voice.TranscribeAudioAsync(request.AudioPath, ct))));
+
+        endpoints.MapPost("/api/v1/audio/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
+            Results.Ok(new { status = "ok", output_path = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct) }));
+
+        endpoints.MapPost("/api/v1/audio/vram/unload", async (IGpuManager gpu, CancellationToken ct) =>
+        {
+            await gpu.CleanMemoryAsync(ct);
+            return Results.Ok(new { status = "ok" });
         });
 
         return endpoints;

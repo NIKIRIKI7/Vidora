@@ -19,6 +19,9 @@ public sealed record YouTubeVideoMetadata
     [JsonPropertyName("channel_id")]
     public string ChannelId { get; init; } = string.Empty;
 
+    [JsonPropertyName("subscriber_count")]
+    public long? SubscriberCount { get; init; }
+
     [JsonPropertyName("view_count")]
     public long ViewCount { get; init; }
 
@@ -28,11 +31,17 @@ public sealed record YouTubeVideoMetadata
     [JsonPropertyName("upload_date")]
     public string? UploadDate { get; init; }
 
+    [JsonPropertyName("published_at")]
+    public DateTimeOffset? PublishedAt { get; init; }
+
     [JsonPropertyName("keywords")]
     public IReadOnlyList<string> Keywords { get; init; } = [];
 
     [JsonPropertyName("thumbnail_url")]
     public string? ThumbnailUrl { get; init; }
+
+    [JsonPropertyName("comments")]
+    public IReadOnlyList<string> Comments { get; init; } = [];
 
     [JsonPropertyName("raw_details")]
     public IReadOnlyDictionary<string, object?>? RawDetails { get; init; }

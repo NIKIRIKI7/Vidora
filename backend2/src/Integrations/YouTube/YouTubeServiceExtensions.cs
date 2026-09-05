@@ -1,6 +1,7 @@
 using Integrations.YouTube.Config;
 using Integrations.YouTube.Contracts;
 using Integrations.YouTube.Downloader;
+using Integrations.YouTube.Innertube;
 using Integrations.YouTube.Scraper;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,13 +17,19 @@ public static class YouTubeServiceExtensions
         var section = configuration.GetSection(YouTubeOptions.SectionName);
         services.Configure<YouTubeOptions>(section);
 
-        // Регистрация скрапера метаданных (ytscrape через Python-враппер)
-        services.AddSingleton<IYouTubeMetadataScraper, YtScrapeMetadataScraper>();
+        services.AddHttpClient<IYouTubeMetadataScraper, YtScrapeMetadataScraper>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(45);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Vidora-DeepTrend/2.0");
+        });
 
-        // Регистрация загрузчика медиа (yt-dlp)
+        services.AddHttpClient<IInnerTubeClient, InnerTubeClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        });
+
         services.AddSingleton<IYouTubeDownloader, YtDlpDownloader>();
-
-        // Регистрация универсального фасада
         services.AddSingleton<IYouTubeClient, YouTubeClient>();
 
         return services;

@@ -54,6 +54,8 @@ public sealed class WebSocketGateway : IWebSocketGateway, IAsyncDisposable
         {
             @event = eventType,
             data = payload,
+            type = eventType,
+            payload = payload,
             timestamp = DateTimeOffset.UtcNow
         });
 

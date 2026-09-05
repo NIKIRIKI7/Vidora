@@ -7,7 +7,6 @@ using MotionContext.Application.Services;
 using MotionContext.Contracts;
 using MotionContext.Domain.Ports;
 using MotionContext.Infrastructure.Capabilities;
-using MotionContext.Infrastructure.Llm;
 using MotionContext.Infrastructure.Parsing;
 using MotionContext.Infrastructure.Persistence;
 using MotionContext.Infrastructure.Remotion;
@@ -52,14 +51,13 @@ public static class MotionServiceExtensions
         services.AddSingleton<IRemotionWorkspaceManager, RemotionWorkspaceManager>();
         services.AddSingleton<IRemotionRunner, RemotionRunner>();
 
-        // LLM Port (Stub по умолчанию, подменяемый на ILlmClient из Integrations)
-        services.AddSingleton<ILlmClient, StubLlmClient>();
+        // LLM Port (registered in Integrations via AddIntegrationServices)
 
         // Entry point facade
         services.AddScoped<IMotionModule, MotionModule>();
 
         // Background Hosted Services
-        services.AddHostedService<MotionDatabaseHostedService>();
+        // services.AddHostedService<MotionDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
         services.AddHostedService<RenderQueueHostedService>();
 
         return services;

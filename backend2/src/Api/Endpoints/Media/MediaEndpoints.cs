@@ -1,6 +1,8 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Kernel.Contracts;
 using Kernel.Exceptions;
+using Kernel.Platform.FileSystem;
 using MediaContext.Contracts;
 using MediaContext.Domain;
 using Microsoft.AspNetCore.Builder;
@@ -132,6 +134,82 @@ public static class MediaEndpoints
                 ct);
 
             return Results.Created($"/api/v1/media/{asset.Id}", asset);
+        });
+
+        group.MapPost("/process-broll", async ([FromBody] ProcessBrollCommand cmd, IMediaModule media, CancellationToken ct) =>
+            Results.Ok(await media.ProcessBrollAsync(cmd, ct)));
+
+        // --- Media streaming endpoint (Range/206 for video scrubbing) ---
+        group.MapGet("/stream", (
+            [FromQuery] string path,
+            IPathResolver pathResolver) =>
+        {
+            if (string.IsNullOrWhiteSpace(path)) return Results.BadRequest();
+
+            var cleanPath = path.Split('?')[0];
+            var safePath = pathResolver.ResolveSafePath(cleanPath);
+
+            if (!File.Exists(safePath)) return Results.NotFound(new { error = $"File not found: {path}" });
+
+            var ext = Path.GetExtension(safePath).ToLowerInvariant();
+            var contentType = ext switch
+            {
+                ".mp4" => "video/mp4",
+                ".webm" => "video/webm",
+                ".wav" => "audio/wav",
+                ".mp3" => "audio/mpeg",
+                ".m4a" => "audio/mp4",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                _ => "application/octet-stream"
+            };
+
+            return Results.File(safePath, contentType, enableRangeProcessing: true);
+        });
+
+        // --- Compatibility aliases for frontend ---
+        endpoints.MapGet("/api/v1/render/media", (
+            [FromQuery] string path,
+            IPathResolver pathResolver) =>
+        {
+            var cleanPath = path.Split('?')[0];
+            var safePath = pathResolver.ResolveSafePath(cleanPath);
+            if (!File.Exists(safePath)) return Results.NotFound();
+
+            var ext = Path.GetExtension(safePath).ToLowerInvariant();
+            var contentType = ext switch
+            {
+                ".mp4" => "video/mp4",
+                ".webm" => "video/webm",
+                ".wav" => "audio/wav",
+                ".mp3" => "audio/mpeg",
+                ".m4a" => "audio/mp4",
+                _ => "application/octet-stream"
+            };
+
+            return Results.File(safePath, contentType, enableRangeProcessing: true);
+        });
+
+        endpoints.MapGet("/api/v1/media/search-stock", async (string query, string orientation = "", IMediaModule media = null!, CancellationToken ct = default) =>
+            Results.Ok(new { status = "ok", videos = await media.SearchStockVideosAsync(query, orientation, 1, 15, ct) }));
+
+        endpoints.MapPost("/api/v1/media/download-stock", async ([FromBody] JsonElement payload, IMediaModule media, CancellationToken ct) =>
+        {
+            var url = payload.GetProperty("url").GetString()!;
+            var filename = payload.GetProperty("filename").GetString()!;
+            var asset = await media.DownloadAndImportStockVideoAsync(url, filename, ct);
+            return Results.Ok(new { status = "ok", path = asset.StoragePath });
+        });
+
+        endpoints.MapGet("/api/v1/media/music-library", async (IMediaModule media, CancellationToken ct) =>
+        {
+            var tracks = await media.GetMusicCatalogAsync(null, ct);
+            return Results.Ok(new
+            {
+                status = "ok",
+                categories = new[] { new { category = "default", category_title = "Standard Collection", tracks } },
+                custom_tracks = Array.Empty<object>()
+            });
         });
 
         return endpoints;

@@ -73,6 +73,17 @@ public static class SystemEndpoints
                 failed_at = f.FailedAt
             })));
 
+        // Просмотр структурированных системных логов
+        group.MapGet("/logs", async (
+            int limit = 100,
+            string level = "",
+            ISystemModule system = null!,
+            CancellationToken ct = default) =>
+        {
+            var logs = await system.GetRecentLogsAsync(limit, string.IsNullOrWhiteSpace(level) ? null : level, ct);
+            return Results.Ok(logs);
+        });
+
         return endpoints;
     }
 }

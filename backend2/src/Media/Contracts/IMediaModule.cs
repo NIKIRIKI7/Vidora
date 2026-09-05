@@ -17,4 +17,5 @@ public interface IMediaModule
     Task<MediaAssetDto> DownloadAndImportStockVideoAsync(string downloadUrl, string title, CancellationToken ct = default);
     Task<IReadOnlyList<MusicTrackDto>> GetMusicCatalogAsync(string? moodFilter = null, CancellationToken ct = default);
     Task DeleteAssetAsync(string assetId, CancellationToken ct = default);
+    Task<ProcessBrollResponse> ProcessBrollAsync(ProcessBrollCommand command, CancellationToken ct = default);
 }

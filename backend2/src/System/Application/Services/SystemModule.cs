@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Microsoft.Extensions.Logging;
@@ -116,6 +117,59 @@ public sealed class SystemModule : ISystemModule
                 ct);
             throw;
         }
+    }
+
+    public async Task<IReadOnlyList<SystemLogEntryDto>> GetRecentLogsAsync(
+        int limit = 100,
+        string? level = null,
+        CancellationToken ct = default)
+    {
+        var dataDir = string.IsNullOrWhiteSpace(_storageConfig.DataStorageDir) ? "data_storage" : _storageConfig.DataStorageDir;
+        var logFilePath = Path.Combine(Path.GetFullPath(dataDir), "app_events.jsonl");
+
+        if (!File.Exists(logFilePath))
+        {
+            return [];
+        }
+
+        var entries = new List<SystemLogEntryDto>();
+        using var fs = new FileStream(logFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(fs);
+
+        var lines = new List<string>();
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                lines.Add(line);
+            }
+        }
+
+        for (int i = lines.Count - 1; i >= 0 && entries.Count < limit; i--)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(lines[i]);
+                var root = doc.RootElement;
+                var entryLevel = root.GetProperty("level").GetString() ?? "INFO";
+
+                if (!string.IsNullOrWhiteSpace(level) && !entryLevel.Equals(level.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                entries.Add(new SystemLogEntryDto(
+                    root.GetProperty("timestamp").GetDateTimeOffset(),
+                    entryLevel,
+                    root.GetProperty("category").GetString() ?? "",
+                    root.GetProperty("event_id").GetInt32(),
+                    root.GetProperty("message").GetString() ?? "",
+                    root.TryGetProperty("exception", out var ex) && ex.ValueKind != JsonValueKind.Null ? ex.Clone() : null));
+            }
+            catch { }
+        }
+
+        return entries;
     }
 
     private static SystemSettingDto MapSetting(SystemSetting s) =>

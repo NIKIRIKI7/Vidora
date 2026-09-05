@@ -3,6 +3,7 @@ using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
 using Kernel.Platform.Logging;
+using Kernel.Platform.Persistence;
 using Kernel.Platform.Process;
 using Kernel.Platform.WebSockets;
 using Microsoft.Extensions.Configuration;
@@ -48,6 +49,9 @@ public static class KernelServiceExtensions
         services.AddSingleton<InMemoryEventBus>();
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
         services.AddHostedService<DomainEventDispatcherHostedService>();
+
+        // 4. CLI-менеджер миграций (dotnet run -- --migrate)
+        services.AddScoped<DatabaseMigrationManager>();
 
         return services;
     }

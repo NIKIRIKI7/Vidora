@@ -66,11 +66,15 @@ public sealed class RenderQueueHostedService : BackgroundService
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MotionDbContext>();
 
-            var pendingJobs = await db.RenderJobs
+            // Materialize from SQLite first, then sort in memory (SQLite doesn't support DateTimeOffset ORDER BY)
+            var queuedJobs = await db.RenderJobs
                 .Where(j => j.Status == RenderJobStatus.Queued)
+                .ToListAsync(ct);
+
+            var pendingJobs = queuedJobs
                 .OrderBy(j => j.CreatedAt)
                 .Select(j => j.Id)
-                .ToListAsync(ct);
+                .ToList();
 
             foreach (var jobId in pendingJobs)
             {
