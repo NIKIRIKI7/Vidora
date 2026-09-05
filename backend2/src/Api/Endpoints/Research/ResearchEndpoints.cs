@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Research.Contracts;
+using Research.Domain.Ports;
 
 namespace Api.Endpoints.Research;
 
@@ -43,6 +44,19 @@ public static class ResearchEndpoints
                 fileContents: bytes,
                 contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileDownloadName: $"deeptrend_research_{id}.xlsx");
+        });
+
+        group.MapPost("/export/excel", async (
+            AdHocExportData request,
+            IResearchReportExporter exporter,
+            CancellationToken ct) =>
+        {
+            var bytes = await exporter.ExportAdHocToExcelAsync(request, ct);
+            var cleanQuery = string.IsNullOrWhiteSpace(request.Query) ? "deeptrend" : request.Query.Trim().Replace(' ', '_');
+            return Results.File(
+                fileContents: bytes,
+                contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileDownloadName: $"vidora_{cleanQuery}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx");
         });
 
         group.MapPost("/runs/{id}/cancel", async (string id, IResearchModule research, CancellationToken ct) =>

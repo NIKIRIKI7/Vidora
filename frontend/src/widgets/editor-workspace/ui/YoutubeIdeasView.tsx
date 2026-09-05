@@ -8,6 +8,7 @@ import {
   Compass, Rocket, ExternalLink, Eye, Check, FileText
 } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
+import { ExportButton, type ExportDataset } from '@features/research-export'
 import {
   useSettingsStore, useNotificationStore,
   type IdeaFormat, type VideoResult, type HookAnalysisData,
@@ -128,6 +129,16 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [allEvaluatedVideoIds, setAllEvaluatedVideoIds] = useState<Set<string>>(new Set())
   const [executedQueriesHistory, setExecutedQueriesHistory] = useState<string[]>([])
+
+  const exportDataset: ExportDataset = {
+    query: nichePreset === 'custom' ? customQuery : nichePreset,
+    language,
+    videos: agentResults,
+    signals: earlySignals,
+    opportunities: blueOceanGaps,
+    goldmine: goldmineReports,
+    analysisData,
+  }
 
   // Сохраняем значения фильтров в localStorage при каждом изменении
   useEffect(() => {
@@ -603,11 +614,7 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                     </button>
                     <button onClick={() => setResultsTab('thumbnails')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${resultsTab === 'thumbnails' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><Eye size={18} /> Обложки</button>
                   </div>
-                  {excelPath && (
-                    <Button variant="secondary" icon={Download} onClick={() => {
-                      const a = document.createElement('a'); a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(excelPath)}`; a.download = 'report.xlsx'; document.body.appendChild(a); a.click(); a.remove();
-                    }}>Скачать Excel</Button>
-                  )}
+                  <ExportButton dataset={exportDataset} onNotify={showNotification} />
                 </div>
 
                 <div className="p-6 flex flex-col gap-10">
