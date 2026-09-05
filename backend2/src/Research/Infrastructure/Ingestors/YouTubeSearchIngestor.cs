@@ -155,9 +155,7 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
                 }
             }
 
-            long subscribers = v.SubscriberCount.HasValue && v.SubscriberCount.Value > 0
-                ? v.SubscriberCount.Value
-                : EstimateSubscribersFromViews(v.ViewCount);
+            long subscribers = v.SubscriberCount.GetValueOrDefault(0);
 
             results.Add(new RawVideoSearchResult(
                 VideoId: v.VideoId,
@@ -188,8 +186,4 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
         return null;
     }
 
-    private static long EstimateSubscribersFromViews(long viewCount)
-    {
-        return Math.Clamp((long)(viewCount * 0.12), 1000L, 50000L);
-    }
 }

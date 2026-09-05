@@ -15,7 +15,9 @@ public sealed record InnerTubeVideoItem(
     bool IsShort,
     string PublishedText,
     string Url,
-    string ThumbnailUrl);
+    string ThumbnailUrl,
+    long SubscriberCount = 0,
+    bool IsVerified = false);
 
 public interface IInnerTubeClient
 {
@@ -24,6 +26,7 @@ public interface IInnerTubeClient
     Task<IReadOnlyList<InnerTubeVideoItem>> GetRelatedVideosAsync(string videoId, int maxResults = 25, string lang = "en", CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeVideoItem>> GetTrendingVideosAsync(string lang = "en", CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeVideoItem>> GetHomeFeedVideosAsync(string lang = "en", CancellationToken ct = default);
+    Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default);
 }
 
 public sealed partial class InnerTubeClient : IInnerTubeClient
@@ -466,6 +469,28 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             }
         }
 
+        // Определение верификации канала по ownerBadges
+        bool isVerified = false;
+        if (vr.TryGetProperty("ownerBadges", out var ob) && ob.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in ob.EnumerateArray())
+            {
+                if (b.TryGetProperty("metadataBadgeRenderer", out var mbr) &&
+                    mbr.TryGetProperty("style", out var style))
+                {
+                    var s = style.GetString() ?? "";
+                    if (s.Contains("VERIFIED", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isVerified = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Если канал верифицирован, у него заведомо больше 100 000 подписчиков
+        long initialSubs = isVerified ? 100_000L : 0L;
+
         int durSec = ParseDurationToSeconds(lengthText);
         return new InnerTubeVideoItem(
             VideoId: vId,
@@ -477,7 +502,9 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             IsShort: durSec is > 0 and <= 180,
             PublishedText: pubText,
             Url: $"https://youtu.be/{vId}",
-            ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg");
+            ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg",
+            SubscriberCount: initialSubs,
+            IsVerified: isVerified);
     }
 
     public static string ExtractJsonText(JsonElement parent, string propertyName)
@@ -527,4 +554,56 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex CleanSpacesRegex();
+
+    public async Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith("UC")) return 0;
+
+        var payload = new
+        {
+            browseId = channelId,
+            context = new
+            {
+                client = new
+                {
+                    hl = "en",
+                    gl = "US",
+                    clientName = "WEB",
+                    clientVersion = "2.20240825.01.00"
+                }
+            }
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/browse?key={PublicInternalKey}");
+        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return 0;
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("header", out var header))
+            {
+                if (header.TryGetProperty("c4TabbedHeaderRenderer", out var c4) &&
+                    c4.TryGetProperty("subscriberCountText", out var sct))
+                {
+                    var text = sct.ValueKind == JsonValueKind.String
+                        ? sct.GetString() ?? ""
+                        : sct.TryGetProperty("simpleText", out var st) ? st.GetString() ?? "" : "";
+                    return ParseCount(text);
+                }
+                var headerStr = header.ToString();
+                var match = Regex.Match(headerStr, @"([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)");
+                if (match.Success) return ParseCount(match.Groups[1].Value);
+            }
+            return 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
 }

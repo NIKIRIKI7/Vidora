@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Integrations.YouTube.Contracts;
+using Integrations.YouTube.Innertube;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
 using Research.Domain.Entities;
@@ -20,6 +22,7 @@ public sealed class YouTubeDeepTrendStreamingPipeline
     private readonly ISignalIngestor _signalIngestor;
     private readonly IYouTubeSearchIngestor _ytIngestor;
     private readonly IYouTubeClient _ytClient;
+    private readonly IInnerTubeClient? _innerTubeClient;
     private readonly MomentumEngine _momentumEngine;
     private readonly BlueOceanDetector _blueOceanDetector;
     private readonly ConfusionDetector _confusionDetector;
@@ -40,11 +43,13 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         TrendArbitrageEngine arbitrageEngine,
         ISkillsCatalog skillsCatalog,
         ILlmClient llmClient,
-        ILogger<YouTubeDeepTrendStreamingPipeline> logger)
+        ILogger<YouTubeDeepTrendStreamingPipeline> logger,
+        IInnerTubeClient? innerTubeClient = null)
     {
         _signalIngestor = signalIngestor;
         _ytIngestor = ytIngestor;
         _ytClient = ytClient;
+        _innerTubeClient = innerTubeClient;
         _momentumEngine = momentumEngine;
         _blueOceanDetector = blueOceanDetector;
         _confusionDetector = confusionDetector;
@@ -214,12 +219,14 @@ public sealed class YouTubeDeepTrendStreamingPipeline
 
                 var cutoffDate = daysBack > 0 ? DateTimeOffset.UtcNow.AddDays(-daysBack) : DateTimeOffset.MinValue;
                 var discoveredVideos = new List<Dictionary<string, object>>();
+                var channelSubsCache = new ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
                 int totalEvaluated = candidatePool.Count;
 
                 // Оцениваем начальный пул
                 foreach (var c in candidatePool)
                 {
-                    if (EvaluateAndTryAddVideo(c, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, out var item))
+                    var (passed, item) = await EvaluateAndTryAddVideoAsync(c, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, channelSubsCache, ct);
+                    if (passed && item != null)
                     {
                         await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = item }));
                     }
@@ -267,7 +274,8 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                                     double p = (m.IsRocket ? 1500 : 0) + m.ViewsPerHour * 1.5;
                                     EnqueueSeed(v.VideoId, p);
 
-                                    if (EvaluateAndTryAddVideo(v, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, out var item))
+                                    var (passed, item) = await EvaluateAndTryAddVideoAsync(v, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, channelSubsCache, ct);
+                                    if (passed && item != null)
                                     {
                                         await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = item }));
                                     }
@@ -303,7 +311,8 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                             double p = (m.IsRocket ? 1200 : 0) + m.ViewsPerHour;
                             EnqueueSeed(c.VideoId, p);
 
-                            if (EvaluateAndTryAddVideo(c, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, out var item))
+                            var (passed, item) = await EvaluateAndTryAddVideoAsync(c, cutoffDate, daysBack, minSubs, maxSubs, minRatio, videoType, lang, discoveredVideos, channelSubsCache, ct);
+                            if (passed && item != null)
                             {
                                 newFoundInRound++;
                                 await EmitAsync(JsonSerializer.Serialize(new { type = "single_video_found", video = item }));
@@ -351,7 +360,7 @@ public sealed class YouTubeDeepTrendStreamingPipeline
     /// <summary>
     /// Строгая оценка и фильтрация ролика по критериям пользователя (подписчики, ratio, дни, тип видео)
     /// </summary>
-    private bool EvaluateAndTryAddVideo(
+    private async Task<(bool Passed, Dictionary<string, object>? Item)> EvaluateAndTryAddVideoAsync(
         RawVideoSearchResult c,
         DateTimeOffset cutoffDate,
         int daysBack,
@@ -361,65 +370,82 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         string videoType,
         string lang,
         List<Dictionary<string, object>> discoveredVideos,
-        out Dictionary<string, object>? item)
+        ConcurrentDictionary<string, long> channelSubsCache,
+        CancellationToken ct)
     {
-        item = null;
-
         // 1. Фильтр свежести (days_back)
         if (daysBack > 0)
         {
-            if (c.PublishedAt > DateTimeOffset.MinValue && c.PublishedAt < cutoffDate)
-                return false;
-
-            if (c.PublishedAt == DateTimeOffset.MinValue && daysBack <= 7)
-                return false;
+            if (c.PublishedAt > DateTimeOffset.MinValue && c.PublishedAt < cutoffDate) return (false, null);
+            if (c.PublishedAt == DateTimeOffset.MinValue && daysBack <= 7) return (false, null);
         }
 
         // 2. Фильтр формата видео (Shorts vs Long)
         bool isShort = c.DurationSeconds <= 60 && c.DurationSeconds > 0;
-        if (videoType == "short" && !isShort) return false;
-        if (videoType == "long" && isShort) return false;
+        if (videoType == "short" && !isShort) return (false, null);
+        if (videoType == "long" && isShort) return (false, null);
 
-        // 3. Строгий фильтр по подписчикам канала (min_subs / max_subs)
-        if (c.SubscriberCount > 0)
+        // 3. Подгрузка РЕАЛЬНЫХ подписчиков канала
+        long realSubs = c.SubscriberCount;
+        if (realSubs <= 0 && !string.IsNullOrWhiteSpace(c.ChannelId) && _innerTubeClient != null)
         {
-            if (minSubs > 0 && c.SubscriberCount < minSubs) return false;
-            if (maxSubs > 0 && c.SubscriberCount > maxSubs) return false;
+            if (channelSubsCache.TryGetValue(c.ChannelId, out var cachedSubs))
+            {
+                realSubs = cachedSubs;
+            }
+            else
+            {
+                try
+                {
+                    realSubs = await _innerTubeClient.GetChannelSubscribersAsync(c.ChannelId, ct);
+                    if (realSubs > 0) channelSubsCache[c.ChannelId] = realSubs;
+                }
+                catch { }
+            }
         }
 
-        // 4. Строгий фильтр виральности: Просмотры / Подписчики >= minRatio
-        double ratio = c.SubscriberCount > 0
-            ? Math.Round((double)c.ViewCount / c.SubscriberCount, 2)
+        // 4. ЖЕСТКИЙ ФИЛЬТР ПОДПИСЧИКОВ (НИКАКИХ ОБХОДОВ ПО VIEWCOUNT!)
+        if (realSubs > 0)
+        {
+            if (minSubs > 0 && realSubs < minSubs) return (false, null);
+            if (maxSubs > 0 && realSubs > maxSubs) return (false, null);
+        }
+        else if (c.ViewCount > maxSubs * 5 && maxSubs > 0)
+        {
+            // Если сабы неизвестны, но просмотров уже > 450k на узкой теме — это почти наверняка канал-гигант
+            return (false, null);
+        }
+
+        // 5. ЖЕСТКИЙ ФИЛЬТР RATIO (Просмотры / Подписчики >= minRatio)
+        double ratio = realSubs > 0
+            ? Math.Round((double)c.ViewCount / realSubs, 2)
             : 0.0;
 
-        if (c.SubscriberCount > 0 && ratio < minRatio)
-            return false;
+        if (realSubs > 0 && ratio < minRatio) return (false, null);
 
-        // 5. Минимальный порог просмотров (отсекаем мусор с 20-30 просмотрами)
-        if (c.ViewCount < 300) return false;
+        // 6. Минимальный порог просмотров
+        if (c.ViewCount < 300) return (false, null);
 
-        var momentum = _momentumEngine.CalculateMomentum(c.ViewCount, c.PublishedAt, c.SubscriberCount);
+        var momentum = _momentumEngine.CalculateMomentum(c.ViewCount, c.PublishedAt, realSubs);
         var ageHours = Math.Max(0.5, (DateTimeOffset.UtcNow - c.PublishedAt).TotalHours);
+        if (momentum.ViewsPerHour < 5 && ageHours > 48 && c.ViewCount < 3000) return (false, null);
 
-        // Отсекаем видео, которые висят неделями и набирают меньше 5 просмотров в час
-        if (momentum.ViewsPerHour < 5 && ageHours > 48 && c.ViewCount < 3000) return false;
-
-        // 6. Фильтр языка (для английского отсекаем кириллические заголовки)
+        // 7. Фильтр языка
         if (lang.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(c.Title, @"[\u0400-\u04FF]"))
-            return false;
+            return (false, null);
 
         var thumbUrl = !string.IsNullOrWhiteSpace(c.ThumbnailUrl)
             ? c.ThumbnailUrl
             : $"https://i.ytimg.com/vi/{c.VideoId}/hqdefault.jpg";
 
-        item = new Dictionary<string, object>
+        var item = new Dictionary<string, object>
         {
             ["video_id"] = c.VideoId,
             ["title"] = c.Title,
             ["channel"] = c.ChannelTitle,
             ["channel_id"] = c.ChannelId,
             ["views"] = c.ViewCount,
-            ["subs"] = c.SubscriberCount,
+            ["subs"] = realSubs,
             ["ratio"] = ratio > 0 ? ratio : 1.5,
             ["vph"] = Math.Max(5, (int)Math.Round(momentum.ViewsPerHour)),
             ["url"] = $"https://www.youtube.com/watch?v={c.VideoId}",
@@ -438,7 +464,7 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         };
 
         discoveredVideos.Add(item);
-        return true;
+        return (true, item);
     }
 
     /// <summary>
