@@ -26,28 +26,33 @@ export const Modal = ({ isOpen, onClose, title, children, className = '' }: Moda
 
   if (!isOpen) return null
 
+  const isCustomWidth = className.includes('max-w-')
+  const widthClass = isCustomWidth ? '' : 'max-w-[460px]'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+      <div
+        className="absolute inset-0 bg-black/85 backdrop-blur-md transition-opacity"
         onClick={onClose}
       />
-      
-      <div 
-        className={`relative w-full max-w-[448px] bg-surface-container/60 backdrop-blur-2xl border border-white/10 rounded-xl shadow-[0_0_40px_rgba(221,183,255,0.2)] flex flex-col overflow-hidden transition-all ${className}`}
+
+      <div
+        className={`relative w-full ${widthClass} bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all z-10 ${className}`}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between p-4 border-b border-white/5 bg-surface-container-lowest/30">
-          <h2 className="font-title-md text-title-md text-on-surface">{title}</h2>
-          <button 
-            onClick={onClose}
-            className="p-1 rounded hover:bg-white/10 text-on-surface-variant transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-4 overflow-y-auto max-h-[70vh] custom-scrollbar">
+        {title && (
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0">
+            <h2 className="font-bold text-base text-white tracking-tight">{title}</h2>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+        <div className="p-6 overflow-y-auto max-h-[80vh] custom-scrollbar flex-1">
           {children}
         </div>
       </div>
