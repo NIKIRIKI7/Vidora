@@ -10,6 +10,7 @@ namespace Research.Infrastructure.Ingestors;
 public interface ISignalIngestor
 {
     Task<IReadOnlyList<EarlySignal>> CollectEarlySignalsAsync(string query, string lang = "ru", CancellationToken ct = default);
+    Task<IReadOnlyList<string>> FetchGoogleTrendsKeywordsAsync(string query, string lang = "ru", CancellationToken ct = default);
 }
 
 public sealed partial class SignalIngestor : ISignalIngestor
@@ -313,6 +314,50 @@ public sealed partial class SignalIngestor : ISignalIngestor
         }
         catch { }
         return list;
+    }
+
+    public async Task<IReadOnlyList<string>> FetchGoogleTrendsKeywordsAsync(string query, string lang = "ru", CancellationToken ct = default)
+    {
+        var curYear = DateTime.UtcNow.Year;
+        var cleanQuery = Regex.Replace(query, @"[,;]+", " ").Trim();
+        var isRu = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase);
+
+        var patterns = isRu
+            ? new[] { "", " как", " почему", $" {curYear}", " обзор", " ошибки", " vs", " альтернатива", " гайд", " настройка" }
+            : new[] { "", " how to", " why", $" {curYear}", " review", " mistakes", " vs", " alternative", " guide", " secrets" };
+
+        var foundKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var tasks = patterns.Select(async sfx =>
+        {
+            var q = sfx.StartsWith(" ") ? $"{cleanQuery}{sfx}" : $"{sfx} {cleanQuery}";
+            try
+            {
+                var url = $"https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q={Uri.EscapeDataString(q.Trim())}&hl={lang}";
+                using var res = await _http.GetAsync(url, ct);
+                if (!res.IsSuccessStatusCode) return;
+                var json = await res.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.GetArrayLength() > 1)
+                {
+                    foreach (var item in doc.RootElement[1].EnumerateArray())
+                    {
+                        var val = item.GetString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(val) && val.Length > 3)
+                        {
+                            lock (foundKeywords)
+                            {
+                                foundKeywords.Add(val);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        });
+
+        await Task.WhenAll(tasks);
+        return foundKeywords.ToList();
     }
 
     private static IReadOnlyList<EarlySignal> ClusterAndRank(List<RawSignal> raw, string query)
