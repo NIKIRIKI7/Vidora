@@ -1,167 +1,167 @@
 using Integrations.YouTube.Config;
 using Integrations.YouTube.Contracts;
-using Integrations.YouTube.Downloader;
 using Integrations.YouTube.Exceptions;
+using Integrations.YouTube.Innertube;
+using Integrations.YouTube.Innertube.Config;
+using Integrations.YouTube.Innertube.Contracts;
+using Integrations.YouTube.Innertube.Resolving;
 using Integrations.YouTube.Scraper;
-using Kernel.Platform.FileSystem;
-using Kernel.Platform.Process;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Moq;
 using Xunit;
 
 namespace Kernel.Tests;
 
 public sealed class YouTubeIntegrationTests : IDisposable
 {
-    private readonly string _testTempDir;
-    private readonly string _dummyScriptPath;
-    private readonly IOptions<YouTubeOptions> _options;
-    private readonly PathResolver _pathResolver;
+    private readonly Mock<IInnerTubeClient> _mockInnerTube = new();
+    private readonly IYouTubeQueryResolver _queryResolver;
+    private readonly HttpClient _httpClient = new();
+    private readonly IOptions<YouTubeOptions> _options = Options.Create(new YouTubeOptions());
 
     public YouTubeIntegrationTests()
     {
-        // Изолированная временная песочница в %TEMP%
-        _testTempDir = Path.Combine(Path.GetTempPath(), "vidora_yt_test_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_testTempDir);
+        var innerTubeOptions = Options.Create(new InnerTubeOptions());
+        _queryResolver = new YouTubeQueryResolver(innerTubeOptions, NullLogger<YouTubeQueryResolver>.Instance);
+    }
 
-        _dummyScriptPath = Path.Combine(_testTempDir, "yt_metadata.py");
-        File.WriteAllText(_dummyScriptPath, "#!/usr/bin/env python3\n# dummy wrapper for tests");
+    private InnerTubeMetadataScraper CreateScraper() =>
+        new(
+            _mockInnerTube.Object,
+            _queryResolver,
+            _httpClient,
+            _options,
+            NullLogger<InnerTubeMetadataScraper>.Instance);
 
-        _options = Options.Create(new YouTubeOptions
-        {
-            YtMetadataScriptPath = _dummyScriptPath,
-            PythonExecutablePath = OperatingSystem.IsWindows() ? "python.exe" : "python3",
-            YtDlpExecutablePath = OperatingSystem.IsWindows() ? "yt-dlp.exe" : "yt-dlp",
-            DownloadDirectory = Path.Combine(_testTempDir, "downloads")
-        });
+    [Theory]
+    [InlineData("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("https://youtube.com/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    public async Task ScrapeVideoMetadataAsync_VariousUrlFormats_ResolvedCorrectlyByQueryResolver(string inputUrl, string expectedId)
+    {
+        var item = new InnerTubeVideoItem(
+            VideoId: expectedId,
+            Title: "Never Gonna Give You Up",
+            ChannelTitle: "Rick Astley",
+            ChannelId: "UCuAXFkgsw1L7xaCfnd5JJOw",
+            ViewCount: 1500000000L,
+            DurationSeconds: 213,
+            IsShort: false,
+            PublishedText: "14 years ago",
+            Url: $"https://youtu.be/{expectedId}",
+            ThumbnailUrl: $"https://i.ytimg.com/vi/{expectedId}/hqdefault.jpg",
+            Description: "Official music video");
 
-        _pathResolver = new PathResolver(NullLogger<PathResolver>.Instance, [_testTempDir]);
+        _mockInnerTube.Setup(c => c.GetVideoDetailsAsync(expectedId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(item);
+        _mockInnerTube.Setup(c => c.GetChannelSubscribersAsync("UCuAXFkgsw1L7xaCfnd5JJOw", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4500000L);
+        _mockInnerTube.Setup(c => c.GetCommentsAsync(expectedId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<string> { "Iconic song!", "Legendary meme" });
+
+        var scraper = CreateScraper();
+        var metadata = await scraper.ScrapeVideoMetadataAsync(inputUrl);
+
+        Assert.Equal(expectedId, metadata.VideoId);
+        Assert.Equal("Never Gonna Give You Up", metadata.Title);
+        Assert.Equal("Rick Astley", metadata.ChannelTitle);
+        Assert.Equal(1500000000L, metadata.ViewCount);
+        Assert.Equal(TimeSpan.FromSeconds(213), metadata.Duration);
+        Assert.Equal(4500000L, metadata.SubscriberCount);
+        Assert.Equal(2, metadata.Comments.Count);
+        Assert.Equal("Official music video", metadata.Description);
+        _mockInnerTube.Verify(c => c.GetVideoDetailsAsync(expectedId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task YtScrape_ValidJsonOutput_ShouldParseVideoMetadataCorrectly()
+    public async Task SearchVideosAsync_ReturnsMappedCandidates()
     {
-        var fakeOutput = """
+        var items = new List<InnerTubeVideoItem>
         {
-          "status": "ok",
-          "video_id": "jNQXAC9IVRw",
-          "title": "Me at the zoo",
-          "description": "The first video on YouTube.",
-          "channel_title": "jawed",
-          "channel_id": "UC4QobU6ST3648RPCrMaS5Ig",
-          "view_count": 310000000,
-          "length_seconds": 19,
-          "upload_date": "2005-04-24",
-          "keywords": ["first video", "zoo"],
-          "thumbnail_url": "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg"
-        }
-        """;
+            new("vid_1", "AI Trends 2026", "TechChannel", "UC1", 85000, 480, false, "2 days ago", "url1", "thumb1"),
+            new("vid_2", "Remotion React Video", "MotionHub", "UC2", 12000, 180, true, "1 week ago", "url2", "thumb2")
+        };
 
-        var supervisor = new FakeProcessSupervisor(new ProcessExecutionResult(0, fakeOutput, ""));
-        var scraper = new YtScrapeMetadataScraper(supervisor, _options, NullLogger<YtScrapeMetadataScraper>.Instance);
+        _mockInnerTube.Setup(c => c.SearchVideosAsync("AI Video", It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items);
 
-        var meta = await scraper.ScrapeVideoMetadataAsync("jNQXAC9IVRw");
+        var scraper = CreateScraper();
+        var results = await scraper.SearchVideosAsync("AI Video", maxResults: 10, daysBack: 30);
 
-        Assert.Equal("jNQXAC9IVRw", meta.VideoId);
-        Assert.Equal("Me at the zoo", meta.Title);
-        Assert.Equal("jawed", meta.ChannelTitle);
-        Assert.Equal(310000000L, meta.ViewCount);
-        Assert.Equal(TimeSpan.FromSeconds(19), meta.Duration);
-        Assert.Equal(2, meta.Keywords.Count);
+        Assert.Equal(2, results.Count);
+        Assert.Equal("vid_1", results[0].VideoId);
+        Assert.Equal("AI Trends 2026", results[0].Title);
+        Assert.Equal(85000, results[0].ViewCount);
+        Assert.Equal("vid_2", results[1].VideoId);
+        Assert.NotNull(results[0].PublishedAt);
     }
 
     [Fact]
-    public async Task YtScrape_ProcessFailure_ShouldThrowYouTubeScrapeException()
+    public async Task GetRelatedVideosAsync_DelegatesToInnerTube()
     {
-        var fakeError = """{"status":"error","message":"Video unavailable"}""";
-        var supervisor = new FakeProcessSupervisor(new ProcessExecutionResult(1, "", fakeError));
-        var scraper = new YtScrapeMetadataScraper(supervisor, _options, NullLogger<YtScrapeMetadataScraper>.Instance);
+        var items = new List<InnerTubeVideoItem>
+        {
+            new("rel_abc1234", "Related Tech", "ChannelA", "UC_A", 5000, 120, false, "3 days ago", "url", "thumb")
+        };
 
+        _mockInnerTube.Setup(c => c.GetRelatedVideosAsync("src_a1b2c3d", 10, "ru", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items);
+
+        var scraper = CreateScraper();
+        var related = await scraper.GetRelatedVideosAsync("https://youtu.be/src_a1b2c3d", 10, "ru");
+
+        Assert.Single(related);
+        Assert.Equal("rel_abc1234", related[0].VideoId);
+        Assert.Equal("Related Tech", related[0].Title);
+        _mockInnerTube.Verify(c => c.GetRelatedVideosAsync("src_a1b2c3d", 10, "ru", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScrapeTranscriptAsync_ReturnsSubtitles()
+    {
+        _mockInnerTube.Setup(c => c.ExtractFastSubtitlesAsync("sub_a1b2c3d", It.IsAny<string[]?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Hello and welcome to this video tutorial.");
+
+        var scraper = CreateScraper();
+        var transcript = await scraper.ScrapeTranscriptAsync("https://www.youtube.com/watch?v=sub_a1b2c3d");
+
+        Assert.Equal("Hello and welcome to this video tutorial.", transcript);
+        _mockInnerTube.Verify(c => c.ExtractFastSubtitlesAsync("sub_a1b2c3d", It.IsAny<string[]?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScrapeVideoMetadataAsync_NotFound_ThrowsYouTubeScrapeException()
+    {
+        _mockInnerTube.Setup(c => c.GetVideoDetailsAsync("missin_gvid", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InnerTubeVideoItem?)null);
+
+        var scraper = CreateScraper();
         await Assert.ThrowsAsync<YouTubeScrapeException>(async () =>
         {
-            await scraper.ScrapeVideoMetadataAsync("unavailable_id");
+            await scraper.ScrapeVideoMetadataAsync("missin_gvid");
         });
     }
 
     [Fact]
-    public async Task YtScrape_WhenCallerCancels_ShouldRethrowOperationCanceledExceptionDirectly()
+    public async Task ScrapeVideoMetadataAsync_WhenCancelled_RethrowsDirectly()
     {
-        var supervisor = new CancelingProcessSupervisor();
-        var scraper = new YtScrapeMetadataScraper(supervisor, _options, NullLogger<YtScrapeMetadataScraper>.Instance);
-
         using var cts = new CancellationTokenSource();
-        cts.Cancel(); // Имитируем отмену вызывающей стороной
+        cts.Cancel();
 
-        // Исключение не должно маскироваться в YouTubeScrapeException (502)
+        _mockInnerTube.Setup(c => c.GetVideoDetailsAsync(It.IsAny<string>(), cts.Token))
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        var scraper = CreateScraper();
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await scraper.ScrapeVideoMetadataAsync("any-id", cts.Token);
-        });
-    }
-
-    [Fact]
-    public async Task YtDlp_WhenCallerCancels_ShouldRethrowOperationCanceledExceptionDirectly()
-    {
-        var supervisor = new CancelingProcessSupervisor();
-        var downloader = new YtDlpDownloader(supervisor, _pathResolver, _options, NullLogger<YtDlpDownloader>.Instance);
-
-        using var cts = new CancellationTokenSource();
-        cts.Cancel(); // Имитируем отмену вызывающей стороной
-
-        // Исключение не должно маскироваться в YouTubeDownloadException (502)
-        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
-        {
-            await downloader.DownloadVideoAsync("any-id", cancellationToken: cts.Token);
+            await scraper.ScrapeVideoMetadataAsync("anyid123456", cts.Token);
         });
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_testTempDir))
-        {
-            try { Directory.Delete(_testTempDir, true); } catch { }
-        }
-    }
-
-    private sealed class FakeProcessSupervisor : IProcessSupervisor
-    {
-        private readonly ProcessExecutionResult _result;
-
-        public FakeProcessSupervisor(ProcessExecutionResult result) => _result = result;
-
-        public Task<ProcessExecutionResult> RunAsync(
-            string fileName,
-            string arguments,
-            string? workingDirectory = null,
-            IReadOnlyDictionary<string, string>? environmentVariables = null,
-            Action<string>? onStdOut = null,
-            Action<string>? onStdErr = null,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(_result);
-        }
-
-        public void TrackProcess(System.Diagnostics.Process process) { }
-        public void Dispose() { }
-    }
-
-    private sealed class CancelingProcessSupervisor : IProcessSupervisor
-    {
-        public Task<ProcessExecutionResult> RunAsync(
-            string fileName,
-            string arguments,
-            string? workingDirectory = null,
-            IReadOnlyDictionary<string, string>? environmentVariables = null,
-            Action<string>? onStdOut = null,
-            Action<string>? onStdErr = null,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromCanceled<ProcessExecutionResult>(cancellationToken);
-        }
-
-        public void TrackProcess(System.Diagnostics.Process process) { }
-        public void Dispose() { }
+        _httpClient.Dispose();
     }
 }
