@@ -82,8 +82,19 @@ export interface CommentGoldmineReport {
 }
 
 export interface CommentGoldmineVideoEntry {
+  video_id?: string
   video_title: string
-  report: CommentGoldmineReport
+  channel?: string
+  views?: number
+  vph?: number
+  confusion_status?: string
+  confusion_index?: number
+  actionable_fix?: string
+  questions_count?: number
+  frustrations_count?: number
+  debates_count?: number
+  top_pains?: Array<{ topic: string; count: number; importance: number }>
+  report?: CommentGoldmineReport
 }
 
 export interface DeepTrendAnalysis {
@@ -99,9 +110,12 @@ export interface DeepTrendAnalysis {
 
 export interface HookAnalysisData {
   original_hook?: string
+  transcript_snippet?: string
   psychology?: string
   flaws_identified?: string
   stolen_hooks?: Array<string | { angle?: string; hook_0_5s?: string; hook_5_20s?: string; why_it_converts?: string }>
+  heatmap?: Array<{ startSeconds: number; endSeconds: number; intensity: number }>
+  transcript?: string
 }
 
 export interface VideoResult {
@@ -143,11 +157,13 @@ export interface MomentumMetrics {
 export interface BlueOceanOpportunity {
   topic: string
   opportunity_score: number
-  status: 'BLUE_OCEAN_UNCONTESTED' | 'MODERATE_GAP' | 'RED_OCEAN_SATURATED'
-  max_competitor_similarity: number
-  competing_videos_count: number
+  status: 'BLUE_OCEAN_UNCONTESTED' | 'MODERATE_GAP' | 'MODERATE_COMPETITION' | 'RED_OCEAN_SATURATED'
+  max_competitor_similarity?: number
+  competing_videos_count?: number
   demand_source: string
   actionable_angle: string
+  competition_index?: number
+  target_audience?: string
 }
 
 export interface EarlySignalItem {

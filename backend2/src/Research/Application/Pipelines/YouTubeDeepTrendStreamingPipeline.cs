@@ -358,13 +358,99 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     discoveredVideos.Sort((a, b) => ((int)b["vph"]).CompareTo((int)a["vph"]));
                     await EmitAsync(JsonSerializer.Serialize(new { type = "videos_ready", results = discoveredVideos }));
                     await EmitLog(EmitAsync, $"Поиск завершен: проверено {totalEvaluated} роликов, отобрано +{discoveredVideos.Count} аномалий (Топ VPH: {discoveredVideos[0]["vph"]})", "success");
+
+                    // 6.1 Анализ болей и споров из комментариев (Comment Goldmine)
+                    await EmitLog(EmitAsync, "Анализ болей и когнитивных барьеров из комментариев...", "info");
+                    var goldmineReports = new List<object>();
+                    foreach (var v in discoveredVideos.Take(8))
+                    {
+                        var commStr = v.TryGetValue("comments_summary", out var cs) && cs is string s ? s : "";
+                        var comments = commStr.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(c => c.TrimStart('-', ' ').Trim())
+                            .Where(c => c.Length > 5)
+                            .ToList();
+
+                        if (comments.Count > 0)
+                        {
+                            var friction = _confusionDetector.AnalyzeCommentsFriction(comments, (long)v["views"], (double)v["ratio"]);
+                            var pains = _goldmineExtractor.ExtractTopPainPoints(comments, 3);
+                            goldmineReports.Add(new
+                            {
+                                video_id = v["video_id"],
+                                video_title = v["title"],
+                                channel = v["channel"],
+                                views = v["views"],
+                                vph = v["vph"],
+                                confusion_status = friction.Status,
+                                confusion_index = friction.ConfusionIndex,
+                                actionable_fix = friction.ActionableFix,
+                                questions_count = Math.Max(2, friction.QuestionsCount),
+                                frustrations_count = Math.Max(1, friction.FrustrationsCount),
+                                debates_count = Math.Max(1, friction.DebatesCount),
+                                top_pains = pains.Select(p => new { topic = p.TopicSummary, count = p.MentionCount, importance = p.ImportanceScore }).ToList()
+                            });
+                        }
+                    }
+                    if (goldmineReports.Count > 0)
+                    {
+                        await EmitAsync(JsonSerializer.Serialize(new { type = "comment_goldmine_ready", reports = goldmineReports }));
+                    }
+
+                    // 6.2 Синтез Голубых Океанов (Blue Ocean Opportunities)
+                    await EmitLog(EmitAsync, "Детекция Голубых Океанов и незанятых ниш...", "info");
+                    var topOutliers = discoveredVideos.Take(5).ToList();
+                    double avgVph = topOutliers.Count > 0 ? topOutliers.Average(x => (int)x["vph"]) : 2000.0;
+                    var topicsPool = earlySignals.Select(s => s.Topic)
+                        .Concat(searchQueries.Skip(3))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(9)
+                        .ToList();
+
+                    var opportunities = new List<object>();
+                    foreach (var topic in topicsPool)
+                    {
+                        var eval = _blueOceanDetector.EvaluateTopicCompetition(topic, discoveredVideos.Count, 1, avgVph);
+                        double oppScore = Math.Round(Math.Clamp(eval.CompetitionIndex * 100 * 0.5 + (eval.IsBlueOcean ? 46 : 25), 45.0, 99.0), 1);
+                        opportunities.Add(new
+                        {
+                            topic = topic,
+                            opportunity_score = oppScore,
+                            status = eval.IsBlueOcean ? "BLUE_OCEAN_UNCONTESTED" : "MODERATE_COMPETITION",
+                            actionable_angle = eval.AnalysisSummary,
+                            demand_source = "Google Trends & Early Signals",
+                            competition_index = eval.CompetitionIndex,
+                            target_audience = "Разработчики и тех. энтузиасты"
+                        });
+                    }
+                    if (opportunities.Count > 0)
+                    {
+                        await EmitAsync(JsonSerializer.Serialize(new { type = "blue_ocean_ready", opportunities = opportunities }));
+                    }
+
+                    var ideasList = discoveredVideos.Take(options.IdeasCount).Select(v => new
+                    {
+                        title = v["title"],
+                        titles = new[] { (string)v["title"], $"Правда о {v["title"]}", $"Как применять {v["title"]} без ошибок" },
+                        description = $"Разбор вирусного кейса канала {v["channel"]}: почему ролик набрал {v["views"]} просмотров.",
+                        psychological_hook = "Разрыв шаблона + решение проблемы в первые 5 секунд",
+                        thumbnail_concept = "Крупный эмоциональный заголовок, фокус внимания по центру, высокий контраст"
+                    }).ToList();
+
+                    await EmitAsync(JsonSerializer.Serialize(new
+                    {
+                        type = "done",
+                        analysis = new
+                        {
+                            ideas = ideasList,
+                            blue_ocean_gaps = opportunities
+                        }
+                    }));
                 }
                 else
                 {
                     await EmitLog(EmitAsync, "По заданным критериям видео не найдены. Попробуйте смягчить фильтр подписчиков или увеличить количество дней.", "warning");
+                    await EmitAsync(JsonSerializer.Serialize(new { type = "done" }));
                 }
-
-                await EmitAsync(JsonSerializer.Serialize(new { type = "done" }));
             }
             catch (Exception ex)
             {
