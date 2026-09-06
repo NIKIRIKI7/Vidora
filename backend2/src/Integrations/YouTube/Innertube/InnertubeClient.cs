@@ -1,45 +1,61 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using Integrations.YouTube.Innertube.Config;
+using Integrations.YouTube.Innertube.Contracts;
+using Integrations.YouTube.Innertube.Diagnostics;
+using Integrations.YouTube.Innertube.Extractors;
+using Integrations.YouTube.Innertube.Resolving;
+using Integrations.YouTube.Innertube.Transport;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Integrations.YouTube.Innertube;
-
-public sealed record InnerTubeVideoItem(
-    string VideoId,
-    string Title,
-    string ChannelTitle,
-    string ChannelId,
-    long ViewCount,
-    int DurationSeconds,
-    bool IsShort,
-    string PublishedText,
-    string Url,
-    string ThumbnailUrl,
-    long SubscriberCount = 0,
-    bool IsVerified = false);
 
 public interface IInnerTubeClient
 {
     Task<IReadOnlyList<InnerTubeVideoItem>> SearchVideosAsync(string query, int maxResults = 30, int daysBack = 0, string lang = "en", CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeVideoItem>> SearchVideosFilteredAsync(string query, InnerTubeSearchFilter? filter = null, int maxResults = 30, string lang = "en", CancellationToken ct = default);
     Task<string?> ExtractFastSubtitlesAsync(string videoId, string[]? preferredLangs = null, CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeVideoItem>> GetRelatedVideosAsync(string videoId, int maxResults = 25, string lang = "en", CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeVideoItem>> GetTrendingVideosAsync(string lang = "en", CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeVideoItem>> GetHomeFeedVideosAsync(string lang = "en", CancellationToken ct = default);
     Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default);
+    Task<InnerTubeChannelStats> GetChannelStatsAsync(string channelId, CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeChannelUpload>> GetChannelRecentUploadsAsync(string channelId, int maxUploads = 15, string lang = "en", CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeSubtitleTrack>> GetSubtitleTracksAsync(string videoId, CancellationToken ct = default);
+    Task<InnerTubeVideoItem?> GetVideoDetailsAsync(string videoId, CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeHeatmapPoint>> GetVideoHeatmapAsync(string videoId, CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeVideoChapter>> GetVideoChaptersAsync(string videoId, CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeWordTimestamp>> GetWordTimestampsAsync(string videoId, CancellationToken ct = default);
+    Task<IReadOnlyList<InnerTubeComment>> GetCommentsDetailedAsync(string videoId, int maxComments = 50, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetCommentsAsync(string videoId, int maxComments = 20, CancellationToken ct = default);
 }
 
 public sealed partial class InnerTubeClient : IInnerTubeClient
 {
-    private const string InnerTubeUrl = "https://www.youtube.com/youtubei/v1";
-    private const string PublicInternalKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
-    private readonly HttpClient _httpClient;
+    private readonly IInnerTubeHttpTransport _transport;
+    private readonly ISearchResponseExtractor _searchExtractor;
+    private readonly IWatchNextResponseExtractor _watchNextExtractor;
+    private readonly IPlayerResponseExtractor _playerExtractor;
+    private readonly IInnerTubeDiagnostics _diagnostics;
+    private readonly InnerTubeOptions _options;
     private readonly ILogger<InnerTubeClient> _logger;
 
-    public InnerTubeClient(HttpClient httpClient, ILogger<InnerTubeClient> logger)
+    public InnerTubeClient(
+        IInnerTubeHttpTransport transport,
+        ISearchResponseExtractor searchExtractor,
+        IWatchNextResponseExtractor watchNextExtractor,
+        IPlayerResponseExtractor playerExtractor,
+        IInnerTubeDiagnostics diagnostics,
+        IOptions<InnerTubeOptions> options,
+        ILogger<InnerTubeClient> logger)
     {
-        _httpClient = httpClient;
+        _transport = transport;
+        _searchExtractor = searchExtractor;
+        _watchNextExtractor = watchNextExtractor;
+        _playerExtractor = playerExtractor;
+        _diagnostics = diagnostics;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -47,6 +63,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         string query, int maxResults = 30, int daysBack = 0, string lang = "en", CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
+
         var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
         string? searchParams = daysBack switch
         {
@@ -57,62 +74,22 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             _ => null
         };
 
-        var payload = new Dictionary<string, object>
-        {
-            ["query"] = query,
-            ["context"] = new
-            {
-                client = new
-                {
-                    hl = lang,
-                    gl = region,
-                    clientName = "WEB",
-                    clientVersion = "2.20240825.01.00"
-                }
-            }
-        };
-        if (!string.IsNullOrEmpty(searchParams))
-        {
-            payload["params"] = searchParams;
-        }
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(15));
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/search?key={PublicInternalKey}");
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
         try
         {
-            using var response = await _httpClient.SendAsync(request, cts.Token);
-            if (!response.IsSuccessStatusCode) return [];
-            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
+            var root = await _transport.SendSearchAsync(query, lang, region, searchParams, ct);
 
-            var results = new List<InnerTubeVideoItem>();
-            if (!doc.RootElement.TryGetProperty("contents", out var contents)) return results;
-            if (!contents.TryGetProperty("twoColumnSearchResultsRenderer", out var col)) return results;
-            if (!col.TryGetProperty("primaryContents", out var primary)) return results;
-            if (!primary.TryGetProperty("sectionListRenderer", out var sectionList)) return results;
-            if (!sectionList.TryGetProperty("contents", out var sections)) return results;
-
-            foreach (var section in sections.EnumerateArray())
+            if (_options.Diagnostics.EnableSchemaDriftDetection)
             {
-                if (!section.TryGetProperty("itemSectionRenderer", out var itemSection)) continue;
-                if (!itemSection.TryGetProperty("contents", out var items)) continue;
-                foreach (var item in items.EnumerateArray())
+                var drift = _diagnostics.DetectSchemaDrift(root, _options.Schema);
+                if (drift.HasDrift)
                 {
-                    if (!item.TryGetProperty("videoRenderer", out var vr)) continue;
-                    var parsed = ParseVideoRenderer(vr);
-                    if (parsed != null)
-                    {
-                        results.Add(parsed);
-                        if (results.Count >= maxResults) break;
-                    }
+                    _logger.LogWarning(
+                        "[InnerTube] Schema drift in search: {Count} issues detected",
+                        drift.Drifts.Count);
                 }
-                if (results.Count >= maxResults) break;
             }
-            return results;
+
+            return _searchExtractor.Extract(root, maxResults);
         }
         catch (Exception ex)
         {
@@ -125,46 +102,13 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         string videoId, int maxResults = 25, string lang = "en", CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(videoId)) return [];
-        var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
-        var payload = new
-        {
-            videoId,
-            context = new
-            {
-                client = new
-                {
-                    hl = lang,
-                    gl = region,
-                    clientName = "WEB",
-                    clientVersion = "2.20240825.01.00"
-                }
-            }
-        };
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(12));
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/next?key={PublicInternalKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
 
         try
         {
-            using var response = await _httpClient.SendAsync(request, cts.Token);
-            if (!response.IsSuccessStatusCode) return [];
-            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
-
-            var results = new List<InnerTubeVideoItem>();
-            if (!doc.RootElement.TryGetProperty("contents", out var contents)) return results;
-            if (!contents.TryGetProperty("twoColumnWatchNextResults", out var watchNext)) return results;
-            if (!watchNext.TryGetProperty("secondaryResults", out var sec)) return results;
-            JsonElement secondaryResultsContainer = sec.TryGetProperty("secondaryResults", out var sr) ? sr : sec;
-            if (!secondaryResultsContainer.TryGetProperty("results", out var items)) return results;
-
-            foreach (var item in items.EnumerateArray())
-            {
-                ExtractItemsRecursive(item, results, maxResults);
-            }
-            return results;
+            var root = await _transport.SendNextAsync(videoId, lang, region, ct);
+            return _watchNextExtractor.ExtractRelatedVideos(root, maxResults);
         }
         catch (Exception ex)
         {
@@ -173,146 +117,14 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         }
     }
 
-    private void ExtractItemsRecursive(JsonElement element, List<InnerTubeVideoItem> results, int maxResults)
-    {
-        if (results.Count >= maxResults) return;
-
-        if (element.TryGetProperty("compactVideoRenderer", out var cvr))
-        {
-            var parsed = ParseCompactVideoRenderer(cvr);
-            if (parsed != null) results.Add(parsed);
-            return;
-        }
-
-        if (element.TryGetProperty("videoRenderer", out var vr))
-        {
-            var parsed = ParseVideoRenderer(vr);
-            if (parsed != null) results.Add(parsed);
-            return;
-        }
-
-        if (element.TryGetProperty("itemSectionRenderer", out var isr) &&
-            isr.TryGetProperty("contents", out var isrContents))
-        {
-            foreach (var child in isrContents.EnumerateArray())
-            {
-                ExtractItemsRecursive(child, results, maxResults);
-            }
-        }
-
-        if (element.TryGetProperty("richItemRenderer", out var rir) &&
-            rir.TryGetProperty("content", out var rirContent))
-        {
-            ExtractItemsRecursive(rirContent, results, maxResults);
-        }
-    }
-
-    private InnerTubeVideoItem? ParseCompactVideoRenderer(JsonElement cvr)
-    {
-        if (!cvr.TryGetProperty("videoId", out var vidProp)) return null;
-        var vId = vidProp.GetString();
-        if (string.IsNullOrEmpty(vId)) return null;
-
-        var title = ExtractJsonText(cvr, "title");
-        var viewsText = ExtractJsonText(cvr, "viewCountText");
-        var lengthText = ExtractJsonText(cvr, "lengthText");
-        var pubText = ExtractJsonText(cvr, "publishedTimeText");
-        var channelTitle = "";
-        var channelId = "";
-        if (cvr.TryGetProperty("shortBylineText", out var sbt) && sbt.TryGetProperty("runs", out var sbtr) && sbtr.GetArrayLength() > 0)
-        {
-            channelTitle = sbtr[0].GetProperty("text").GetString() ?? "";
-            if (sbtr[0].TryGetProperty("navigationEndpoint", out var nav) &&
-                nav.TryGetProperty("browseEndpoint", out var be))
-            {
-                channelId = be.TryGetProperty("browseId", out var bid) ? bid.GetString() ?? "" : "";
-            }
-        }
-        int durSec = ParseDurationToSeconds(lengthText);
-
-        bool isVerified = false;
-        long subscriberCount = 0L;
-        if (cvr.TryGetProperty("ownerBadges", out var ob) && ob.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var badge in ob.EnumerateArray())
-            {
-                if (badge.TryGetProperty("metadataBadgeRenderer", out var mbr) &&
-                    mbr.TryGetProperty("style", out var styleProp) &&
-                    (styleProp.GetString()?.Contains("VERIFIED") ?? false))
-                {
-                    isVerified = true;
-                    subscriberCount = 100_000L;
-                    break;
-                }
-            }
-        }
-
-        return new InnerTubeVideoItem(
-            VideoId: vId,
-            Title: title,
-            ChannelTitle: channelTitle,
-            ChannelId: string.IsNullOrEmpty(channelId) ? channelTitle : channelId,
-            ViewCount: ParseCount(viewsText),
-            DurationSeconds: durSec,
-            IsShort: durSec is > 0 and <= 180,
-            PublishedText: pubText,
-            Url: $"https://youtu.be/{vId}",
-            ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg",
-            SubscriberCount: subscriberCount,
-            IsVerified: isVerified);
-    }
-
     public async Task<IReadOnlyList<InnerTubeVideoItem>> GetTrendingVideosAsync(string lang = "en", CancellationToken ct = default)
     {
         var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
-        var payload = new
-        {
-            browseId = "FEtrending",
-            context = new
-            {
-                client = new
-                {
-                    hl = lang,
-                    gl = region,
-                    clientName = "WEB",
-                    clientVersion = "2.20240825.01.00"
-                }
-            }
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/browse?key={PublicInternalKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         try
         {
-            using var response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return [];
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-            var list = new List<InnerTubeVideoItem>();
-            if (!doc.RootElement.TryGetProperty("contents", out var contents)) return list;
-            if (!contents.TryGetProperty("twoColumnBrowseResultsRenderer", out var tc)) return list;
-            if (!tc.TryGetProperty("tabs", out var tabs) || tabs.GetArrayLength() == 0) return list;
-            if (!tabs[0].TryGetProperty("tabRenderer", out var tr)) return list;
-            if (!tr.TryGetProperty("content", out var tabContent)) return list;
-            if (!tabContent.TryGetProperty("sectionListRenderer", out var slr)) return list;
-            if (!slr.TryGetProperty("contents", out var secArr)) return list;
-
-            foreach (var sec in secArr.EnumerateArray())
-            {
-                if (!sec.TryGetProperty("itemSectionRenderer", out var isr)) continue;
-                if (!isr.TryGetProperty("contents", out var isrContents)) continue;
-                foreach (var item in isrContents.EnumerateArray())
-                {
-                    if (item.TryGetProperty("videoRenderer", out var vr))
-                    {
-                        var parsed = ParseVideoRenderer(vr);
-                        if (parsed != null) list.Add(parsed);
-                    }
-                }
-            }
-            return list;
+            var root = await _transport.SendBrowseAsync(_options.BrowseIds.Trending, lang, region, ct);
+            return ExtractBrowseVideos(root);
         }
         catch (Exception ex)
         {
@@ -324,51 +136,11 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
     public async Task<IReadOnlyList<InnerTubeVideoItem>> GetHomeFeedVideosAsync(string lang = "en", CancellationToken ct = default)
     {
         var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
-        var payload = new
-        {
-            browseId = "FEwhat_to_watch",
-            context = new
-            {
-                client = new
-                {
-                    hl = lang,
-                    gl = region,
-                    clientName = "WEB",
-                    clientVersion = "2.20240825.01.00"
-                }
-            }
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/browse?key={PublicInternalKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         try
         {
-            using var response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return [];
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-            var list = new List<InnerTubeVideoItem>();
-            if (!doc.RootElement.TryGetProperty("contents", out var contents)) return list;
-            if (!contents.TryGetProperty("twoColumnBrowseResultsRenderer", out var tc)) return list;
-            if (!tc.TryGetProperty("tabs", out var tabs) || tabs.GetArrayLength() == 0) return list;
-            if (!tabs[0].TryGetProperty("tabRenderer", out var tr)) return list;
-            if (!tr.TryGetProperty("content", out var tabContent)) return list;
-            if (!tabContent.TryGetProperty("richGridRenderer", out var rgr)) return list;
-            if (!rgr.TryGetProperty("contents", out var contentsArr)) return list;
-
-            foreach (var item in contentsArr.EnumerateArray())
-            {
-                if (item.TryGetProperty("richItemRenderer", out var rir) &&
-                    rir.TryGetProperty("content", out var rirContent) &&
-                    rirContent.TryGetProperty("videoRenderer", out var vr))
-                {
-                    var parsed = ParseVideoRenderer(vr);
-                    if (parsed != null) list.Add(parsed);
-                }
-            }
-            return list;
+            var root = await _transport.SendBrowseAsync(_options.BrowseIds.HomeFeed, lang, region, ct);
+            return ExtractHomeFeedVideos(root);
         }
         catch (Exception ex)
         {
@@ -379,112 +151,378 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
     public async Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith("UC")) return 0;
-
-        var payload = new
-        {
-            browseId = channelId,
-            context = new
-            {
-                client = new
-                {
-                    hl = "en",
-                    gl = "US",
-                    clientName = "WEB",
-                    clientVersion = "2.20240825.01.00"
-                }
-            }
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/browse?key={PublicInternalKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith(_options.Metadata.ChannelIdPrefix))
+            return 0;
 
         try
         {
-            using var response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return 0;
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            var root = doc.RootElement;
+            var root = await _transport.SendBrowseAsync(channelId, "en", "US", ct);
 
-            if (root.TryGetProperty("header", out var header))
+            if (!root.TryGetProperty(_options.Schema.HeaderKey, out var header))
+                return 0;
+
+            if (header.TryGetProperty(_options.Schema.C4TabbedHeaderRendererKey, out var c4))
             {
-                if (header.TryGetProperty("c4TabbedHeaderRenderer", out var c4) &&
-                    c4.TryGetProperty("subscriberCountText", out var sct))
-                {
-                    var text = ExtractJsonText(c4, "subscriberCountText");
-                    return ParseCount(text);
-                }
-                var headerStr = header.ToString();
-                var match = Regex.Match(headerStr, @"""subscriberCountText"":\s*\{""simpleText""\s*:\s*""([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)""");
-                if (match.Success) return ParseCount(match.Groups[1].Value);
-                var match2 = Regex.Match(headerStr, @"([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)");
-                if (match2.Success) return ParseCount(match2.Groups[1].Value);
+                var text = c4.ExtractRunsText(_options.Schema.SubscriberCountTextKey);
+                return InnerTubeParsers.ParseCount(text);
             }
+
+            var headerStr = header.ToString();
+            var match = System.Text.RegularExpressions.Regex.Match(
+                headerStr,
+                @"""subscriberCountText"":\s*\{""simpleText""\s*:\s*""([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)""");
+            if (match.Success) return InnerTubeParsers.ParseCount(match.Groups[1].Value);
+
+            var match2 = System.Text.RegularExpressions.Regex.Match(
+                headerStr,
+                @"([\d\.,]+[KkMmБбМм]?)\s*(?:subscribers|подписчик)");
+            if (match2.Success) return InnerTubeParsers.ParseCount(match2.Groups[1].Value);
+
             return 0;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogDebug(ex, "[InnerTube] Channel subscribers fetch failed for {ChannelId}", channelId);
             return 0;
         }
     }
 
-    public async Task<string?> ExtractFastSubtitlesAsync(string videoId, string[]? preferredLangs = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<InnerTubeSubtitleTrack>> GetSubtitleTracksAsync(string videoId, CancellationToken ct = default)
     {
-        var langs = preferredLangs ?? ["ru", "en", "es"];
-        var payload = new
-        {
-            videoId,
-            context = new
-            {
-                client = new
-                {
-                    hl = "en",
-                    gl = "US",
-                    clientName = "ANDROID",
-                    clientVersion = "19.29.35",
-                    androidSdkVersion = 30
-                }
-            }
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{InnerTubeUrl}/player?key={PublicInternalKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(10));
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
 
         try
         {
-            using var response = await _httpClient.SendAsync(request, cts.Token);
-            if (!response.IsSuccessStatusCode) return null;
-            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Android, ct);
+            return _playerExtractor.ExtractSubtitleTracks(root);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Subtitle tracks fetch failed for {VideoId}", videoId);
+            return [];
+        }
+    }
 
-            if (!doc.RootElement.TryGetProperty("captions", out var captions)) return null;
-            if (!captions.TryGetProperty("playerCaptionsTracklistRenderer", out var tracklist)) return null;
-            if (!tracklist.TryGetProperty("captionTracks", out var tracks) || tracks.GetArrayLength() == 0) return null;
+    public async Task<InnerTubeVideoItem?> GetVideoDetailsAsync(string videoId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return null;
 
-            string? targetUrl = null;
+        try
+        {
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Android, ct);
+            var items = _playerExtractor.ExtractVideoItems(root, 1);
+            return items.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Video details fetch failed for {VideoId}", videoId);
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> GetCommentsAsync(string videoId, int maxComments = 20, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
+
+        try
+        {
+            var root = await _transport.SendNextAsync(videoId, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
+            var comments = _watchNextExtractor.ExtractComments(root, maxComments);
+            return comments.Select(c => c.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Comments fetch failed for {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<InnerTubeComment>> GetCommentsDetailedAsync(string videoId, int maxComments = 50, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
+
+        try
+        {
+            var root = await _transport.SendNextAsync(videoId, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
+            var comments = _watchNextExtractor.ExtractComments(root, maxComments);
+            if (comments.Count >= maxComments) return comments;
+
+            var continuationToken = _watchNextExtractor.ExtractCommentsContinuationToken(root);
+            if (string.IsNullOrEmpty(continuationToken)) return comments;
+
+            var contRoot = await _transport.SendNextAsync(null, continuationToken, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
+            var moreComments = _watchNextExtractor.ExtractCommentsFromContinuation(contRoot, maxComments - comments.Count);
+
+            return comments.Concat(moreComments).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Detailed comments fetch failed for {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<InnerTubeHeatmapPoint>> GetVideoHeatmapAsync(string videoId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
+
+        try
+        {
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Web, ct);
+            return _playerExtractor.ExtractHeatmap(root);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Heatmap fetch failed for {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<InnerTubeVideoChapter>> GetVideoChaptersAsync(string videoId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
+
+        try
+        {
+            var root = await _transport.SendNextAsync(videoId, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
+            return _watchNextExtractor.ExtractChapters(root);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Chapters fetch failed for {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<InnerTubeWordTimestamp>> GetWordTimestampsAsync(string videoId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
+
+        try
+        {
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Web, ct);
+            return _playerExtractor.ExtractWordTimestamps(root);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Word timestamps fetch failed for {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<InnerTubeVideoItem>> SearchVideosFilteredAsync(
+        string query, InnerTubeSearchFilter? filter = null, int maxResults = 30, string lang = "en", CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return [];
+
+        var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
+        var searchParams = InnerTubeSearchParamsBuilder.Build(filter);
+
+        try
+        {
+            var root = await _transport.SendSearchAsync(query, lang, region, searchParams, ct);
+            return _searchExtractor.Extract(root, maxResults);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[InnerTube] Filtered search failed: {Query}", query);
+            return [];
+        }
+    }
+
+    public async Task<InnerTubeChannelStats> GetChannelStatsAsync(string channelId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith(_options.Metadata.ChannelIdPrefix))
+            return new InnerTubeChannelStats(0, 0, 0, "");
+
+        try
+        {
+            var root = await _transport.SendBrowseAsync(channelId, "en", "US", ct);
+
+            long subscriberCount = 0;
+            long totalViewCount = 0;
+            int videoCount = 0;
+            string description = "";
+
+            if (root.TryGetProperty(_options.Schema.HeaderKey, out var header))
+            {
+                if (header.TryGetProperty(_options.Schema.C4TabbedHeaderRendererKey, out var c4))
+                {
+                    var subText = c4.ExtractRunsText(_options.Schema.SubscriberCountTextKey);
+                    subscriberCount = InnerTubeParsers.ParseCount(subText);
+                    var viewText = c4.ExtractRunsText("videosCountText");
+                    videoCount = (int)InnerTubeParsers.ParseCount(viewText);
+                }
+            }
+
+            if (root.TryGetProperty("metadata", out var metadata) &&
+                metadata.TryGetProperty("channelMetadataRenderer", out var cmr))
+            {
+                description = cmr.TryGetProperty("description", out var descEl) ? descEl.GetString() ?? "" : "";
+                var viewStr = cmr.TryGetProperty("viewCount", out var vcEl) ? vcEl.GetString() : null;
+                if (long.TryParse(viewStr, out var vc)) totalViewCount = vc;
+            }
+
+            return new InnerTubeChannelStats(subscriberCount, totalViewCount, videoCount, description);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Channel stats fetch failed for {ChannelId}", channelId);
+            return new InnerTubeChannelStats(0, 0, 0, "");
+        }
+    }
+
+    public async Task<IReadOnlyList<InnerTubeChannelUpload>> GetChannelRecentUploadsAsync(
+        string channelId, int maxUploads = 15, string lang = "en", CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelId) || !channelId.StartsWith(_options.Metadata.ChannelIdPrefix))
+            return [];
+
+        var region = lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? "RU" : "US";
+
+        try
+        {
+            var root = await _transport.SendBrowseAsync(channelId, lang, region, ct, "6gQJRkVleHBsb3Jl");
+            var uploads = new List<InnerTubeChannelUpload>();
+
+            if (root.TryGetProperty("contents", out var contents) &&
+                contents.TryGetProperty("twoColumnBrowseResultsRenderer", out var twoCol) &&
+                twoCol.TryGetProperty("tabs", out var tabs) && tabs.GetArrayLength() > 0)
+            {
+                foreach (var tab in tabs.EnumerateArray())
+                {
+                    if (tab.TryGetProperty("tabRenderer", out var tabR) &&
+                        tabR.TryGetProperty("content", out var tabContent) &&
+                        tabContent.TryGetProperty("sectionListRenderer", out var slr) &&
+                        slr.TryGetProperty("contents", out var secArr))
+                    {
+                        foreach (var sec in secArr.EnumerateArray())
+                        {
+                            if (sec.TryGetProperty("itemSectionRenderer", out var isr) &&
+                                isr.TryGetProperty("contents", out var isrContents))
+                            {
+                                foreach (var item in isrContents.EnumerateArray())
+                                {
+                                    if (item.TryGetProperty("gridRenderer", out var grid) &&
+                                        grid.TryGetProperty("items", out var gridItems))
+                                    {
+                                        ExtractChannelUploads(gridItems, uploads, maxUploads);
+                                    }
+                                    else if (item.TryGetProperty("richGridRenderer", out var rgr) &&
+                                             rgr.TryGetProperty("contents", out var rgrContents))
+                                    {
+                                        ExtractChannelUploads(rgrContents, uploads, maxUploads);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (uploads.Count >= maxUploads) break;
+                }
+            }
+
+            return uploads.Take(maxUploads).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Channel uploads fetch failed for {ChannelId}", channelId);
+            return [];
+        }
+    }
+
+    private void ExtractChannelUploads(JsonElement items, List<InnerTubeChannelUpload> uploads, int maxUploads)
+    {
+        foreach (var item in items.EnumerateArray())
+        {
+            if (uploads.Count >= maxUploads) break;
+
+            if (item.TryGetProperty("gridVideoRenderer", out var gvr))
+            {
+                var upload = ParseGridVideoRenderer(gvr);
+                if (upload != null) uploads.Add(upload);
+            }
+            else if (item.TryGetProperty("richItemRenderer", out var rir) &&
+                     rir.TryGetProperty("content", out var content))
+            {
+                if (content.TryGetProperty("videoRenderer", out var vr))
+                {
+                    var upload = ParseVideoRendererToUpload(vr);
+                    if (upload != null) uploads.Add(upload);
+                }
+            }
+        }
+    }
+
+    private InnerTubeChannelUpload? ParseGridVideoRenderer(JsonElement gvr)
+    {
+        if (!gvr.TryGetProperty("videoId", out var vidEl)) return null;
+        var videoId = vidEl.GetString();
+        if (string.IsNullOrEmpty(videoId)) return null;
+
+        var title = gvr.ExtractRunsText("title");
+        var pubText = gvr.ExtractRunsText("publishedTimeText");
+        var lengthText = gvr.ExtractRunsText("lengthText");
+        int duration = InnerTubeParsers.ParseDurationToSeconds(lengthText);
+
+        var thumbnail = $"https://i.ytimg.com/vi/{videoId}/hqdefault.jpg";
+        if (gvr.TryGetProperty("thumbnail", out var thumbEl) &&
+            thumbEl.TryGetProperty("thumbnails", out var thumbArr) &&
+            thumbArr.GetArrayLength() > 0)
+        {
+            thumbnail = thumbArr[0].TryGetProperty("url", out var urlEl) ? urlEl.GetString() ?? thumbnail : thumbnail;
+        }
+
+        int viewCount = 0;
+        var viewsText = gvr.ExtractRunsText("viewCountText");
+        viewCount = (int)InnerTubeParsers.ParseCount(viewsText);
+
+        return new InnerTubeChannelUpload(videoId, title, thumbnail, viewCount, pubText, duration);
+    }
+
+    private InnerTubeChannelUpload? ParseVideoRendererToUpload(JsonElement vr)
+    {
+        if (!vr.TryGetProperty("videoId", out var vidEl)) return null;
+        var videoId = vidEl.GetString();
+        if (string.IsNullOrEmpty(videoId)) return null;
+
+        var title = vr.ExtractRunsText("title");
+        var pubText = vr.ExtractRunsText("publishedTimeText");
+        var lengthText = vr.ExtractRunsText("lengthText");
+        int duration = InnerTubeParsers.ParseDurationToSeconds(lengthText);
+
+        var thumbnail = $"https://i.ytimg.com/vi/{videoId}/hqdefault.jpg";
+        var viewsText = vr.ExtractRunsText("viewCountText");
+        int viewCount = (int)InnerTubeParsers.ParseCount(viewsText);
+
+        return new InnerTubeChannelUpload(videoId, title, thumbnail, viewCount, pubText, duration);
+    }
+
+    public async Task<string?> ExtractFastSubtitlesAsync(string videoId, string[]? preferredLangs = null, CancellationToken ct = default)
+    {
+        var langs = preferredLangs ?? _options.Subtitles.PreferredLanguages;
+
+        try
+        {
+            var tracks = await GetSubtitleTracksAsync(videoId, ct);
+            if (tracks.Count == 0) return null;
+
+            InnerTubeSubtitleTrack? targetTrack = null;
             foreach (var lang in langs)
             {
-                foreach (var track in tracks.EnumerateArray())
-                {
-                    var code = track.TryGetProperty("languageCode", out var lc) ? lc.GetString()?.ToLowerInvariant() ?? "" : "";
-                    if (code.StartsWith(lang))
-                    {
-                        targetUrl = track.GetProperty("baseUrl").GetString();
-                        break;
-                    }
-                }
-                if (targetUrl != null) break;
+                targetTrack = tracks.FirstOrDefault(t => t.LanguageCode.StartsWith(lang, StringComparison.OrdinalIgnoreCase));
+                if (targetTrack != null) break;
             }
-            targetUrl ??= tracks[0].TryGetProperty("baseUrl", out var bu) ? bu.GetString() : null;
-            if (string.IsNullOrEmpty(targetUrl)) return null;
+            targetTrack ??= tracks[0];
 
-            var subRes = await _httpClient.GetStringAsync($"{targetUrl}&fmt=json3", cts.Token);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_options.Timeouts.SubtitleFetchSeconds));
+
+            var subUrl = $"{targetTrack.BaseUrl}&fmt={_options.Subtitles.SubtitleFormat}";
+            var subRes = await _transport.FetchStringAsync(subUrl, cts.Token);
             using var subDoc = JsonDocument.Parse(subRes);
-            if (!subDoc.RootElement.TryGetProperty("events", out var events)) return null;
+
+            if (!subDoc.RootElement.TryGetProperty("events", out var events))
+                return null;
 
             var sb = new StringBuilder();
             foreach (var ev in events.EnumerateArray())
@@ -493,13 +531,12 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
                 foreach (var s in segs.EnumerateArray())
                 {
                     if (s.TryGetProperty("utf8", out var text))
-                    {
                         sb.Append(text.GetString()).Append(' ');
-                    }
                 }
             }
+
             var clean = CleanSpacesRegex().Replace(sb.ToString(), " ").Trim();
-            return clean.Length > 40 ? clean : null;
+            return clean.Length > _options.Subtitles.MinLength ? clean : null;
         }
         catch (Exception ex)
         {
@@ -508,27 +545,85 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         }
     }
 
-    private static InnerTubeVideoItem? ParseVideoRenderer(JsonElement vr)
+    private IReadOnlyList<InnerTubeVideoItem> ExtractBrowseVideos(JsonElement root)
+    {
+        var results = new List<InnerTubeVideoItem>();
+
+        if (!root.TryGetProperty(_options.Schema.ContentsKey, out var contents)) return results;
+        if (!contents.TryGetProperty(_options.Schema.TwoColumnBrowseResultsKey, out var twoCol)) return results;
+        if (!twoCol.TryGetProperty(_options.Schema.TabsKey, out var tabs) || tabs.GetArrayLength() == 0) return results;
+        if (!tabs[0].TryGetProperty(_options.Schema.TabRendererKey, out var tr)) return results;
+        if (!tr.TryGetProperty("content", out var tabContent)) return results;
+        if (!tabContent.TryGetProperty(_options.Schema.SectionListRendererKey, out var slr)) return results;
+        if (!slr.TryGetProperty(_options.Schema.ContentsKey, out var secArr)) return results;
+
+        foreach (var sec in secArr.EnumerateArray())
+        {
+            if (!sec.TryGetProperty(_options.Schema.ItemSectionRendererKey, out var isr)) continue;
+            if (!isr.TryGetProperty(_options.Schema.ContentsKey, out var isrContents)) continue;
+            foreach (var item in isrContents.EnumerateArray())
+            {
+                if (item.TryGetProperty(_options.Schema.VideoRendererKey, out var vr))
+                {
+                    var parsed = ParseVideoRendererFromBrowse(vr);
+                    if (parsed != null) results.Add(parsed);
+                }
+            }
+        }
+
+        return results;
+    }
+
+    private IReadOnlyList<InnerTubeVideoItem> ExtractHomeFeedVideos(JsonElement root)
+    {
+        var results = new List<InnerTubeVideoItem>();
+
+        if (!root.TryGetProperty(_options.Schema.ContentsKey, out var contents)) return results;
+        if (!contents.TryGetProperty(_options.Schema.TwoColumnBrowseResultsKey, out var twoCol)) return results;
+        if (!twoCol.TryGetProperty(_options.Schema.TabsKey, out var tabs) || tabs.GetArrayLength() == 0) return results;
+        if (!tabs[0].TryGetProperty(_options.Schema.TabRendererKey, out var tr)) return results;
+        if (!tr.TryGetProperty("content", out var tabContent)) return results;
+        if (!tabContent.TryGetProperty(_options.Schema.RichGridRendererKey, out var rgr)) return results;
+        if (!rgr.TryGetProperty(_options.Schema.ContentsKey, out var contentsArr)) return results;
+
+        foreach (var item in contentsArr.EnumerateArray())
+        {
+            if (item.TryGetProperty(_options.Schema.RichItemRendererKey, out var rir) &&
+                rir.TryGetProperty("content", out var rirContent) &&
+                rirContent.TryGetProperty(_options.Schema.VideoRendererKey, out var vr))
+            {
+                var parsed = ParseVideoRendererFromBrowse(vr);
+                if (parsed != null) results.Add(parsed);
+            }
+        }
+
+        return results;
+    }
+
+    private InnerTubeVideoItem? ParseVideoRendererFromBrowse(JsonElement vr)
     {
         if (!vr.TryGetProperty("videoId", out var vidProp)) return null;
         var vId = vidProp.GetString();
         if (string.IsNullOrEmpty(vId)) return null;
-        var title = ExtractJsonText(vr, "title");
-        var viewsText = ExtractJsonText(vr, "viewCountText");
-        var lengthText = ExtractJsonText(vr, "lengthText");
-        var pubText = ExtractJsonText(vr, "publishedTimeText");
+
+        var title = vr.ExtractRunsText("title");
+        var viewsText = vr.ExtractRunsText("viewCountText");
+        var lengthText = vr.ExtractRunsText("lengthText");
+        var pubText = vr.ExtractRunsText("publishedTimeText");
+
         var channelTitle = "";
         var channelId = "";
         if (vr.TryGetProperty("ownerText", out var ot) && ot.TryGetProperty("runs", out var otr) && otr.GetArrayLength() > 0)
         {
-            channelTitle = otr[0].GetProperty("text").GetString() ?? "";
+            channelTitle = otr[0].TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
             if (otr[0].TryGetProperty("navigationEndpoint", out var nav) &&
                 nav.TryGetProperty("browseEndpoint", out var be))
             {
                 channelId = be.TryGetProperty("browseId", out var bid) ? bid.GetString() ?? "" : "";
             }
         }
-        int durSec = ParseDurationToSeconds(lengthText);
+
+        int durSec = InnerTubeParsers.ParseDurationToSeconds(lengthText);
 
         bool isVerified = false;
         if (vr.TryGetProperty("ownerBadges", out var ob) && ob.ValueKind == JsonValueKind.Array)
@@ -536,14 +631,11 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             foreach (var b in ob.EnumerateArray())
             {
                 if (b.TryGetProperty("metadataBadgeRenderer", out var mbr) &&
-                    mbr.TryGetProperty("style", out var style))
+                    mbr.TryGetProperty("style", out var style) &&
+                    (style.GetString()?.Contains("VERIFIED") ?? false))
                 {
-                    var s = style.GetString() ?? "";
-                    if (s.Contains("VERIFIED", StringComparison.OrdinalIgnoreCase))
-                    {
-                        isVerified = true;
-                        break;
-                    }
+                    isVerified = true;
+                    break;
                 }
             }
         }
@@ -553,60 +645,15 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             Title: title,
             ChannelTitle: channelTitle,
             ChannelId: string.IsNullOrEmpty(channelId) ? channelTitle : channelId,
-            ViewCount: ParseCount(viewsText),
+            ViewCount: InnerTubeParsers.ParseCount(viewsText),
             DurationSeconds: durSec,
             IsShort: durSec is > 0 and <= 180,
             PublishedText: pubText,
             Url: $"https://youtu.be/{vId}",
             ThumbnailUrl: $"https://i.ytimg.com/vi/{vId}/hqdefault.jpg",
-            SubscriberCount: isVerified ? 100_000L : 0L,
             IsVerified: isVerified);
     }
 
-    public static string ExtractJsonText(JsonElement parent, string propertyName)
-    {
-        if (!parent.TryGetProperty(propertyName, out var prop)) return "";
-        if (prop.ValueKind == JsonValueKind.String) return prop.GetString() ?? "";
-        if (prop.TryGetProperty("simpleText", out var st)) return st.GetString() ?? "";
-        if (prop.TryGetProperty("runs", out var runs) && runs.ValueKind == JsonValueKind.Array)
-        {
-            var sb = new StringBuilder();
-            foreach (var r in runs.EnumerateArray())
-            {
-                if (r.TryGetProperty("text", out var t)) sb.Append(t.GetString());
-            }
-            return sb.ToString();
-        }
-        return "";
-    }
-
-    public static long ParseCount(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return 0;
-        var clean = raw.ToLowerInvariant().Replace("views", "").Replace("subscribers", "").Replace("подписчиков", "").Replace("подписчика", "").Replace("подписчик", "").Replace(" ", "").Trim();
-        double mult = 1.0;
-        if (clean.EndsWith('k') || clean.EndsWith('к')) { mult = 1_000; clean = clean[..^1]; }
-        else if (clean.EndsWith('m') || clean.EndsWith('м')) { mult = 1_000_000; clean = clean[..^1]; }
-        else if (clean.EndsWith('b') || clean.EndsWith('б')) { mult = 1_000_000_000; clean = clean[..^1]; }
-        if (double.TryParse(clean.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var val))
-            return (long)(val * mult);
-        return 0;
-    }
-
-    public static int ParseDurationToSeconds(string duration)
-    {
-        if (string.IsNullOrWhiteSpace(duration)) return 0;
-        var parts = duration.Split(':');
-        try
-        {
-            if (parts.Length == 3) return int.Parse(parts[0]) * 3600 + int.Parse(parts[1]) * 60 + int.Parse(parts[2]);
-            if (parts.Length == 2) return int.Parse(parts[0]) * 60 + int.Parse(parts[1]);
-            if (parts.Length == 1 && int.TryParse(parts[0], out var s)) return s;
-        }
-        catch { }
-        return 0;
-    }
-
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex CleanSpacesRegex();
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s+")]
+    private static partial System.Text.RegularExpressions.Regex CleanSpacesRegex();
 }

@@ -13,9 +13,11 @@
     "preview": "vite preview",
     "electron:dev": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:build": "pnpm build && node electron/build.cjs",
-    "backend:dev": "cd ../backend && .venv\\Scripts\\uvicorn app.main:app --host 127.0.0.1 --port 8355 --reload",
+    "backend:dev": "cd ../backend2 && dotnet run --launch-profile http",
+    "backend:migrate": "cd ../backend2 && dotnet run -- --migrate",
+    "backend:dev:py": "cd ../backend && .venv\\Scripts\\uvicorn app.main:app --host 127.0.0.1 --port 8355 --reload",
     "backend:build": "cd ../backend && .venv\\Scripts\\python build.py",
-    "dev:all": "concurrently -n backend,frontend -c yellow,cyan \"pnpm backend:dev\" \"pnpm dev\""
+    "dev:all": "concurrently -n backend,frontend -c green,cyan \"pnpm backend:dev\" \"pnpm dev\""
   },
   "dependencies": {
     "lucide-react": "^1.31.0",

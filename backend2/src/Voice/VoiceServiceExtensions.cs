@@ -19,13 +19,12 @@ public static class VoiceServiceExtensions
 {
     public static IServiceCollection AddVoiceContext(this IServiceCollection services, IConfiguration configuration)
     {
-        var storageSection = configuration.GetSection(AppStorageConfig.SectionName);
-        var storage = storageSection.Get<AppStorageConfig>() ?? new AppStorageConfig();
-        var dataDir = string.IsNullOrWhiteSpace(storage.DataStorageDir) ? "data_storage" : storage.DataStorageDir;
-        var fullDataDir = Path.GetFullPath(dataDir);
+        var storage = configuration.GetSection(AppStorageConfig.SectionName).Get<AppStorageConfig>()
+            ?? throw new InvalidOperationException("Секция 'Storage' не найдена в appsettings.json.");
+        var fullDataDir = Path.GetFullPath(storage.DataStorageDir);
         if (!Directory.Exists(fullDataDir)) Directory.CreateDirectory(fullDataDir);
 
-        var connectionString = $"Data Source={Path.Combine(fullDataDir, "voice.db")}";
+        var connectionString = $"Data Source={Path.GetFullPath(storage.GetDatabasePath("voice"))}";
         services.AddDbContext<VoiceDbContext>(options => options.UseSqlite(connectionString));
 
         services.AddScoped<ITtsJobRepository, EfTtsJobRepository>();
@@ -39,7 +38,7 @@ public static class VoiceServiceExtensions
         services.AddHttpClient<ITtsEngineProvider, MiniMaxSpeechProvider>();
         services.AddScoped<TtsProviderRegistry>();
 
-        // Движки выравнивания (Alignment)
+        // Чистые движки принудительного выравнивания речи (Forced Alignment)
         services.AddScoped<IForcedAlignmentProvider, WhisperAlignmentProvider>();
         services.AddScoped<IForcedAlignmentProvider, NativeFallbackAlignmentProvider>();
         services.AddScoped<AlignmentProviderRegistry>();

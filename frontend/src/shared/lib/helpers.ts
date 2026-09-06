@@ -1,4 +1,4 @@
-export const API = import.meta.env.VITE_API_URL || 'http://localhost:8355'
+export const API = import.meta.env.VITE_API_URL || 'http://localhost:5116'
 
 export const pad = (num: number) => num.toString().padStart(2, '0')
 

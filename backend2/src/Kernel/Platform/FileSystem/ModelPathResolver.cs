@@ -4,10 +4,10 @@ public static class ModelPathResolver
 {
     private static readonly string[] RecognizedModelExtensions =
     [
-        ".pt", ".safetensors", ".bin", ".onnx", ".pth", ".json", ".yaml"
+        ".pt", ".safetensors", ".bin", ".onnx", ".pth", ".json", ".yaml", ".gguf"
     ];
 
-    public static string? Locate(string targetPath, string? dataStorageDir = "data_storage")
+    public static string? Locate(string targetPath, string? dataStorageDir)
     {
         var candidates = GetCandidatePaths(targetPath, dataStorageDir);
         foreach (var path in candidates)
@@ -16,11 +16,13 @@ public static class ModelPathResolver
             {
                 return Path.GetFullPath(path);
             }
+
             if (Directory.Exists(path) && DirectoryContainsModelFiles(path))
             {
                 return Path.GetFullPath(path);
             }
         }
+
         return null;
     }
 
@@ -43,12 +45,14 @@ public static class ModelPathResolver
         }
     }
 
-    public static IReadOnlyList<string> GetCandidatePaths(string targetPath, string? dataStorageDir = "data_storage")
+    public static IReadOnlyList<string> GetCandidatePaths(string targetPath, string? dataStorageDir)
     {
         var cleanTarget = targetPath.Replace('\\', '/').TrimStart('/');
-        var dataDir = string.IsNullOrWhiteSpace(dataStorageDir) ? "data_storage" : dataStorageDir.Replace('\\', '/').TrimStart('/');
-
+        var dataDir = string.IsNullOrWhiteSpace(dataStorageDir)
+            ? "data_storage"
+            : dataStorageDir.Replace('\\', '/').TrimStart('/');
         var cwd = Directory.GetCurrentDirectory();
+
         var baseDirs = new List<string>
         {
             cwd,
@@ -58,24 +62,30 @@ public static class ModelPathResolver
             Path.GetFullPath(Path.Combine(cwd, ".."))
         };
 
+        var modelsSubDir = "ai-models";
         var results = new List<string>();
 
         foreach (var baseDir in baseDirs)
         {
-            results.Add(Path.Combine(baseDir, cleanTarget));
-            results.Add(Path.Combine(baseDir, dataDir, cleanTarget));
-
-            if (cleanTarget.StartsWith("ai-models/", StringComparison.OrdinalIgnoreCase))
+            if (cleanTarget.StartsWith($"{dataDir}/{modelsSubDir}/", StringComparison.OrdinalIgnoreCase))
             {
-                var sub = cleanTarget["ai-models/".Length..];
+                results.Add(Path.Combine(baseDir, cleanTarget));
+                var sub = cleanTarget[$"{dataDir}/{modelsSubDir}/".Length..];
+                results.Add(Path.Combine(baseDir, modelsSubDir, sub));
+            }
+            else if (cleanTarget.StartsWith($"{modelsSubDir}/", StringComparison.OrdinalIgnoreCase))
+            {
+                var sub = cleanTarget[$"{modelsSubDir}/".Length..];
+                results.Add(Path.Combine(baseDir, dataDir, modelsSubDir, sub));
                 results.Add(Path.Combine(baseDir, dataDir, sub));
-                results.Add(Path.Combine(baseDir, dataDir, "ai-models", sub));
-                results.Add(Path.Combine(baseDir, "ai-models", sub));
+                results.Add(Path.Combine(baseDir, modelsSubDir, sub));
             }
             else
             {
-                results.Add(Path.Combine(baseDir, "ai-models", cleanTarget));
-                results.Add(Path.Combine(baseDir, dataDir, "ai-models", cleanTarget));
+                results.Add(Path.Combine(baseDir, dataDir, modelsSubDir, cleanTarget));
+                results.Add(Path.Combine(baseDir, cleanTarget));
+                results.Add(Path.Combine(baseDir, dataDir, cleanTarget));
+                results.Add(Path.Combine(baseDir, modelsSubDir, cleanTarget));
             }
         }
 

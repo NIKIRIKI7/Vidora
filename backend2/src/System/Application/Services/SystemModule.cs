@@ -124,8 +124,7 @@ public sealed class SystemModule : ISystemModule
         string? level = null,
         CancellationToken ct = default)
     {
-        var dataDir = string.IsNullOrWhiteSpace(_storageConfig.DataStorageDir) ? "data_storage" : _storageConfig.DataStorageDir;
-        var logFilePath = Path.Combine(Path.GetFullPath(dataDir), "app_events.jsonl");
+        var logFilePath = _storageConfig.GetLogFilePath();
 
         if (!File.Exists(logFilePath))
         {

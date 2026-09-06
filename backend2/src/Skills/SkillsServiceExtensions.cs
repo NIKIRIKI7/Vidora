@@ -17,19 +17,16 @@ public static class SkillsServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // 1. Определение директории хранения SQLite базы данных
-        var storageSection = configuration.GetSection(AppStorageConfig.SectionName);
-        var storage = storageSection.Get<AppStorageConfig>() ?? new AppStorageConfig();
-        var dataDir = string.IsNullOrWhiteSpace(storage.DataStorageDir) ? "data_storage" : storage.DataStorageDir;
-        var fullDataDir = Path.GetFullPath(dataDir);
+        var storage = configuration.GetSection(AppStorageConfig.SectionName).Get<AppStorageConfig>()
+            ?? throw new InvalidOperationException("Секция 'Storage' не найдена в appsettings.json.");
+        var fullDataDir = Path.GetFullPath(storage.DataStorageDir);
 
         if (!Directory.Exists(fullDataDir))
         {
             Directory.CreateDirectory(fullDataDir);
         }
 
-        var dbPath = Path.Combine(fullDataDir, "skills.db");
-        var connectionString = $"Data Source={dbPath}";
+        var connectionString = $"Data Source={Path.GetFullPath(storage.GetDatabasePath("skills"))}";
 
         // 2. Регистрация DbContext
         services.AddDbContext<SkillsDbContext>(options =>

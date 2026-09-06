@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Kernel.Exceptions;
+using Kernel.Platform.Config;
 using Kernel.Ports;
 using LLama;
 using LLama.Common;
@@ -16,6 +17,7 @@ namespace Integrations.LLM;
 public sealed class LlmClient : ILlmClient, IDisposable
 {
     private readonly LlmOptions _options;
+    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<LlmClient> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -33,10 +35,12 @@ public sealed class LlmClient : ILlmClient, IDisposable
 
     public LlmClient(
         IOptions<LlmOptions> options,
+        IOptions<AppStorageConfig> storageConfig,
         ILogger<LlmClient> logger,
         ILoggerFactory loggerFactory)
     {
         _options = options.Value;
+        _storageConfig = storageConfig.Value;
         _logger = logger;
         _loggerFactory = loggerFactory;
     }
@@ -54,7 +58,7 @@ public sealed class LlmClient : ILlmClient, IDisposable
             if (!File.Exists(fullPath))
             {
                 throw new FileNotFoundException(
-                    $"Model file not found: {fullPath}. Download Gemma 3 GGUF to ai-models/.");
+                    $"Model file not found: {fullPath}. Download Gemma 3 GGUF to {_storageConfig.GetModelsDirectory()}/.");
             }
 
             _logger.LogInformation(
@@ -91,11 +95,10 @@ public sealed class LlmClient : ILlmClient, IDisposable
 
         if (!File.Exists(fullPath))
         {
-            var fallbackDir = Path.Combine(Directory.GetCurrentDirectory(), "ai-models");
-            if (Directory.Exists(fallbackDir))
+            var modelsDir = _storageConfig.GetModelsDirectory();
+            if (Directory.Exists(modelsDir))
             {
-                var found = Directory.GetFiles(fallbackDir, "*.gguf", SearchOption.AllDirectories)
-                    .FirstOrDefault();
+                var found = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.AllDirectories).FirstOrDefault();
                 if (found != null) fullPath = found;
             }
         }

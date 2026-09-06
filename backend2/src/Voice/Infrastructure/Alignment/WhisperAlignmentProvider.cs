@@ -1,8 +1,11 @@
-using System.Text.Json;
-using Kernel.Exceptions;
+using System.Diagnostics;
+using Integrations.Whisper.Config;
+using Integrations.Whisper.Native;
+using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
-using Kernel.Platform.Process;
+using Kernel.Platform.Gpu;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SystemContext.Domain.Ports;
 using Voice.Domain;
 using Voice.Domain.Ports;
@@ -14,138 +17,138 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
 {
     public AlignmentEngineType EngineType => AlignmentEngineType.Whisper;
 
-    private readonly IMlProcessHost _mlHost;
     private readonly IPathResolver _pathResolver;
+    private readonly IGpuManager _gpuManager;
     private readonly ISystemSettingRepository _settingRepo;
+    private readonly WhisperOptions _whisperOptions;
+    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<WhisperAlignmentProvider> _logger;
 
     public WhisperAlignmentProvider(
-        IMlProcessHost mlHost,
         IPathResolver pathResolver,
+        IGpuManager gpuManager,
         ISystemSettingRepository settingRepo,
+        IOptions<WhisperOptions> whisperOptions,
+        IOptions<AppStorageConfig> storageConfig,
         ILogger<WhisperAlignmentProvider> logger)
     {
-        _mlHost = mlHost;
         _pathResolver = pathResolver;
+        _gpuManager = gpuManager;
         _settingRepo = settingRepo;
+        _whisperOptions = whisperOptions.Value;
+        _storageConfig = storageConfig.Value;
         _logger = logger;
+
+        _whisperOptions.ValidateAndSanitize(msg => _logger.LogWarning("{Message}", msg));
     }
 
     public async Task<AlignmentData> AlignAsync(string audioFilePath, string expectedText, CancellationToken ct = default)
     {
         var safeAudio = _pathResolver.ResolveSafePath(audioFilePath);
+        var jobId = Guid.NewGuid().ToString("N")[..8];
 
-        var customSetting = await _settingRepo.GetByKeyAsync("voice.whisper_model_path", ct);
-        string modelTarget = customSetting?.Value ?? "ai-models/whisper/small.pt";
+        _logger.LogInformation(
+            "[WhisperAlign] Starting word-level alignment (FasterWhisper.NET). Job: [Job_{JobId}], Audio: {Audio}",
+            jobId, Path.GetFileName(safeAudio));
 
-        var resolvedModelPath = ModelPathResolver.Locate(modelTarget, "data_storage");
-        if (string.IsNullOrEmpty(resolvedModelPath))
+        var modelDir = ResolveModelDirectory();
+        if (string.IsNullOrEmpty(modelDir) || !Directory.Exists(modelDir))
         {
-            var whisperDirCandidates = ModelPathResolver.GetCandidatePaths("ai-models/whisper", "data_storage");
-            foreach (var dirPath in whisperDirCandidates)
-            {
-                if (Directory.Exists(dirPath))
-                {
-                    var ptFiles = Directory.GetFiles(dirPath, "*.pt");
-                    if (ptFiles.Length > 0)
-                    {
-                        resolvedModelPath = ptFiles[0];
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (string.IsNullOrEmpty(resolvedModelPath) || !File.Exists(resolvedModelPath))
-        {
-            _logger.LogError("[WhisperAligner] Веса модели Whisper не найдены по пути: {Path}. Fallback.", modelTarget);
+            _logger.LogError("[FasterWhisper] Model directory not found at {Path}. Using FallbackProportional.",
+                _whisperOptions.Model.DirectoryPath);
             return FallbackProportionalAlignment(expectedText, safeAudio);
         }
 
-        SyncScriptFile();
-
-        var scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "tools", "scripts", "whisper_align.py");
-
-        _logger.LogInformation("[WhisperAligner] Запуск выравнивания. Скрипт: {Script}, Модель: {Model}",
-            scriptPath, resolvedModelPath);
-
-        var payload = new
+        IAsyncDisposable? gpuLock = null;
+        if (_whisperOptions.Hardware.Device.Equals("cuda", StringComparison.OrdinalIgnoreCase))
         {
-            audio_path = safeAudio,
-            text = expectedText,
-            model_path = resolvedModelPath
-        };
-
-        ProcessExecutionResult result;
-        try
-        {
-            result = await _mlHost.ExecuteScriptAsync(
-                scriptRelativePath: Path.Combine("tools", "scripts", "whisper_align.py"),
-                jsonPayload: payload,
-                contextName: "Whisper_Alignment",
-                acquireGpuLock: true,
-                cancellationToken: ct);
-        }
-        catch (ProcessExecutionException ex)
-        {
-            _logger.LogError(ex, "[WhisperAligner] Python завершился аварийно (ExitCode: {Code}).\nSTDERR:\n{StdErr}\nSTDOUT:\n{StdOut}",
-                ex.ExitCode, ex.StandardError, "");
-            return FallbackProportionalAlignment(expectedText, safeAudio);
+            _logger.LogDebug("[GPU] Acquiring VRAM lock for [Job_{JobId}]...", jobId);
+            gpuLock = await _gpuManager.AcquireGpuLockAsync($"Whisper_Alignment_{jobId}", ct);
+            _logger.LogInformation("[GPU] VRAM lock acquired. Running FasterWhisper.NET inference.");
         }
 
         try
         {
-            return ParseAlignmentJson(result.StandardOutput);
+            using var nativeModel = new NativeWhisperModel(_whisperOptions, modelDir, _logger);
+
+            var result = await nativeModel.AlignAsync(
+                safeAudio,
+                expectedText,
+                _whisperOptions.Inference.DefaultLanguage,
+                ct);
+
+            double rtf = result.TotalDurationMs > 0
+                ? (result.InferenceElapsedMs / 1000.0) / (result.TotalDurationMs / 1000.0)
+                : 0.0;
+
+            double avgConfidence = result.Words.Count > 0 ? result.Words.Average(w => w.Confidence) : 0.0;
+
+            _logger.LogInformation(
+                "[FasterWhisper] Inference completed in {ElapsedMs} ms. RTF: {Rtf:F3}x ({Speed:F1}x realtime). " +
+                "Words: {WordsCount}, Avg confidence: {Conf:F2}",
+                result.InferenceElapsedMs, rtf, rtf > 0 ? 1.0 / rtf : 0, result.Words.Count, avgConfidence);
+
+            return new AlignmentData(result.Words, result.TotalDurationMs, "FasterWhisper_NET");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[WhisperAligner] Сбой разбора JSON-вывода Whisper:\n{Output}", result.StandardOutput);
+            _logger.LogError(ex, "[WhisperAlign] FasterWhisper.NET failed for [Job_{JobId}]. Falling back.", jobId);
             return FallbackProportionalAlignment(expectedText, safeAudio);
+        }
+        finally
+        {
+            if (gpuLock != null)
+            {
+                await gpuLock.DisposeAsync();
+                _logger.LogInformation("[GPU] VRAM released. Lock [Job_{JobId}] cleared.", jobId);
+            }
+
+            if (_whisperOptions.MemoryManagement.RetentionPolicy.Equals("UnloadImmediately", StringComparison.OrdinalIgnoreCase))
+            {
+                await _gpuManager.CleanMemoryAsync(CancellationToken.None);
+            }
         }
     }
 
-    private AlignmentData ParseAlignmentJson(string jsonOutput)
+    private string? ResolveModelDirectory()
     {
-        if (string.IsNullOrWhiteSpace(jsonOutput))
+        string modelTarget = _whisperOptions.Model.DirectoryPath;
+
+        var customSetting = _settingRepo.GetByKeyAsync("voice.whisper_model_path").GetAwaiter().GetResult();
+        if (!string.IsNullOrEmpty(customSetting?.Value))
         {
-            throw new InvalidOperationException("Вывод скрипта Whisper пуст.");
+            modelTarget = customSetting.Value;
         }
 
-        using var doc = JsonDocument.Parse(jsonOutput);
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("status", out var statusProp) && statusProp.GetString() == "error")
+        var located = ModelPathResolver.Locate(modelTarget, _storageConfig.DataStorageDir);
+        if (!string.IsNullOrEmpty(located))
         {
-            var msg = root.TryGetProperty("message", out var m) ? m.GetString() : "Неизвестная ошибка в скрипте Whisper.";
-            throw new InvalidOperationException(msg);
-        }
-
-        long totalDurationMs = root.TryGetProperty("total_duration_ms", out var td) ? td.GetInt64() : 0;
-        var words = new List<TimedWord>();
-
-        if (root.TryGetProperty("words", out var wordsArr) && wordsArr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in wordsArr.EnumerateArray())
+            if (File.Exists(located))
             {
-                var word = item.GetProperty("word").GetString() ?? string.Empty;
-                var start = item.GetProperty("start_ms").GetInt64();
-                var end = item.GetProperty("end_ms").GetInt64();
-                var conf = item.TryGetProperty("confidence", out var c) ? c.GetDouble() : 1.0;
-
-                if (!string.IsNullOrWhiteSpace(word))
-                {
-                    words.Add(new TimedWord(word, start, end, conf));
-                }
+                return Path.GetDirectoryName(located);
+            }
+            if (Directory.Exists(located))
+            {
+                return located;
             }
         }
 
-        _logger.LogInformation("[WhisperAligner] Успешно распознано слов: {Count}, длительность: {Ms} мс", words.Count, totalDurationMs);
-        return new AlignmentData(words, totalDurationMs, "Whisper");
+        var candidates = ModelPathResolver.GetCandidatePaths(
+            _storageConfig.GetModelPath("whisper"), _storageConfig.DataStorageDir);
+        foreach (var dir in candidates)
+        {
+            if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "model.bin")))
+            {
+                return dir;
+            }
+        }
+
+        return null;
     }
 
     private AlignmentData FallbackProportionalAlignment(string text, string audioPath)
     {
-        _logger.LogWarning("[WhisperAligner] ПЕРЕХОД НА FALLBACK (пропорциональное распределение слов)");
+        _logger.LogWarning("[WhisperAlign] FALLBACK (proportional word distribution)");
         var tokens = text.Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0) return AlignmentData.Empty;
 
@@ -166,122 +169,5 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
         }
 
         return new AlignmentData(list, estimatedDurationMs, "FallbackProportional");
-    }
-
-    private void SyncScriptFile()
-    {
-        var targetDir = Path.Combine(Directory.GetCurrentDirectory(), "tools", "scripts");
-        if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-
-        var scriptPath = Path.Combine(targetDir, "whisper_align.py");
-
-        var scriptCode = """
-#!/usr/bin/env python3
-import sys, os, json, wave, torch, whisper
-import numpy as np
-
-def load_wav_mono_16k(audio_path):
-    with wave.open(audio_path, "rb") as wf:
-        sr = wf.getframerate()
-        ch = wf.getnchannels()
-        width = wf.getsampwidth()
-        frames = wf.readframes(wf.getnframes())
-
-        if width == 2:
-            data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-        elif width == 4:
-            data = np.frombuffer(frames, dtype=np.int32).astype(np.float32) / 2147483648.0
-        elif width == 1:
-            data = (np.frombuffer(frames, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
-        else:
-            raise ValueError(f"Unsupported sample width: {width} bytes")
-
-        if ch > 1:
-            data = data.reshape(-1, ch).mean(axis=1)
-
-        if sr != 16000:
-            num_target = int(len(data) * 16000 / sr)
-            orig_idx = np.linspace(0, len(data) - 1, len(data))
-            target_idx = np.linspace(0, len(data) - 1, num_target)
-            data = np.interp(target_idx, orig_idx, data).astype(np.float32)
-
-        return data
-
-def main():
-    payload_json = os.environ.get("ML_TASK_PAYLOAD")
-    if not payload_json:
-        print(json.dumps({"status": "error", "message": "ML_TASK_PAYLOAD is missing"}), file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        data = json.loads(payload_json)
-        audio_path = data["audio_path"]
-        expected_text = data.get("text", "")
-        model_path = data["model_path"]
-
-        if not os.path.exists(audio_path):
-            raise FileNotFoundError(f"Audio file not found: {audio_path}")
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        use_fp16 = (device == "cuda")
-
-        audio_np = load_wav_mono_16k(audio_path)
-        model = whisper.load_model(model_path, device=device)
-
-        result = model.transcribe(
-            audio_np,
-            initial_prompt=expected_text,
-            word_timestamps=True,
-            fp16=use_fp16,
-            verbose=False
-        )
-
-        words = []
-        total_duration_ms = int(len(audio_np) / 16000.0 * 1000)
-
-        for segment in result.get("segments", []):
-            for w in segment.get("words", []):
-                start_ms = int(round(w["start"] * 1000))
-                end_ms = int(round(w["end"] * 1000))
-                word_str = w["word"].strip()
-                confidence = float(w.get("probability", 1.0))
-                if word_str:
-                    words.append({
-                        "word": word_str,
-                        "start_ms": start_ms,
-                        "end_ms": end_ms,
-                        "confidence": round(confidence, 2)
-                    })
-
-        print(json.dumps({
-            "status": "ok",
-            "total_duration_ms": total_duration_ms,
-            "words": words
-        }, ensure_ascii=False))
-        sys.exit(0)
-
-    except Exception as e:
-        print(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False), file=sys.stderr)
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
-""";
-
-        bool needWrite = true;
-        if (File.Exists(scriptPath))
-        {
-            var existingContent = File.ReadAllText(scriptPath, System.Text.Encoding.UTF8);
-            if (string.Equals(existingContent.Trim(), scriptCode.Trim(), StringComparison.Ordinal))
-            {
-                needWrite = false;
-            }
-        }
-
-        if (needWrite)
-        {
-            File.WriteAllText(scriptPath, scriptCode, new System.Text.UTF8Encoding(false));
-            _logger.LogInformation("[WhisperAligner] Скрипт whisper_align.py синхронизирован на диск.");
-        }
     }
 }

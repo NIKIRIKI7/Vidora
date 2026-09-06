@@ -21,10 +21,19 @@ export const useRenderWebSocket = () => {
       ws.onmessage = e => {
         try {
           const msg = JSON.parse(e.data)
-          if (msg.type === 'RENDER_PROGRESS' && msg.payload) {
-            setRenderProgress(Number(msg.payload.progress) || 0)
+          const eventType = msg.event || msg.type
+          const payload = msg.data || msg.payload
+
+          if (eventType === 'RENDER_PROGRESS' && payload) {
+            const pct = Number(payload.percentage ?? payload.progress) || 0
+            setRenderProgress(pct)
             if (renderListenerRef.current) {
-              renderListenerRef.current(msg.payload)
+              renderListenerRef.current({
+                task_id: payload.task_id || payload.taskId,
+                progress: pct,
+                status: payload.status === 'Processing' ? 'rendering' : (payload.status?.toLowerCase() || 'rendering'),
+                target_id: payload.task_id || payload.scene_id
+              })
             }
           }
         } catch (err) {

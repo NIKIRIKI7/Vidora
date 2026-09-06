@@ -6,6 +6,7 @@ using Integrations.YouTube.Config;
 using Integrations.YouTube.Contracts;
 using Integrations.YouTube.Exceptions;
 using Integrations.YouTube.Innertube;
+using Integrations.YouTube.Innertube.Contracts;
 using Integrations.YouTube.Innertube.Resolving;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -313,6 +314,183 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
             _logger.LogDebug(ex, "[InnerTube] Субтитры недоступны для {VideoId}", videoId);
             return null;
         }
+    }
+
+    public async Task<IReadOnlyList<YouTubeVideoMetadata>> SearchVideosFilteredAsync(
+        string query,
+        YouTubeSearchFilter? filter = null,
+        int maxResults = 20,
+        string lang = "ru",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        maxResults = Math.Clamp(maxResults, 1, 50);
+
+        try
+        {
+            var itFilter = filter != null ? MapToInnerTubeFilter(filter) : null;
+            var results = await _innerTubeClient.SearchVideosFilteredAsync(query, itFilter, maxResults, lang, cancellationToken);
+            return results.Select(MapToMetadata).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "[InnerTube] Ошибка фильтрованного поиска по запросу '{Query}'", query);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<YouTubeCommentItem>> ScrapeCommentsDetailedAsync(
+        string videoUrlOrId,
+        int maxComments = 50,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoUrlOrId);
+        var videoId = ResolveVideoId(videoUrlOrId);
+
+        try
+        {
+            var comments = await _innerTubeClient.GetCommentsDetailedAsync(videoId, maxComments, cancellationToken);
+            return comments.Select(c => new YouTubeCommentItem(
+                c.AuthorName,
+                c.AuthorChannelId,
+                c.Text,
+                c.LikeCount,
+                c.PublishedTime,
+                c.CommentId)).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Сбой детальных комментариев для {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<YouTubeVideoChapter>> GetVideoChaptersAsync(
+        string videoUrlOrId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoUrlOrId);
+        var videoId = ResolveVideoId(videoUrlOrId);
+
+        try
+        {
+            var chapters = await _innerTubeClient.GetVideoChaptersAsync(videoId, cancellationToken);
+            return chapters.Select(c => new YouTubeVideoChapter(
+                c.StartSeconds, c.EndSeconds, c.Title, c.ThumbnailUrl)).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Сбой получения глав для {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<YouTubeHeatmapPoint>> GetVideoHeatmapAsync(
+        string videoUrlOrId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoUrlOrId);
+        var videoId = ResolveVideoId(videoUrlOrId);
+
+        try
+        {
+            var heatmap = await _innerTubeClient.GetVideoHeatmapAsync(videoId, cancellationToken);
+            return heatmap.Select(h => new YouTubeHeatmapPoint(
+                h.StartSeconds, h.EndSeconds, h.Intensity)).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Сбой получения heatmap для {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<YouTubeWordTimestamp>> GetWordTimestampsAsync(
+        string videoUrlOrId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoUrlOrId);
+        var videoId = ResolveVideoId(videoUrlOrId);
+
+        try
+        {
+            var words = await _innerTubeClient.GetWordTimestampsAsync(videoId, cancellationToken);
+            return words.Select(w => new YouTubeWordTimestamp(
+                w.StartMs, w.EndMs, w.Word)).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Сбой получения word timestamps для {VideoId}", videoId);
+            return [];
+        }
+    }
+
+    public async Task<YouTubeChannelStats> GetChannelStatsAsync(
+        string channelId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channelId);
+
+        try
+        {
+            var stats = await _innerTubeClient.GetChannelStatsAsync(channelId, cancellationToken);
+            return new YouTubeChannelStats(
+                stats.SubscriberCount, stats.TotalViewCount, stats.VideoCount, stats.Description);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Сбой статистики канала {ChannelId}", channelId);
+            return new YouTubeChannelStats(0, 0, 0, "");
+        }
+    }
+
+    public async Task<IReadOnlyList<YouTubeChannelUpload>> GetChannelRecentUploadsAsync(
+        string channelId,
+        int maxUploads = 15,
+        string lang = "ru",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channelId);
+
+        try
+        {
+            var uploads = await _innerTubeClient.GetChannelRecentUploadsAsync(channelId, maxUploads, lang, cancellationToken);
+            return uploads.Select(u => new YouTubeChannelUpload(
+                u.VideoId, u.Title, u.ThumbnailUrl, u.ViewCount, u.PublishedText, u.DurationSeconds)).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Сбой загрузок канала {ChannelId}", channelId);
+            return [];
+        }
+    }
+
+    private static InnerTubeSearchFilter MapToInnerTubeFilter(YouTubeSearchFilter filter)
+    {
+        return new InnerTubeSearchFilter
+        {
+            UploadDate = filter.UploadDate,
+            Type = filter.Type,
+            Duration = filter.Duration,
+            SortBy = filter.SortBy,
+            Features = filter.Features
+        };
+    }
+
+    private static YouTubeVideoMetadata MapToMetadata(InnerTubeVideoItem item)
+    {
+        return new YouTubeVideoMetadata
+        {
+            VideoId = item.VideoId,
+            Title = item.Title,
+            Description = item.Description,
+            ChannelTitle = item.ChannelTitle,
+            ChannelId = item.ChannelId,
+            SubscriberCount = item.SubscriberCount > 0 ? item.SubscriberCount : null,
+            ViewCount = item.ViewCount,
+            Duration = TimeSpan.FromSeconds(item.DurationSeconds),
+            ThumbnailUrl = item.ThumbnailUrl
+        };
     }
 
     private string ResolveVideoId(string videoUrlOrId)

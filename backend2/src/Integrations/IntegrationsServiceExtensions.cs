@@ -1,6 +1,7 @@
 using Integrations.LLM;
 using Integrations.LLM.Local;
 using Integrations.Pexels;
+using Integrations.Whisper.Config;
 using Integrations.YouTube.Innertube;
 using Kernel.Ports;
 using Microsoft.Extensions.Configuration;
@@ -30,12 +31,11 @@ public static class IntegrationsServiceExtensions
         // 4. Native in-process LLamaSharp client (Gemma 3 GGUF)
         services.AddSingleton<ILlmClient, LlmClient>();
 
-        // 5. InnerTube Client
-        services.AddHttpClient<IInnerTubeClient, InnerTubeClient>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(8);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-        });
+        // 5. InnerTube Module (replaces the old monolithic InnerTubeClient registration)
+        services.AddInnerTubeModule(configuration);
+
+        // 6. Native Whisper (CTranslate2) configuration
+        services.Configure<WhisperOptions>(configuration.GetSection(WhisperOptions.SectionName));
 
         return services;
     }

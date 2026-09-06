@@ -57,7 +57,6 @@ public sealed partial class GgufModelResolver : IGgufModelResolver
         if (allFiles.Count == 0) return null;
 
         var cleanTarget = CleanNameRegex().Replace(engineName.ToLowerInvariant(), "");
-
         foreach (var file in allFiles)
         {
             var fileNameClean = CleanNameRegex().Replace(Path.GetFileNameWithoutExtension(file).ToLowerInvariant(), "");
@@ -100,14 +99,12 @@ public sealed partial class GgufModelResolver : IGgufModelResolver
     {
         var cwd = Directory.GetCurrentDirectory();
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var dataDir = string.IsNullOrWhiteSpace(_storageConfig.DataStorageDir) ? "data_storage" : _storageConfig.DataStorageDir;
+        var modelsDir = _storageConfig.GetModelsDirectory();
 
         return
         [
-            Path.Combine(cwd, "ai-models"),
-            Path.Combine(cwd, dataDir, "ai-models"),
-            Path.Combine(AppContext.BaseDirectory, "ai-models"),
-            Path.Combine(userProfile, "ai-models"),
+            Path.Combine(cwd, modelsDir),
+            Path.Combine(AppContext.BaseDirectory, modelsDir),
             Path.Combine(userProfile, ".cache", "vidora-models")
         ];
     }

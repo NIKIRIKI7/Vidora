@@ -46,9 +46,7 @@ public sealed class HardwareMonitorService
     {
         try
         {
-            var targetDir = Path.GetFullPath(string.IsNullOrWhiteSpace(_storageConfig.DataStorageDir)
-                ? "data_storage"
-                : _storageConfig.DataStorageDir);
+            var targetDir = Path.GetFullPath(_storageConfig.DataStorageDir);
 
             var root = Path.GetPathRoot(targetDir);
             if (!string.IsNullOrEmpty(root))

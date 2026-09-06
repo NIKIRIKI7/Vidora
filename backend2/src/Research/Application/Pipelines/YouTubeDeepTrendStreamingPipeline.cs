@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Integrations.YouTube.Contracts;
-using Integrations.YouTube.Innertube;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
 using Research.Domain.Entities;
@@ -22,7 +21,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
     private readonly ISignalIngestor _signalIngestor;
     private readonly IYouTubeSearchIngestor _ytIngestor;
     private readonly IYouTubeClient _ytClient;
-    private readonly IInnerTubeClient? _innerTubeClient;
     private readonly MomentumEngine _momentumEngine;
     private readonly BlueOceanDetector _blueOceanDetector;
     private readonly ConfusionDetector _confusionDetector;
@@ -43,13 +41,11 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         TrendArbitrageEngine arbitrageEngine,
         ISkillsCatalog skillsCatalog,
         ILlmClient llmClient,
-        ILogger<YouTubeDeepTrendStreamingPipeline> logger,
-        IInnerTubeClient? innerTubeClient = null)
+        ILogger<YouTubeDeepTrendStreamingPipeline> logger)
     {
         _signalIngestor = signalIngestor;
         _ytIngestor = ytIngestor;
         _ytClient = ytClient;
-        _innerTubeClient = innerTubeClient;
         _momentumEngine = momentumEngine;
         _blueOceanDetector = blueOceanDetector;
         _confusionDetector = confusionDetector;
@@ -414,7 +410,7 @@ public sealed class YouTubeDeepTrendStreamingPipeline
 
         // 3. Подгрузка реального числа подписчиков
         long realSubs = c.SubscriberCount;
-        if (realSubs <= 0 && !string.IsNullOrWhiteSpace(c.ChannelId) && _innerTubeClient != null)
+        if (realSubs <= 0 && !string.IsNullOrWhiteSpace(c.ChannelId))
         {
             if (channelSubsCache.TryGetValue(c.ChannelId, out var cachedSubs))
             {
@@ -422,8 +418,18 @@ public sealed class YouTubeDeepTrendStreamingPipeline
             }
             else
             {
-                realSubs = await _innerTubeClient.GetChannelSubscribersAsync(c.ChannelId, ct);
-                if (realSubs > 0) channelSubsCache[c.ChannelId] = realSubs;
+                try
+                {
+                    var channelStats = await _ytClient.Metadata.GetChannelStatsAsync(c.ChannelId, ct);
+                    if (channelStats.SubscriberCount > 0)
+                    {
+                        realSubs = channelStats.SubscriberCount;
+                        channelSubsCache[c.ChannelId] = realSubs;
+                    }
+                }
+                catch
+                {
+                }
             }
         }
 

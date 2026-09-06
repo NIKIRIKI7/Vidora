@@ -16,7 +16,29 @@
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="FasterWhisper.NET.Gpu" Version="1.0.8" />
   </ItemGroup>
+
+  <Target Name="CopyNativeLibs" BeforeTargets="CoreCompile">
+    <!-- FasterWhisper.NET.Gpu native libs from NuGet -->
+    <ItemGroup>
+      <NativeLibs Include="$(NuGetPackageRoot)fasterwhisper.net.gpu\1.0.8\runtimes\win-x64\native\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeLibs)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <!-- cuDNN 8 from system CUDA install -->
+    <ItemGroup>
+      <CudnnLibs Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\cudnn*8.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CudnnLibs)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <!-- CUDA runtime -->
+    <ItemGroup>
+      <CudaRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\cudart64_12.dll" />
+      <CudaRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\cublas64_12.dll" />
+      <CudaRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\cublasLt64_12.dll" />
+      <CudaRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\cusparse64_12.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CudaRuntime)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\..\backend2.csproj" />

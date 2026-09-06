@@ -1,6 +1,8 @@
 using Kernel.Exceptions;
+using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Process;
+using Microsoft.Extensions.Options;
 using Voice.Domain;
 using Voice.Domain.Exceptions;
 using Voice.Domain.ValueObjects;
@@ -13,19 +15,25 @@ public sealed class CosyVoiceTtsProvider : ITtsEngineProvider
 
     private readonly IMlProcessHost _mlHost;
     private readonly IPathResolver _pathResolver;
+    private readonly AppStorageConfig _storageConfig;
 
-    public CosyVoiceTtsProvider(IMlProcessHost mlHost, IPathResolver pathResolver)
+    public CosyVoiceTtsProvider(
+        IMlProcessHost mlHost,
+        IPathResolver pathResolver,
+        IOptions<AppStorageConfig> storageConfig)
     {
         _mlHost = mlHost;
         _pathResolver = pathResolver;
+        _storageConfig = storageConfig.Value;
     }
 
     public async Task<RawSynthesisResult> SynthesizeAsync(string text, VoiceSpec spec, string destinationPath, CancellationToken ct)
     {
-        var modelDir = _pathResolver.ResolveSafePath("ai-models/cosyvoice");
-        if (!Directory.Exists(modelDir))
+        var modelTarget = _storageConfig.GetModelPath("cosyvoice");
+        var resolvedModelDir = ModelPathResolver.Locate(modelTarget, _storageConfig.DataStorageDir);
+        if (string.IsNullOrEmpty(resolvedModelDir))
         {
-            throw new DomainConflictException("Каталог с моделью CosyVoice не найден: 'ai-models/cosyvoice'.", "COSYVOICE_NOT_FOUND");
+            throw new DomainConflictException($"Каталог с моделью CosyVoice не найден: '{modelTarget}'.", "COSYVOICE_NOT_FOUND");
         }
 
         var safeDest = _pathResolver.ResolveSafePath(destinationPath);
@@ -38,11 +46,11 @@ public sealed class CosyVoiceTtsProvider : ITtsEngineProvider
             speaker_id = spec.SpeakerId,
             speed = spec.Speed,
             output_path = safeDest,
-            model_dir = modelDir
+            model_dir = resolvedModelDir
         };
 
         await _mlHost.ExecuteScriptAsync(
-            scriptRelativePath: Path.Combine("tools", "scripts", "cosyvoice_tts.py"),
+            scriptRelativePath: _storageConfig.GetScriptPath("cosyvoice_tts.py"),
             jsonPayload: payload,
             contextName: "TTS_CosyVoice",
             acquireGpuLock: true,

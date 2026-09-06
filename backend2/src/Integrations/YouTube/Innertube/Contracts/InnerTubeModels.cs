@@ -34,4 +34,45 @@ public sealed record InnerTubeComment(
     string Text,
     int LikeCount,
     string PublishedTime,
-    string CommentId);
+    string CommentId,
+    string? ContinuationToken = null);
+
+public sealed record InnerTubeHeatmapPoint(
+    double StartSeconds,
+    double EndSeconds,
+    double Intensity);
+
+public sealed record InnerTubeVideoChapter(
+    int StartSeconds,
+    int EndSeconds,
+    string Title,
+    string ThumbnailUrl);
+
+public sealed record InnerTubeWordTimestamp(
+    double StartMs,
+    double EndMs,
+    string Word);
+
+public sealed record InnerTubeChannelUpload(
+    string VideoId,
+    string Title,
+    string ThumbnailUrl,
+    int ViewCount,
+    string PublishedText,
+    int DurationSeconds);
+
+public sealed record InnerTubeChannelStats(
+    long SubscriberCount,
+    long TotalViewCount,
+    int VideoCount,
+    string Description);
+
+public sealed class InnerTubeSearchFilter
+{
+    public string? Type { get; set; }
+    public string? Duration { get; set; }
+    public string? SortBy { get; set; }
+    public string? UploadDate { get; set; }
+    public string? Features { get; set; }
+    public string? License { get; set; }
+}

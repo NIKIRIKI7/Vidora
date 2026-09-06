@@ -1,5 +1,7 @@
+using Kernel.Platform.Config;
 using Kernel.Platform.Process;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Voice.Domain;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
@@ -11,11 +13,16 @@ public sealed class OmniVoiceCloneProvider : IVoiceCloneProvider
     public VoiceEngineType EngineType => VoiceEngineType.LocalOmniVoice;
 
     private readonly IMlProcessHost _mlHost;
+    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<OmniVoiceCloneProvider> _logger;
 
-    public OmniVoiceCloneProvider(IMlProcessHost mlHost, ILogger<OmniVoiceCloneProvider> logger)
+    public OmniVoiceCloneProvider(
+        IMlProcessHost mlHost,
+        IOptions<AppStorageConfig> storageConfig,
+        ILogger<OmniVoiceCloneProvider> logger)
     {
         _mlHost = mlHost;
+        _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
@@ -35,7 +42,7 @@ public sealed class OmniVoiceCloneProvider : IVoiceCloneProvider
         };
 
         var result = await _mlHost.ExecuteScriptAsync(
-            scriptRelativePath: Path.Combine("tools", "scripts", "omnivoice_clone.py"),
+            scriptRelativePath: _storageConfig.GetScriptPath("omnivoice_clone.py"),
             jsonPayload: payload,
             contextName: "VoiceClone_OmniVoice",
             acquireGpuLock: true,
@@ -65,11 +72,16 @@ public sealed class MiniMaxCloneProvider : IVoiceCloneProvider
     public VoiceEngineType EngineType => VoiceEngineType.CloudMiniMax;
 
     private readonly IMlProcessHost _mlHost;
+    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<MiniMaxCloneProvider> _logger;
 
-    public MiniMaxCloneProvider(IMlProcessHost mlHost, ILogger<MiniMaxCloneProvider> logger)
+    public MiniMaxCloneProvider(
+        IMlProcessHost mlHost,
+        IOptions<AppStorageConfig> storageConfig,
+        ILogger<MiniMaxCloneProvider> logger)
     {
         _mlHost = mlHost;
+        _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
@@ -88,7 +100,7 @@ public sealed class MiniMaxCloneProvider : IVoiceCloneProvider
         };
 
         var result = await _mlHost.ExecuteScriptAsync(
-            scriptRelativePath: Path.Combine("tools", "scripts", "minimax_clone.py"),
+            scriptRelativePath: _storageConfig.GetScriptPath("minimax_clone.py"),
             jsonPayload: payload,
             contextName: "VoiceClone_MiniMax",
             acquireGpuLock: false,

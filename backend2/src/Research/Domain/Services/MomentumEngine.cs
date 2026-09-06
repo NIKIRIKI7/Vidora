@@ -16,6 +16,37 @@ public sealed class MomentumEngine
         return CalculateDynamicMomentum(views, ageHours, ratio: ratio);
     }
 
+    public MomentumScore CalculateMomentum(
+        long views, DateTimeOffset publishedAt, long subscriberCount,
+        ChannelBaselineMetrics? baseline, DateTimeOffset? referenceNow = null)
+    {
+        var now = referenceNow ?? DateTimeOffset.UtcNow;
+        var ageHours = Math.Max(0.5, (now - publishedAt).TotalHours);
+        double ratio = subscriberCount > 0 ? (double)views / subscriberCount : 1.5;
+
+        var baseScore = CalculateDynamicMomentum(views, ageHours, ratio: ratio);
+
+        if (baseline is { IsValid: true } bl)
+        {
+            var baselineBoost = bl.OutlierRatio(views);
+            if (baselineBoost >= 2.0)
+            {
+                var boostedScore = baseScore.MScore + (int)Math.Round(baselineBoost * 10);
+                return new MomentumScore(
+                    baseScore.ViewsPerHour,
+                    Math.Max(baseScore.OutlierMultiplier, baselineBoost),
+                    baseScore.Score,
+                    Math.Min(100, boostedScore),
+                    baseScore.VelocityStage,
+                    $"+{Math.Max(int.Parse(baseScore.AccelerationPct.Trim('%', '+')), (int)Math.Round(baselineBoost * 50))}%",
+                    baseScore.EngagementMultiplier,
+                    baseScore.IsRocket || baselineBoost >= 4.0);
+            }
+        }
+
+        return baseScore;
+    }
+
     public MomentumScore CalculateDynamicMomentum(
         long views, double hoursAlive, long likes = 0, long comments = 0, double ratio = 1.0)
     {

@@ -1,5 +1,7 @@
+using Kernel.Platform.Config;
 using Kernel.Platform.Process;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Voice.Domain;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
@@ -9,11 +11,16 @@ namespace Voice.Infrastructure.Providers;
 public sealed class OmniVoiceDesignProvider : IVoiceDesignProvider
 {
     private readonly IMlProcessHost _mlHost;
+    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<OmniVoiceDesignProvider> _logger;
 
-    public OmniVoiceDesignProvider(IMlProcessHost mlHost, ILogger<OmniVoiceDesignProvider> logger)
+    public OmniVoiceDesignProvider(
+        IMlProcessHost mlHost,
+        IOptions<AppStorageConfig> storageConfig,
+        ILogger<OmniVoiceDesignProvider> logger)
     {
         _mlHost = mlHost;
+        _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
@@ -35,7 +42,7 @@ public sealed class OmniVoiceDesignProvider : IVoiceDesignProvider
         };
 
         var result = await _mlHost.ExecuteScriptAsync(
-            scriptRelativePath: Path.Combine("tools", "scripts", "omnivoice_design.py"),
+            scriptRelativePath: _storageConfig.GetScriptPath("omnivoice_design.py"),
             jsonPayload: payload,
             contextName: "VoiceDesign_OmniVoice",
             acquireGpuLock: true,

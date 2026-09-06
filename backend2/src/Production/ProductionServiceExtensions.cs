@@ -19,13 +19,12 @@ public static class ProductionServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var storageSection = configuration.GetSection(AppStorageConfig.SectionName);
-        var storage = storageSection.Get<AppStorageConfig>() ?? new AppStorageConfig();
-        var dataDir = string.IsNullOrWhiteSpace(storage.DataStorageDir) ? "data_storage" : storage.DataStorageDir;
-        var fullDataDir = Path.GetFullPath(dataDir);
+        var storage = configuration.GetSection(AppStorageConfig.SectionName).Get<AppStorageConfig>()
+            ?? throw new InvalidOperationException("Секция 'Storage' не найдена в appsettings.json.");
+        var fullDataDir = Path.GetFullPath(storage.DataStorageDir);
         if (!Directory.Exists(fullDataDir)) Directory.CreateDirectory(fullDataDir);
 
-        var connectionString = $"Data Source={Path.Combine(fullDataDir, "production.db")}";
+        var connectionString = $"Data Source={Path.GetFullPath(storage.GetDatabasePath("production"))}";
         services.AddDbContext<ProductionDbContext>(options => options.UseSqlite(connectionString));
 
         services.AddScoped<IProjectRepository, EfProjectRepository>();

@@ -1,3 +1,4 @@
+using Kernel.Platform.Config;
 using MediaContext.Application.Services;
 using MediaContext.Contracts;
 using MediaContext.Domain.Ports;
@@ -16,14 +17,18 @@ public static class MediaServiceExtensions
 {
     public static IServiceCollection AddMediaContext(this IServiceCollection services, IConfiguration configuration)
     {
+        var storage = configuration.GetSection(AppStorageConfig.SectionName).Get<AppStorageConfig>()
+            ?? throw new InvalidOperationException("Секция 'Storage' не найдена в appsettings.json.");
+
         services.AddDbContext<MediaDbContext>(options =>
             options.UseSqlite(configuration.GetConnectionString("MediaDb")
-                ?? "Data Source=data_storage/media.db"));
+                ?? $"Data Source={Path.GetFullPath(storage.GetDatabasePath("media"))}"));
 
         services.AddScoped<IMediaAssetRepository, EfMediaAssetRepository>();
         services.AddSingleton<IMediaStorageService, LocalMediaStorageService>();
         services.AddSingleton<IBrollNormalizer, FfmpegBrollNormalizer>();
         services.AddSingleton<IMusicCatalogProvider, LocalMusicCatalogProvider>();
+        services.AddScoped<IYouTubeBrollCatalog, YouTubeBrollCatalog>();
         services.AddScoped<IMediaModule, MediaModule>();
         // services.AddHostedService<MediaDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 

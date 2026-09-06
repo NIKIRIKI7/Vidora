@@ -30,11 +30,10 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
-
         var cleanQuery = Regex.Replace(query, @"[,;]+", " ").Trim();
         cleanQuery = Regex.Replace(cleanQuery, @"\s+", " ");
-
         string cacheKey = $"yt_search_{cleanQuery.ToLowerInvariant()}_{maxResults}_{daysBack}_{lang}";
+        
         var cached = await _cache.GetAsync<IReadOnlyList<RawVideoSearchResult>>(cacheKey, ct);
         if (cached != null && cached.Count > 0)
         {
@@ -44,7 +43,6 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
 
         _logger.LogInformation("[YouTubeIngestor] Поиск кандидатов через IYouTubeClient: '{Query}' (daysBack: {Days}, lang: {Lang})", cleanQuery, daysBack, lang);
         var videos = await _youTubeClient.SearchAsync(cleanQuery, maxResults, daysBack, lang, ct);
-
         if (videos.Count == 0 && query.Contains(' '))
         {
             var parts = cleanQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -61,7 +59,6 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
         {
             await _cache.SetAsync(cacheKey, (IReadOnlyList<RawVideoSearchResult>)results, TimeSpan.FromHours(2), ct);
         }
-
         return results;
     }
 
@@ -74,19 +71,16 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
     {
         if (string.IsNullOrWhiteSpace(videoId)) return [];
         string cacheKey = $"yt_related_{videoId}_{maxResults}_{daysBack}_{lang}";
-
         var cached = await _cache.GetAsync<IReadOnlyList<RawVideoSearchResult>>(cacheKey, ct);
         if (cached != null && cached.Count > 0) return cached;
 
         _logger.LogInformation("[YouTubeIngestor] Сбор связанных рекомендаций для {VideoId}", videoId);
         var videos = await _youTubeClient.GetRelatedVideosAsync(videoId, maxResults, lang, ct);
         var results = MapToResults(videos, daysBack);
-
         if (results.Count > 0)
         {
             await _cache.SetAsync(cacheKey, (IReadOnlyList<RawVideoSearchResult>)results, TimeSpan.FromHours(3), ct);
         }
-
         return results;
     }
 
@@ -100,12 +94,10 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
 
         var videos = await _youTubeClient.GetTrendingVideosAsync(lang, ct);
         var results = MapToResults(videos, 7);
-
         if (results.Count > 0)
         {
             await _cache.SetAsync(cacheKey, (IReadOnlyList<RawVideoSearchResult>)results, TimeSpan.FromHours(1), ct);
         }
-
         return results;
     }
 
@@ -119,12 +111,10 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
 
         var videos = await _youTubeClient.GetHomeFeedVideosAsync(lang, ct);
         var results = MapToResults(videos, 7);
-
         if (results.Count > 0)
         {
             await _cache.SetAsync(cacheKey, (IReadOnlyList<RawVideoSearchResult>)results, TimeSpan.FromMinutes(30), ct);
         }
-
         return results;
     }
 
@@ -155,6 +145,7 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
                 }
             }
 
+            // Никаких искусственных ограничений до 50 000 подписчиков!
             long subscribers = v.SubscriberCount.GetValueOrDefault(0);
 
             results.Add(new RawVideoSearchResult(
@@ -185,5 +176,4 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
         }
         return null;
     }
-
 }

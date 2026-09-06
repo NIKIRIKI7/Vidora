@@ -9,10 +9,13 @@ public interface IPlayerResponseExtractor
 {
     IReadOnlyList<InnerTubeVideoItem> ExtractVideoItems(JsonElement root, int maxResults = 25);
     IReadOnlyList<InnerTubeSubtitleTrack> ExtractSubtitleTracks(JsonElement root);
+    IReadOnlyList<InnerTubeHeatmapPoint> ExtractHeatmap(JsonElement root);
+    IReadOnlyList<InnerTubeWordTimestamp> ExtractWordTimestamps(JsonElement root);
     string? ExtractVideoId(JsonElement root);
     string? ExtractTitle(JsonElement root);
     long ExtractViewCount(JsonElement root);
     int ExtractDurationSeconds(JsonElement root);
+    string? FindNode(JsonElement root, string path);
 }
 
 public sealed class PlayerResponseExtractor : IPlayerResponseExtractor
@@ -104,6 +107,114 @@ public sealed class PlayerResponseExtractor : IPlayerResponseExtractor
             return seconds;
         }
         return 0;
+    }
+
+    public IReadOnlyList<InnerTubeHeatmapPoint> ExtractHeatmap(JsonElement root)
+    {
+        var points = new List<InnerTubeHeatmapPoint>();
+        if (root.ValueKind != JsonValueKind.Object) return points;
+
+        JsonElement renderer = default;
+
+        if (root.TryGetProperty("playerHeatmapRenderer", out var hm))
+        {
+            renderer = hm;
+        }
+        else if (root.TryGetProperty(_schema.VideoDetailsKey, out var vd) &&
+                 vd.TryGetProperty("playerHeatmapRenderer", out var vdHm))
+        {
+            renderer = vdHm;
+        }
+
+        if (renderer.ValueKind != JsonValueKind.Object) return points;
+
+        if (!renderer.TryGetProperty("heatmap", out var heatmap) ||
+            heatmap.ValueKind != JsonValueKind.Array)
+            return points;
+
+        foreach (var point in heatmap.EnumerateArray())
+        {
+            if (!point.TryGetProperty("startMillis", out var startEl) ||
+                !point.TryGetProperty("endMillis", out var endEl) ||
+                !point.TryGetProperty("intensity", out var intensityEl))
+                continue;
+
+            var startMs = startEl.ValueKind == JsonValueKind.String
+                ? double.Parse(startEl.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                : startEl.GetDouble();
+            var endMs = endEl.ValueKind == JsonValueKind.String
+                ? double.Parse(endEl.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                : endEl.GetDouble();
+            var intensity = intensityEl.ValueKind == JsonValueKind.String
+                ? double.Parse(intensityEl.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                : intensityEl.GetDouble();
+
+            points.Add(new InnerTubeHeatmapPoint(startMs / 1000.0, endMs / 1000.0, intensity));
+        }
+
+        return points;
+    }
+
+    public IReadOnlyList<InnerTubeWordTimestamp> ExtractWordTimestamps(JsonElement root)
+    {
+        var words = new List<InnerTubeWordTimestamp>();
+        if (root.ValueKind != JsonValueKind.Object) return words;
+
+        if (!root.TryGetProperty("videoDetails", out var vd)) return words;
+        if (!vd.TryGetProperty("transcriptBodyRenderer", out var transcriptBody)) return words;
+        if (!transcriptBody.TryGetProperty("cueGroups", out var cueGroups) ||
+            cueGroups.ValueKind != JsonValueKind.Array)
+            return words;
+
+        foreach (var cueGroup in cueGroups.EnumerateArray())
+        {
+            if (!cueGroup.TryGetProperty("transcriptCueGroupRenderer", out var cgr)) continue;
+            if (!cgr.TryGetProperty("cues", out var cues) || cues.ValueKind != JsonValueKind.Array) continue;
+
+            foreach (var cue in cues.EnumerateArray())
+            {
+                if (!cue.TryGetProperty("transcriptCueRenderer", out var tcr)) continue;
+                if (!tcr.TryGetProperty("startOffsetMs", out var startEl)) continue;
+                if (!tcr.TryGetProperty("durationMs", out var durEl)) continue;
+                if (!tcr.TryGetProperty("cue", out var cueContent)) continue;
+
+                var text = cueContent.TryGetProperty("simpleText", out var st)
+                    ? st.GetString() ?? ""
+                    : cueContent.ExtractRunsText("runs");
+
+                var startMs = double.TryParse(startEl.GetString(), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : 0;
+                var durMs = double.TryParse(durEl.GetString(), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0;
+
+                if (!string.IsNullOrWhiteSpace(text))
+                    words.Add(new InnerTubeWordTimestamp(startMs, startMs + durMs, text.Trim()));
+            }
+        }
+
+        return words;
+    }
+
+    public string? FindNode(JsonElement root, string path)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return null;
+
+        var parts = path.Split('.');
+        var current = root;
+        foreach (var part in parts)
+        {
+            if (!current.TryGetProperty(part, out var next)) return null;
+            current = next;
+        }
+
+        return current.ValueKind switch
+        {
+            JsonValueKind.String => current.GetString(),
+            JsonValueKind.Number => current.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => current.GetRawText()
+        };
     }
 
     private InnerTubeVideoItem? ParseVideoDetails(JsonElement vd)

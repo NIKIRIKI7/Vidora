@@ -7,7 +7,7 @@ public sealed class LlmOptions
     /// <summary>
     /// Относительный или абсолютный путь к .gguf файлу модели.
     /// </summary>
-    public string ModelPath { get; set; } = "ai-models/gemma3-4b/gemma-3-4b-it-Q4_K_M.gguf";
+    public string ModelPath { get; set; } = "data_storage/ai-models/gemma3-4b/gemma-3-4b-it-Q4_K_M.gguf";
 
     /// <summary>
     /// Размер контекстного окна (токенов).

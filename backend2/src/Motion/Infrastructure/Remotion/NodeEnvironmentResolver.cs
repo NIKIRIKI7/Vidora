@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Kernel.Exceptions;
+using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MotionContext.Domain.Ports;
 
 namespace MotionContext.Infrastructure.Remotion;
@@ -10,13 +12,16 @@ namespace MotionContext.Infrastructure.Remotion;
 public sealed partial class NodeEnvironmentResolver : INodeEnvironmentResolver
 {
     private readonly IPathResolver _pathResolver;
+    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<NodeEnvironmentResolver> _logger;
 
     public NodeEnvironmentResolver(
         IPathResolver pathResolver,
+        IOptions<AppStorageConfig> storageConfig,
         ILogger<NodeEnvironmentResolver> logger)
     {
         _pathResolver = pathResolver;
+        _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
@@ -46,7 +51,7 @@ public sealed partial class NodeEnvironmentResolver : INodeEnvironmentResolver
         }
 
         throw new DomainConflictException(
-            "Совместимая среда Node.js (v20 или v22 LTS) не обнаружена. Пожалуйста, разверните Node в tools/node22/ или установите системный Node.",
+            "Совместимая среда Node.js (v20 или v22 LTS) не обнаружена. Разверните Node в tools/node22/ или установите системный Node.",
             "NODE_ENVIRONMENT_MISSING");
     }
 
@@ -70,17 +75,15 @@ public sealed partial class NodeEnvironmentResolver : INodeEnvironmentResolver
             }
         }
 
-        throw new FileNotFoundException(
-            $"Скрипт Remotion CLI не найден в каталоге {masterWorkspace}. Убедитесь, что выполнен 'npm install'.");
+        throw new FileNotFoundException($"Скрипт Remotion CLI не найден в каталоге {masterWorkspace}.");
     }
 
     public string ResolveMasterWorkspaceDirectory()
     {
         string[] candidates =
         [
-            Path.Combine(Directory.GetCurrentDirectory(), "tools", "remotion_workspace"),
-            Path.Combine(AppContext.BaseDirectory, "tools", "remotion_workspace"),
-            Path.Combine(Directory.GetCurrentDirectory(), "remotion_workspace")
+            Path.Combine(Directory.GetCurrentDirectory(), _storageConfig.RemotionWorkspaceDir),
+            Path.Combine(AppContext.BaseDirectory, _storageConfig.RemotionWorkspaceDir)
         ];
 
         foreach (var candidate in candidates)
@@ -91,7 +94,7 @@ public sealed partial class NodeEnvironmentResolver : INodeEnvironmentResolver
             }
         }
 
-        var fallback = _pathResolver.ResolveSafePath(Path.Combine(Directory.GetCurrentDirectory(), "tools", "remotion_workspace"));
+        var fallback = _pathResolver.ResolveSafePath(Path.Combine(Directory.GetCurrentDirectory(), _storageConfig.RemotionWorkspaceDir));
         Directory.CreateDirectory(fallback);
         return fallback;
     }
@@ -112,7 +115,23 @@ public sealed partial class NodeEnvironmentResolver : INodeEnvironmentResolver
         return env;
     }
 
-    private async Task<string?> GetSystemNodeVersionAsync(CancellationToken ct)
+    private List<string> GetLocalNodeCandidates()
+    {
+        var cwd = Directory.GetCurrentDirectory();
+        var baseDir = AppContext.BaseDirectory;
+        var tools = _storageConfig.ToolsDir;
+        string exe = OperatingSystem.IsWindows() ? "node.exe" : "bin/node";
+
+        return
+        [
+            Path.Combine(cwd, tools, "node22", exe),
+            Path.Combine(baseDir, tools, "node22", exe),
+            Path.Combine(cwd, tools, "node", exe),
+            Path.Combine(baseDir, tools, "node", exe)
+        ];
+    }
+
+    private static async Task<string?> GetSystemNodeVersionAsync(CancellationToken ct)
     {
         try
         {
@@ -138,21 +157,6 @@ public sealed partial class NodeEnvironmentResolver : INodeEnvironmentResolver
         {
             return null;
         }
-    }
-
-    private static IReadOnlyList<string> GetLocalNodeCandidates()
-    {
-        var cwd = Directory.GetCurrentDirectory();
-        var baseDir = AppContext.BaseDirectory;
-        string exe = OperatingSystem.IsWindows() ? "node.exe" : "bin/node";
-
-        return
-        [
-            Path.Combine(cwd, "tools", "node22", exe),
-            Path.Combine(baseDir, "tools", "node22", exe),
-            Path.Combine(cwd, "tools", "node", exe),
-            Path.Combine(baseDir, "tools", "node", exe)
-        ];
     }
 
     [GeneratedRegex(@"^v(\d+)\.")]

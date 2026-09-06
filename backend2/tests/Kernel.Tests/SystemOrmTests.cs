@@ -30,7 +30,8 @@ public class SystemOrmTests
 
         var settingRepo = new EfSystemSettingRepository(dbContext);
         var modelRepo = new EfAiModelRepository(dbContext);
-        var seeder = new SystemDatabaseSeeder(settingRepo, modelRepo, NullLogger<SystemDatabaseSeeder>.Instance);
+        var storageConfig = Options.Create(new AppStorageConfig());
+        var seeder = new SystemDatabaseSeeder(settingRepo, modelRepo, storageConfig, NullLogger<SystemDatabaseSeeder>.Instance);
 
         await seeder.SeedAsync();
 
