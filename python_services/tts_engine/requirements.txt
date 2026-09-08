@@ -1,0 +1,18 @@
+# --- API-каркас воркера ---
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+
+# --- ML-ядро ---
+torch>=2.0.0
+torchaudio>=2.0.0
+numpy>=1.24.0
+soundfile>=0.12.0
+
+# --- OmniVoice (k2-fsa) ---
+# Модель ищется локально в <TTS_MODELS_DIR>/OmniVoice,
+# иначе скачивается с Hugging Face: https://huggingface.co/k2-fsa/OmniVoice
+# pip install omnivoice
+#
+# Для int8-квантования дополнительно (опционально):
+# pip install bitsandbytes accelerate
