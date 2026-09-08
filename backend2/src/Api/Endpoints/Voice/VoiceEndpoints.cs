@@ -1,11 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Kernel.Exceptions;
+using Kernel.Platform.Config;
+using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
 using Voice.Application.Commands;
 using Voice.Application.Contracts;
 using Voice.Application.Services;
@@ -38,7 +41,11 @@ public static class VoiceEndpoints
                 ReferenceAudioPath: request.ReferenceAudioPath,
                 Filters: request.Filters,
                 GuidanceScale: request.EffectiveGuidanceScale,
-                NumSteps: request.EffectiveNumSteps);
+                NumSteps: request.EffectiveNumSteps,
+                Denoise: request.EffectiveDenoise,
+                Duration: request.EffectiveDuration,
+                PreprocessPrompt: request.EffectivePreprocess,
+                PostprocessOutput: request.EffectivePostprocess);
 
             var result = await voice.SynthesizeSpeechAsync(command, ct);
             return Results.Ok(result);
@@ -108,8 +115,11 @@ public static class VoiceEndpoints
             [FromForm] VoiceEngineType engine,
             [FromForm] string? referenceText,
             [FromForm] string? language,
+            [FromForm] string? localEngineId,
             IFormFile referenceAudio,
             IVoiceModule voice,
+            IPathResolver pathResolver,
+            IOptions<AppStorageConfig> storageConfig,
             CancellationToken ct) =>
         {
             if (referenceAudio is null || referenceAudio.Length == 0)
@@ -117,16 +127,28 @@ public static class VoiceEndpoints
                 throw new ValidationException("referenceAudio", "Аудиофайл референса обязателен.");
             }
 
-            var tempPath = Path.Combine(Path.GetTempPath(), $"clone_ref_{Guid.NewGuid():N}{Path.GetExtension(referenceAudio.FileName)}");
+            // Сохраняем эталон внутри доверенной песочницы (data_storage/temp),
+            // т.к. системный %TEMP% находится за пределами разрешённых корней IPathResolver.
+            var cloneRefDir = pathResolver.ResolveSafePath(
+                Path.Combine(storageConfig.Value.DataStorageDir, "temp", "voice", "clone_references"));
+            Directory.CreateDirectory(cloneRefDir);
+
+            var tempPath = Path.Combine(cloneRefDir, $"clone_ref_{Guid.NewGuid():N}{Path.GetExtension(referenceAudio.FileName)}");
             await using (var fs = File.Create(tempPath))
             {
                 await referenceAudio.CopyToAsync(fs, ct);
             }
 
-            var request = new CloneSpeakerRequest(name, engine, referenceText, language);
+            var request = new CloneSpeakerRequest(name, engine, referenceText, language, localEngineId);
             var profile = await voice.CreateClonedSpeakerAsync(request, tempPath, ct);
             return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
         }).DisableAntiforgery();
+
+        speakerGroup.MapPost("/design", async (CreateDesignedSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
+        {
+            var profile = await voice.CreateDesignedSpeakerAsync(request, ct);
+            return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
+        });
 
         speakerGroup.MapPut("/{id}", async (string id, UpdateSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
@@ -170,9 +192,10 @@ public static class VoiceEndpoints
             return Results.Ok(new { status = "ok", output_path = outPath });
         });
 
-        group.MapPost("/vram/unload", async (IGpuManager gpu, CancellationToken ct) =>
+        group.MapPost("/vram/unload", async (IVoiceModule voice, IGpuManager gpu, CancellationToken ct) =>
         {
-            await gpu.CleanMemoryAsync(ct);
+            await voice.UnloadVramAsync(ct); // локальный ML-воркер
+            await gpu.CleanMemoryAsync(ct);  // нативный C# GPU-стек (Whisper и т.п.)
             return Results.Ok(new { status = "ok" });
         });
 
@@ -189,7 +212,11 @@ public static class VoiceEndpoints
                 ReferenceAudioPath: request.ReferenceAudioPath,
                 Filters: request.Filters,
                 GuidanceScale: request.EffectiveGuidanceScale,
-                NumSteps: request.EffectiveNumSteps);
+                NumSteps: request.EffectiveNumSteps,
+                Denoise: request.EffectiveDenoise,
+                Duration: request.EffectiveDuration,
+                PreprocessPrompt: request.EffectivePreprocess,
+                PostprocessOutput: request.EffectivePostprocess);
 
             var res = await voice.SynthesizeSpeechAsync(cmd, ct);
             return Results.Ok(new
@@ -215,9 +242,10 @@ public static class VoiceEndpoints
         endpoints.MapPost("/api/v1/audio/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
             Results.Ok(new { status = "ok", output_path = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct) }));
 
-        endpoints.MapPost("/api/v1/audio/vram/unload", async (IGpuManager gpu, CancellationToken ct) =>
+        endpoints.MapPost("/api/v1/audio/vram/unload", async (IVoiceModule voice, IGpuManager gpu, CancellationToken ct) =>
         {
-            await gpu.CleanMemoryAsync(ct);
+            await voice.UnloadVramAsync(ct); // локальный ML-воркер
+            await gpu.CleanMemoryAsync(ct);  // нативный C# GPU-стек (Whisper и т.п.)
             return Results.Ok(new { status = "ok" });
         });
 
@@ -238,12 +266,20 @@ public sealed record SynthesizeSpeechRequest(
     [property: JsonPropertyName("guidanceScale")] double? GuidanceScaleCamel = null,
     [property: JsonPropertyName("num_steps")] int? NumSteps = null,
     [property: JsonPropertyName("numSteps")] int? NumStepsCamel = null,
-    [property: JsonPropertyName("steps")] int? Steps = null)
+    [property: JsonPropertyName("steps")] int? Steps = null,
+    [property: JsonPropertyName("denoise")] bool? Denoise = null,
+    [property: JsonPropertyName("duration")] double? Duration = null,
+    [property: JsonPropertyName("preprocess_prompt")] bool? PreprocessPrompt = null,
+    [property: JsonPropertyName("postprocess_output")] bool? PostprocessOutput = null)
 {
     public double EffectiveSpeed => Speed ?? 1.0;
     public double EffectivePitch => Pitch ?? 1.0;
-    public double EffectiveGuidanceScale => GuidanceScale ?? GuidanceScaleCamel ?? 2.0;
-    public int EffectiveNumSteps => NumSteps ?? NumStepsCamel ?? Steps ?? 24;
+    public double EffectiveGuidanceScale => GuidanceScale ?? GuidanceScaleCamel ?? 3.0;
+    public int EffectiveNumSteps => NumSteps ?? NumStepsCamel ?? Steps ?? 32;
+    public bool EffectiveDenoise => Denoise ?? true;
+    public double EffectiveDuration => Duration ?? 0.0;
+    public bool EffectivePreprocess => PreprocessPrompt ?? true;
+    public bool EffectivePostprocess => PostprocessOutput ?? true;
 }
 
 public sealed record BatchSynthesizeItemRequest(

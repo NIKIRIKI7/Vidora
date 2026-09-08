@@ -10,6 +10,7 @@ using Voice.Infrastructure.Audio;
 using Voice.Infrastructure.Persistence;
 using Voice.Infrastructure.Providers;
 using Voice.Infrastructure.Providers.Cloud;
+using Voice.Infrastructure.Providers.Local;
 using Voice.Infrastructure.Seeding;
 
 namespace Voice;
@@ -29,9 +30,17 @@ public static class VoiceServiceExtensions
         services.AddScoped<ITtsJobRepository, EfTtsJobRepository>();
         services.AddScoped<ISpeakerProfileRepository, EfSpeakerProfileRepository>();
 
+        // HTTP-клиент к локальному ML-воркеру (python_services/tts_engine)
+        services.AddHttpClient<ILocalTtsClient, LocalTtsClient>((sp, client) =>
+        {
+            client.BaseAddress = new Uri(configuration["Integrations:LocalTts:BaseUrl"] ?? "http://127.0.0.1:8000");
+            client.Timeout = TimeSpan.FromMinutes(2); // Запас для тяжёлой генерации на GPU
+        });
+
         // Движки TTS
         services.AddHttpClient<ITtsEngineProvider, OpenAiSpeechProvider>();
         services.AddHttpClient<ITtsEngineProvider, MiniMaxSpeechProvider>();
+        services.AddScoped<ITtsEngineProvider, LocalTtsSpeechProvider>(); // локальный ML-воркер
         services.AddScoped<TtsProviderRegistry>();
 
         // Чистые движки принудительного выравнивания речи (Forced Alignment)
@@ -39,8 +48,9 @@ public static class VoiceServiceExtensions
         services.AddScoped<IForcedAlignmentProvider, NativeFallbackAlignmentProvider>();
         services.AddScoped<AlignmentProviderRegistry>();
 
-        // Клонирование голоса (облачный MiniMax)
+        // Клонирование голоса (облачный MiniMax + локальный ML-воркер)
         services.AddHttpClient<IVoiceCloneProvider, MiniMaxCloneProvider>();
+        services.AddScoped<IVoiceCloneProvider, LocalTtsCloneProvider>();
         services.AddScoped<VoiceCloneProviderRegistry>();
 
         // Самоописывающиеся дескрипторы движков + каталог

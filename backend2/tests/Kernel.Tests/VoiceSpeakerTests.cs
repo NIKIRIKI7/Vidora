@@ -65,14 +65,15 @@ public class VoiceSpeakerTests
     [Fact]
     public void SpeakerProfile_CreateDesigned_ShouldHaveDesignedEvents()
     {
-        var spec = new VoiceDesignSpec("Deep male voice", "ru-RU", gender: "Male");
+        var spec = new VoiceDesignSpec("Deep male voice for narration");
         var profile = SpeakerProfile.CreateDesigned(
-            new SpeakerId("designed_001"), "Designed Voice", VoiceEngineType.CloudOpenAi,
+            new SpeakerId("designed_001"), VoiceEngineType.CloudOpenAi,
             spec, "Deep male voice for narration");
 
         Assert.Equal(SpeakerSourceType.Designed, profile.SourceType);
         Assert.False(profile.IsDefault);
-        Assert.Equal("Deep male voice", profile.Description);
+        Assert.Equal("Deep male voice for narration", profile.Description);
+        Assert.Equal("multilingual", profile.Language);
         Assert.Contains(profile.DomainEvents, e => e is SpeakerVoiceDesignedEvent);
     }
 
@@ -171,8 +172,8 @@ public class VoiceSpeakerTests
 
         var active = SpeakerProfile.CreateBuiltIn(new SpeakerId("active_speaker"), "Active", VoiceEngineType.CloudOpenAi, "en");
         var inactive = SpeakerProfile.CreateDesigned(
-            new SpeakerId("inactive_speaker"), "Inactive", VoiceEngineType.CloudOpenAi,
-            new VoiceDesignSpec("test", "en"), "desc");
+            new SpeakerId("inactive_speaker"), VoiceEngineType.CloudOpenAi,
+            new VoiceDesignSpec("test"), "desc");
         inactive.Deactivate();
 
         await repo.AddAsync(active);
@@ -187,15 +188,13 @@ public class VoiceSpeakerTests
     [Fact]
     public void VoiceDesignSpec_ShouldValidateRequiredFields()
     {
-        Assert.Throws<ValidationException>(() => new VoiceDesignSpec("", "ru-RU"));
-        Assert.Throws<ValidationException>(() => new VoiceDesignSpec("desc", ""));
-        Assert.Throws<ValidationException>(() => new VoiceDesignSpec("desc", "ru-RU", speed: 0.1));
-        Assert.Throws<ValidationException>(() => new VoiceDesignSpec("desc", "ru-RU", speed: 5.0));
+        Assert.Throws<ValidationException>(() => new VoiceDesignSpec(""));
+        Assert.Throws<ValidationException>(() => new VoiceDesignSpec(new string('a', 2001)));
 
-        var spec = new VoiceDesignSpec("Deep voice", "ru-RU", gender: "Male", speed: 1.2);
-        Assert.Equal("Deep voice", spec.Description);
-        Assert.Equal("ru-RU", spec.Language);
-        Assert.Equal(1.2, spec.Speed);
+        var spec = new VoiceDesignSpec("Deep voice", localEngineId: "omni_voice_v1");
+        Assert.Equal("Deep voice", spec.Prompt);
+        Assert.Equal("omni_voice_v1", spec.LocalEngineId);
+        Assert.Equal("Deep voice", spec.ToInstructString());
     }
 
     [Fact]

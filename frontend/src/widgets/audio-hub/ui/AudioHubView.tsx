@@ -41,12 +41,12 @@ import {
 type StudioAction = 'synthesize' | 'design' | 'clone'
 
 const RANDOM_PRESETS = [
-  'male, deep resonant voice, calm authoritative documentary tone, clear diction, russian language',
-  'female, warm melodic podcast host voice, friendly tone, clear diction, russian language',
-  'young male, tech enthusiast, energetic presentation style, fast-paced, russian language',
-  'neutral studio narrator, balanced timbre, professional presentation style, english language',
-  'female expressive voice, bright tone, smooth articulation, english language',
-  'male baritone, confident presentation style, clear diction, english language',
+  'male, middle-aged, low pitch, russian accent',
+  'female, young adult, high pitch, russian accent',
+  'male, young adult, moderate pitch, russian accent',
+  'female, middle-aged, moderate pitch, british accent',
+  'female, whisper, low pitch, american accent',
+  'male, elderly, low pitch, american accent',
 ]
 
 export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
@@ -60,8 +60,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
   // 1b. Список движков и выбранные движки для clone/design
   const [engines, setEngines] = useState<VoiceEngineInfoDto[]>([])
-  const [cloneEngine, setCloneEngine] = useState<string>('LocalOmniVoice')
-  const [designEngine, setDesignEngine] = useState<string>('LocalOmniVoice')
+  const [cloneEngine, setCloneEngine] = useState<string>('')
+  const [designEngine, setDesignEngine] = useState<string>('')
 
   // 2. Текущее действие студии
   const [activeAction, setActiveAction] = useState<StudioAction>('synthesize')
@@ -77,8 +77,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
   const statusMenuRef = useRef<HTMLDivElement>(null)
 
   // 4. Параметры инференса (Инспектор справа)
-  const [guidanceScale, setGuidanceScale] = useState(2.0)
-  const [numSteps, setNumSteps] = useState(24)
+  const [guidanceScale, setGuidanceScale] = useState(3.0)
+  const [numSteps, setNumSteps] = useState(32)
   const [speed, setSpeed] = useState(1.0)
   const [pitch, setPitch] = useState(1.0)
   const [enableDenoise, setEnableDenoise] = useState(true)
@@ -96,9 +96,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
   const { insertTag, toggleCaps, hasSelection } = useVoiceTagInserter(textEditorRef)
 
   // 6. Форма Voice Design (Конструктор)
+  const [designName, setDesignName] = useState('')
   const [designPrompt, setDesignPrompt] = useState(RANDOM_PRESETS[0])
-  const [designLanguage, setDesignLanguage] = useState('ru-RU')
-  const [designGender, setDesignGender] = useState('Male')
   const [isDesigning, setIsDesigning] = useState(false)
 
   // 7. Форма Voice Clone (Клонирование)
@@ -202,8 +201,10 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
     [aiModels]
   )
   const isLocalGpuReady = useMemo(
-    () => aiModels.some((m) => m.id.includes('omnivoice') && m.status === 'Ready'),
-    [aiModels]
+    () =>
+      aiModels.some((m) => m.id.includes('omnivoice') && m.status === 'Ready') ||
+      engines.some((e) => e.mode === 'local' && e.is_available),
+    [aiModels, engines]
   )
 
   // Динамическая фильтрация движков по среде и возможностям (из бэкенда)
@@ -277,26 +278,30 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
       const ready = availableForMode.find((e) => e.is_available) || availableForMode[0]
       setCloneEngine(ready.id)
     } else {
-      setCloneEngine(mode === 'local' ? 'LocalOmniVoice' : 'CloudMiniMax')
+      setCloneEngine('')
     }
   }
 
   // Создание дизайна голоса
   const handleCreateDesign = async () => {
+    if (!designName.trim()) {
+      showNotification('Укажите имя нового голоса', 'error')
+      return
+    }
     if (!designPrompt.trim()) {
-      showNotification('Заполните описание тембра', 'error')
+      showNotification('Опишите тембр голоса (prompt)', 'error')
       return
     }
     setIsDesigning(true)
     try {
       const profile = await voiceApi.designSpeaker({
-        description: designPrompt.trim(),
-        language: designLanguage,
-        gender: designGender,
-        speed: 1.0,
-        engine: designEngine,
+        name: designName.trim(),
+        engine: 'LocalTts',
+        prompt: designPrompt.trim(),
+        local_engine_id: designEngine || undefined,
       })
       showNotification(`Голос "${profile.name}" успешно задизайнен!`, 'success')
+      setDesignName('')
       setActiveEnv('local')
       setActiveAction('synthesize')
       await loadData(true)
@@ -832,10 +837,20 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     )}
                   </div>
 
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Имя нового голоса</label>
+                    <Input
+                      value={designName}
+                      onChange={(e) => setDesignName(e.target.value)}
+                      placeholder="Например: Дип-нарратор"
+                      className="text-xs py-2"
+                    />
+                  </div>
+
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center">
                       <label className="text-xs font-semibold text-slate-300">
-                        Описание тембра и характера
+                        Промпт тембра и характера (свободный текст)
                       </label>
                       <button
                         type="button"
@@ -854,28 +869,13 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                       onChange={(e) => setDesignPrompt(e.target.value)}
                       rows={3}
                       className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-secondary font-mono leading-relaxed"
-                      placeholder="male, deep resonant voice, calm authoritative documentary tone, clear diction, russian language"
+                      placeholder="Например: male, low pitch, russian accent"
                     />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs text-on-surface-variant">Язык</label>
-                      <Input
-                        value={designLanguage}
-                        onChange={(e) => setDesignLanguage(e.target.value)}
-                        className="text-xs py-2"
-                        placeholder="ru-RU или en-US"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-on-surface-variant">Пол</label>
-                      <Input
-                        value={designGender}
-                        onChange={(e) => setDesignGender(e.target.value)}
-                        className="text-xs py-2"
-                        placeholder="Male / Female"
-                      />
+                    <div className="text-[10px] text-on-surface-variant/60 leading-relaxed bg-black/20 p-2 rounded-lg border border-white/5 mt-1">
+                      <b>Допустимые теги (через запятую):</b><br/>
+                      <b>Пол/Возраст:</b> male, female, child, teenager, young adult, middle-aged, elderly<br/>
+                      <b>Голос:</b> whisper, very low pitch, low pitch, moderate pitch, high pitch, very high pitch<br/>
+                      <b>Акцент:</b> russian accent, american accent, british accent и др.
                     </div>
                   </div>
                 </div>

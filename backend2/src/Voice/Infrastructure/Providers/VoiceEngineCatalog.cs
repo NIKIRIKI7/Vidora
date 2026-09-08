@@ -1,20 +1,32 @@
+using Microsoft.Extensions.Logging;
 using Voice.Application.Contracts;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
+using Voice.Infrastructure.Providers.Local;
 
 namespace Voice.Infrastructure.Providers;
 
 public sealed class VoiceEngineCatalog : IVoiceEngineCatalog
 {
     private readonly IEnumerable<IVoiceEngineDescriptor> _descriptors;
+    private readonly ILocalTtsClient _localTtsClient;
+    private readonly ILogger<VoiceEngineCatalog> _logger;
 
-    public VoiceEngineCatalog(IEnumerable<IVoiceEngineDescriptor> descriptors)
+    public VoiceEngineCatalog(
+        IEnumerable<IVoiceEngineDescriptor> descriptors,
+        ILocalTtsClient localTtsClient,
+        ILogger<VoiceEngineCatalog> logger)
     {
         _descriptors = descriptors;
+        _localTtsClient = localTtsClient;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<VoiceEngineInfoDto>> DiscoverEnginesAsync(CancellationToken ct = default)
     {
+        var results = new List<VoiceEngineInfoDto>();
+
+        // 1. Статические движки (облачные дескрипторы)
         var tasks = _descriptors.Select(async desc =>
         {
             EngineReadiness readiness;
@@ -47,7 +59,37 @@ public sealed class VoiceEngineCatalog : IVoiceEngineCatalog
             );
         });
 
-        var results = await Task.WhenAll(tasks);
+        results.AddRange(await Task.WhenAll(tasks));
+
+        // 2. Динамические движки локального ML-воркера (python_services/tts_engine)
+        try
+        {
+            var localModels = await _localTtsClient.GetAvailableModelsAsync(ct);
+            foreach (var localModel in localModels)
+            {
+                bool hasSynth = localModel.Capabilities.Contains("synthesis", StringComparer.OrdinalIgnoreCase);
+                bool hasClone = localModel.Capabilities.Contains("clone", StringComparer.OrdinalIgnoreCase);
+                bool hasDesign = localModel.Capabilities.Contains("design", StringComparer.OrdinalIgnoreCase);
+
+                results.Add(new VoiceEngineInfoDto(
+                    Id: localModel.Id,
+                    Name: localModel.Name,
+                    Mode: "local",
+                    Capabilities: localModel.Capabilities,
+                    SupportsClone: hasClone,
+                    SupportsDesign: hasDesign,
+                    SupportsSynthesis: hasSynth,
+                    IsAvailable: true,
+                    StatusMessage: "Готов (Local ML Worker)",
+                    Description: "Локальная модель на базе GPU"
+                ));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "[VoiceEngineCatalog] Сбой получения локальных моделей ML-воркера.");
+        }
+
         return results.OrderByDescending(r => r.IsAvailable).ThenBy(r => r.Name).ToList();
     }
 

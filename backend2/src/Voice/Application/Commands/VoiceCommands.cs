@@ -12,8 +12,12 @@ public sealed record SynthesizeSpeechCommand(
     double Pitch = 1.0,
     string? ReferenceAudioPath = null,
     AudioFilterSpec? Filters = null,
-    double GuidanceScale = 2.0,
-    int NumSteps = 24);
+    double GuidanceScale = 3.0,
+    int NumSteps = 32,
+    bool Denoise = true,
+    double Duration = 0.0,
+    bool PreprocessPrompt = true,
+    bool PostprocessOutput = true);
 
 public sealed record BatchItemSpec(
     string Text,

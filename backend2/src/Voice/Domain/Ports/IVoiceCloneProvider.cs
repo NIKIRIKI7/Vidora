@@ -4,7 +4,8 @@ namespace Voice.Domain.Ports;
 
 public sealed record CloneVoiceResult(
     string SpeakerId,
-    string PreviewAudioPath);
+    string PreviewAudioPath,
+    string? LocalEmbeddingPath = null);
 
 public interface IVoiceCloneProvider
 {

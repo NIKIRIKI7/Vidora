@@ -135,7 +135,14 @@ public sealed record CloneSpeakerRequest(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("engine")] VoiceEngineType Engine,
     [property: JsonPropertyName("reference_text")] string? ReferenceText,
-    [property: JsonPropertyName("language")] string? Language);
+    [property: JsonPropertyName("language")] string? Language,
+    [property: JsonPropertyName("local_engine_id")] string? LocalEngineId = null);
+
+public sealed record CreateDesignedSpeakerRequest(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("engine")] VoiceEngineType Engine,
+    [property: JsonPropertyName("prompt")] string Prompt,
+    [property: JsonPropertyName("local_engine_id")] string? LocalEngineId = null);
 
 public sealed record UpdateSpeakerRequest(
     [property: JsonPropertyName("name")] string Name);

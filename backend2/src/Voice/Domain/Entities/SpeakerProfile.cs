@@ -24,6 +24,8 @@ public class SpeakerProfile : BaseEntity<string>
     public string? CloneReferenceAudioPath { get; private set; }
     public string? CloneReferenceText { get; private set; }
     public string? PreviewAudioPath { get; private set; }
+    public string? LocalEngineId { get; private set; }
+    public string? LocalEmbeddingPath { get; private set; }
 
     protected SpeakerProfile() { }
 
@@ -59,49 +61,52 @@ public class SpeakerProfile : BaseEntity<string>
 
     public static SpeakerProfile CreateDesigned(
         SpeakerId speakerId,
-        string name,
         VoiceEngineType engine,
         VoiceDesignSpec spec,
         string designedDescription)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ValidationException("name", "Имя диктора обязательно.");
+        if (string.IsNullOrWhiteSpace(designedDescription))
+            throw new ValidationException("designed_description", "Инструкция дизайна голоса обязательна.");
 
         var profile = new SpeakerProfile
         {
             Id = $"spk_{speakerId.Value}",
             SpeakerId = speakerId,
-            Name = name.Trim(),
-            Description = spec.Description,
+            Name = $"Designed Voice ({speakerId.Value[..Math.Min(6, speakerId.Value.Length)]})",
+            Description = spec.Prompt,
             SourceType = SpeakerSourceType.Designed,
             Engine = engine,
-            Language = spec.Language,
-            Gender = spec.Gender,
+            Language = "multilingual",
+            Gender = null,
             IsDefault = false,
             IsActive = true,
-            DesignedDescription = designedDescription?.Trim(),
+            DesignedDescription = designedDescription.Trim(),
+            LocalEngineId = spec.LocalEngineId,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
 
-        profile.AddDomainEvent(new SpeakerVoiceDesignedEvent(profile.Id, spec.Description, engine));
+        profile.AddDomainEvent(new SpeakerVoiceDesignedEvent(profile.Id, spec.Prompt, engine));
         return profile;
     }
 
     public static SpeakerProfile CreateCloned(
         SpeakerId speakerId,
         VoiceEngineType engine,
-        ClonedVoiceSpec spec)
+        ClonedVoiceSpec spec,
+        string? localEmbeddingPath = null)
     {
         if (string.IsNullOrWhiteSpace(spec.ReferenceAudioPath))
             throw new ValidationException("reference_audio_path", "Путь к эталонному аудио обязателен.");
+
+        var localMarker = spec.LocalEngineId != null ? $" ({spec.LocalEngineId})" : "";
 
         var profile = new SpeakerProfile
         {
             Id = $"spk_{speakerId.Value}",
             SpeakerId = speakerId,
             Name = spec.Name,
-            Description = $"Клонированный голос на основе {engine}",
+            Description = $"Клонированный голос на основе {engine}{localMarker}",
             SourceType = SpeakerSourceType.Cloned,
             Engine = engine,
             Language = spec.Language ?? "multilingual",
@@ -110,6 +115,8 @@ public class SpeakerProfile : BaseEntity<string>
             IsActive = true,
             CloneReferenceAudioPath = spec.ReferenceAudioPath.Trim(),
             CloneReferenceText = spec.ReferenceText?.Trim(),
+            LocalEngineId = spec.LocalEngineId,
+            LocalEmbeddingPath = localEmbeddingPath?.Trim(),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -146,6 +153,12 @@ public class SpeakerProfile : BaseEntity<string>
         IsActive = false;
         UpdatedAt = DateTimeOffset.UtcNow;
         AddDomainEvent(new SpeakerDeletedEvent(Id));
+    }
+
+    public void AssertCanDelete()
+    {
+        if (IsDefault)
+            throw new DomainConflictException("Невозможно удалить встроенный диктор.", "BUILTIN_SPEAKER_READONLY");
     }
 
     public void Activate()

@@ -14,6 +14,7 @@ using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 using Voice.Infrastructure.Alignment;
 using Voice.Infrastructure.Providers;
+using Voice.Infrastructure.Providers.Local;
 
 namespace Voice.Application.Services;
 
@@ -30,6 +31,7 @@ public sealed class VoiceModule : IVoiceModule
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<VoiceModule> _logger;
     private readonly IVoiceEngineCatalog _engineCatalog;
+    private readonly ILocalTtsClient _localTtsClient;
 
     public VoiceModule(
         ITtsJobRepository repository,
@@ -42,6 +44,7 @@ public sealed class VoiceModule : IVoiceModule
         IVoiceMediaRegistrar mediaRegistrar,
         IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
+        ILocalTtsClient localTtsClient,
         ILogger<VoiceModule> logger)
     {
         _repository = repository;
@@ -54,6 +57,7 @@ public sealed class VoiceModule : IVoiceModule
         _mediaRegistrar = mediaRegistrar;
         _pathResolver = pathResolver;
         _storageConfig = storageConfig.Value;
+        _localTtsClient = localTtsClient;
         _logger = logger;
     }
 
@@ -62,11 +66,31 @@ public sealed class VoiceModule : IVoiceModule
         var speaker = await _speakerRepo.GetBySpeakerIdAsync(new SpeakerId(cmd.SpeakerId), ct);
 
         var refAudio = cmd.ReferenceAudioPath;
-        if (string.IsNullOrWhiteSpace(refAudio) && speaker != null && speaker.SourceType == SpeakerSourceType.Cloned && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
-            refAudio = speaker.CloneReferenceAudioPath;
+        string? instruct = null;
+
+        if (speaker != null)
+        {
+            if (speaker.SourceType == SpeakerSourceType.Cloned)
+            {
+                if (string.IsNullOrWhiteSpace(refAudio) && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
+                    refAudio = speaker.CloneReferenceAudioPath;
+            }
+            else if (speaker.SourceType == SpeakerSourceType.Designed)
+            {
+                instruct = speaker.DesignedDescription;
+            }
+        }
 
         var engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.CloudOpenAi;
-        var spec = new VoiceSpec(engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio, cmd.GuidanceScale, cmd.NumSteps);
+        var spec = new VoiceSpec(
+            engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio,
+            cmd.GuidanceScale, cmd.NumSteps, cmd.Denoise, cmd.Duration, cmd.PreprocessPrompt, cmd.PostprocessOutput)
+        {
+            // Данные локального ML-воркера и Voice Design пробрасываем из профиля диктора
+            LocalEngineId = speaker?.LocalEngineId,
+            LocalEmbeddingPath = speaker?.LocalEmbeddingPath,
+            InstructPrompt = instruct
+        };
         var job = TtsJob.Create(TtsJobId.New(), cmd.Text, spec);
 
         await _repository.AddAsync(job, ct);
@@ -200,19 +224,60 @@ public sealed class VoiceModule : IVoiceModule
 
         var spec = new ClonedVoiceSpec(
             request.Engine, referenceAudioPath, request.Name,
-            request.ReferenceText, request.Language);
+            request.ReferenceText, request.Language, request.LocalEngineId);
 
         var provider = _cloneRegistry.Resolve(request.Engine);
         var result = await provider.CloneVoiceAsync(spec, ct);
 
         var speakerId = new SpeakerId(result.SpeakerId);
-        var profile = SpeakerProfile.CreateCloned(speakerId, request.Engine, spec);
+        var profile = SpeakerProfile.CreateCloned(speakerId, request.Engine, spec, result.LocalEmbeddingPath);
         profile.SetPreviewAudio(result.PreviewAudioPath!);
 
         await _speakerRepo.AddAsync(profile, ct);
         await _speakerRepo.SaveChangesAsync(ct);
 
         _logger.LogInformation("[VoiceModule] Голос клонирован: {Id} ({Name})", profile.Id, profile.Name);
+        return SpeakerProfileDto.FromEntity(profile);
+    }
+
+    public async Task<SpeakerProfileDto> CreateDesignedSpeakerAsync(CreateDesignedSpeakerRequest request, CancellationToken ct = default)
+    {
+        _logger.LogInformation("[VoiceModule] Дизайн голоса через {Engine}. Промпт: '{Prompt}'", request.Engine, request.Prompt);
+
+        var spec = new VoiceDesignSpec(
+            prompt: request.Prompt,
+            localEngineId: request.LocalEngineId);
+
+        var speakerId = new SpeakerId($"des_{Guid.NewGuid():N}"[..16]);
+        var instructString = spec.ToInstructString();
+
+        var profile = SpeakerProfile.CreateDesigned(speakerId, request.Engine, spec, instructString);
+        profile.UpdateName(request.Name);
+
+        // Сохраняем профиль до генерации превью, т.к. синтез читает диктора из БД
+        await _speakerRepo.AddAsync(profile, ct);
+        await _speakerRepo.SaveChangesAsync(ct);
+
+        try
+        {
+            // Превью автоматически подхватит DesignedDescription как instruct-промпт
+            var previewText = "Привет! Это демонстрация моего нового голоса, созданного по текстовому описанию.";
+            var previewJob = await SynthesizeSpeechAsync(new SynthesizeSpeechCommand(
+                Text: previewText,
+                SpeakerId: profile.SpeakerId.Value,
+                Engine: profile.Engine,
+                AlignmentEngine: AlignmentEngineType.Passthrough), ct);
+
+            profile.SetPreviewAudio(previewJob.AudioPath);
+            await _speakerRepo.UpdateAsync(profile, ct);
+            await _speakerRepo.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[VoiceModule] Не удалось сгенерировать превью для дизайн-голоса '{Name}'.", request.Name);
+        }
+
+        _logger.LogInformation("[VoiceModule] Дизайн-голос создан: {Id} ({Name})", profile.Id, profile.Name);
         return SpeakerProfileDto.FromEntity(profile);
     }
 
@@ -233,9 +298,38 @@ public sealed class VoiceModule : IVoiceModule
         var profile = await _speakerRepo.GetByIdAsync(id, ct)
             ?? throw new ResourceNotFoundException("SpeakerProfile", id);
 
-        profile.Deactivate();
-        await _speakerRepo.UpdateAsync(profile, ct);
+        profile.AssertCanDelete();
+        DeleteAssociatedFiles(profile);
+
+        await _speakerRepo.DeleteAsync(profile, ct);
         await _speakerRepo.SaveChangesAsync(ct);
+    }
+
+    private void DeleteAssociatedFiles(SpeakerProfile profile)
+    {
+        DeleteIfExists(profile.PreviewAudioPath);
+        DeleteIfExists(profile.CloneReferenceAudioPath);
+        DeleteIfExists(profile.LocalEmbeddingPath);
+    }
+
+    private void DeleteIfExists(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return;
+
+        try
+        {
+            var safePath = _pathResolver.ResolveSafePath(filePath);
+            if (File.Exists(safePath))
+            {
+                File.Delete(safePath);
+                _logger.LogInformation("[VoiceModule] Удалён файл диктора: {Path}", safePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[VoiceModule] Не удалось удалить связанный файл диктора: {Path}", filePath);
+        }
     }
 
     public async Task<VoiceJobDto> GenerateSpeakerPreviewAsync(string id, GeneratePreviewRequest request, CancellationToken ct = default)
@@ -344,10 +438,10 @@ public sealed class VoiceModule : IVoiceModule
         return safeOut;
     }
 
-    public Task UnloadVramAsync(CancellationToken ct = default)
+    public async Task UnloadVramAsync(CancellationToken ct = default)
     {
-        _logger.LogInformation("[VoiceModule] Запрос выгрузки VRAM (делегирование GPU-менеджеру)");
-        return Task.CompletedTask;
+        _logger.LogInformation("[VoiceModule] Запрос выгрузки VRAM локального ML-воркера.");
+        await _localTtsClient.UnloadVramAsync(ct);
     }
 
     public Task<IReadOnlyList<VoiceEngineInfoDto>> GetAvailableEnginesAsync(CancellationToken ct = default)

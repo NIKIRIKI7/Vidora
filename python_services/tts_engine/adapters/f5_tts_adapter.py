@@ -55,11 +55,14 @@ class F5TTSAdapter(BaseVoiceEngine):
         self,
         text: str,
         embedding_path: Optional[str],
+        instruct: Optional[str],
         output_path: str,
         speed: float = 1.0,
         pitch: float = 1.0,
+        gen_config: Optional[dict] = None,
     ):
         # 1. Читаете вектор диктора: embedding = torch.load(embedding_path)
+        #    либо используете instruct (voice design)
         # 2. Генерируете аудио
         # 3. Сохраняете .wav в output_path
         raise NotImplementedError()

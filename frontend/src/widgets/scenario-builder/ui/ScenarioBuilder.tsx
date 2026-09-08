@@ -222,20 +222,27 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
               <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
               <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
             </div>
-            <Input list="agent-models" value={agentEngine} onChange={e => taskModes.scenario === 'cloud' ? setCloudEngine('scenario', e.target.value) : setLocalEngine('scenario', e.target.value)} className="text-xs font-mono" placeholder="LLM Движок (Агент)" />
-            <datalist id="agent-models">
-              {taskModes.scenario === 'cloud'
-                ? cloudModels.map(m => (
+            {taskModes.scenario === 'cloud' ? (
+              <>
+                <Input list="cloud-agent-models" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} className="text-xs font-mono" placeholder="LLM Движок (Облако)" />
+                <datalist id="cloud-agent-models">
+                  {cloudModels.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
                     </option>
-                  ))
-                : localModels.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
                   ))}
-            </datalist>
+                </datalist>
+              </>
+            ) : (
+              <Select value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="text-xs font-mono">
+                <option value="" disabled>Выберите локальную модель...</option>
+                {localModels.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </Select>
+            )}
             <div className="flex gap-2">
               <Button variant="primary" onClick={handleGenerateAI} disabled={isGenerating || (!idea && !customTopic.trim())} className="flex-1 text-xs px-2">
                 {isGenerating ? <Spinner /> : <><Wand2 size={14} className="mr-1" /> Написать Сценарий</>}

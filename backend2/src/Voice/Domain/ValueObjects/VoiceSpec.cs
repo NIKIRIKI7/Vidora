@@ -29,6 +29,30 @@ public sealed record VoiceSpec
     [JsonPropertyName("reference_audio_path")]
     public string? ReferenceAudioPath { get; init; }
 
+    // Данные локального ML-воркера (заполняются из профиля диктора для LocalTts)
+    [JsonPropertyName("local_engine_id")]
+    public string? LocalEngineId { get; init; }
+
+    [JsonPropertyName("local_embedding_path")]
+    public string? LocalEmbeddingPath { get; init; }
+
+    // Voice Design: instruct-промпт (взаимоисключающ с LocalEmbeddingPath)
+    [JsonPropertyName("instruct_prompt")]
+    public string? InstructPrompt { get; init; }
+
+    // Advanced Settings (тонкие настройки диффузии локального воркера)
+    [JsonPropertyName("denoise")]
+    public bool Denoise { get; init; } = true;
+
+    [JsonPropertyName("duration")]
+    public double Duration { get; init; } = 0.0;
+
+    [JsonPropertyName("preprocess_prompt")]
+    public bool PreprocessPrompt { get; init; } = true;
+
+    [JsonPropertyName("postprocess_output")]
+    public bool PostprocessOutput { get; init; } = true;
+
     public VoiceSpec(
         VoiceEngineType engine,
         string speakerId,
@@ -36,8 +60,12 @@ public sealed record VoiceSpec
         double speed = 1.0,
         double pitch = 1.0,
         string? referenceAudioPath = null,
-        double guidanceScale = 2.0,
-        int numSteps = 24)
+        double guidanceScale = 3.0,
+        int numSteps = 32,
+        bool denoise = true,
+        double duration = 0.0,
+        bool preprocessPrompt = true,
+        bool postprocessOutput = true)
     {
         if (string.IsNullOrWhiteSpace(speakerId))
         {
@@ -59,6 +87,11 @@ public sealed record VoiceSpec
         {
             throw new ValidationException("num_steps", "Количество шагов диффузии должно быть в пределах от 8 до 128.");
         }
+        if (duration < 0.0)
+        {
+            throw new ValidationException("duration", "Длительность не может быть отрицательной.");
+        }
+
         Engine = engine;
         SpeakerId = speakerId.Trim();
         AlignmentEngine = alignmentEngine;
@@ -66,6 +99,10 @@ public sealed record VoiceSpec
         Pitch = Math.Round(pitch, 2);
         GuidanceScale = Math.Round(guidanceScale, 2);
         NumSteps = numSteps;
+        Denoise = denoise;
+        Duration = duration;
+        PreprocessPrompt = preprocessPrompt;
+        PostprocessOutput = postprocessOutput;
         ReferenceAudioPath = referenceAudioPath?.Trim();
     }
 }

@@ -1,6 +1,6 @@
 {
-    "extensions": ".py .toml .ini .tsx .env.example .cs .csproj .sln .json .config .env.example .dockerfile .yaml .ps1 .dockerfile .yaml .sh .md",
-    "ignored_paths": "__pycache__, .venv-voice, tools, venv, bin, obj, .venv, .git, .idea, .pytest_cache, venv-cosyvoice, .venv-vosyvoice, ai-models",
+    "extensions": ".cs .csproj .sln .ts .tsx .js .jsx .vue .css .scss .html .json .py .toml .ini .env.example .yaml .yml .sh .ps1 .md .config .dockerfile",
+    "ignored_paths": ".git, .idea, .vs, .vscode, node_modules, .pnpm-store, dist, build, release, coverage, bin, obj, data_storage, tools, __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, .turbo, .vite, .cache, venv, .venv, .venv-voice, .venv-vosyvoice, .venv-qwen, .venv-moss, venv-cosyvoice, ai-models, test-results, playwright-report, .playwright-mcp",
     "minify": true,
     "remove_comments": true,
     "remove_secrets": true,

@@ -50,6 +50,16 @@ _VOICE_PRESETS = {
     "nova": "female, young adult, high pitch",
 }
 
+VALID_INSTRUCTS = {
+    "american accent", "australian accent", "british accent", "canadian accent", "child", 
+    "chinese accent", "elderly", "female", "high pitch", "indian accent", "japanese accent", 
+    "korean accent", "low pitch", "male", "middle-aged", "moderate pitch", "portuguese accent", 
+    "russian accent", "teenager", "very high pitch", "very low pitch", "whisper", "young adult",
+    "东北话", "中年", "中音调", "云南话", "低音调", "儿童", "四川话", "女", "宁夏话", "少年", 
+    "极低音调", "极高音调", "桂林话", "河南话", "济南话", "甘肃话", "男", "石家庄话", "老年", 
+    "耳语", "贵州话", "陕西话", "青岛话", "青年", "高音调"
+}
+
 
 def _default_models_dir() -> Path:
     """Каталог с локальными весами.
@@ -81,7 +91,7 @@ def _config_float(name: str, default: float) -> float:
 class OmniVoiceAdapter(BaseVoiceEngine):
     engine_id = "omni_voice_v1"
     name = "OmniVoice (k2-fsa, compressed/quantized)"
-    capabilities = ["synthesis", "clone"]
+    capabilities = ["synthesis", "clone", "design"]
 
     def __init__(self, checkpoint: Optional[str] = None) -> None:
         # Точка загрузки: локальный каталог с весами либо HF-репозиторий.
@@ -244,9 +254,11 @@ class OmniVoiceAdapter(BaseVoiceEngine):
         self,
         text: str,
         embedding_path: Optional[str],
+        instruct: Optional[str],
         output_path: str,
         speed: float = 1.0,
         pitch: float = 1.0,
+        gen_config: Optional[dict] = None,
     ):
         text = (text or "").strip()
         if not text:
@@ -254,28 +266,51 @@ class OmniVoiceAdapter(BaseVoiceEngine):
 
         model = self._require_model()
 
+        from omnivoice import OmniVoiceGenerationConfig, VoiceClonePrompt
+
+        gen = gen_config or {}
+        duration = float(gen.get("duration") or 0.0)
+
+        # Тонкие настройки диффузии (Advanced Settings)
+        gen_config_obj = OmniVoiceGenerationConfig(
+            num_step=int(gen.get("num_steps", _config_int("OMNIVOICE_STEPS", 32))),
+            guidance_scale=float(gen.get("guidance_scale", _config_float("OMNIVOICE_GUIDANCE", 3.0))),
+            denoise=bool(gen.get("denoise", True)),
+            preprocess_prompt=bool(gen.get("preprocess_prompt", True)),
+            postprocess_output=bool(gen.get("postprocess_output", True)),
+        )
+
         gen_kwargs: Dict[str, Any] = {
             "text": text,
-            "num_step": _config_int("OMNIVOICE_STEPS", 32),
+            "generation_config": gen_config_obj,
         }
 
-        if embedding_path:
-            # Клон: читаем сохранённый voice clone prompt (.pt) и используем его.
-            from omnivoice import VoiceClonePrompt
-
+        # Взаимоисключающие источники голоса: Design (instruct) > Clone (.pt) > preset.
+        instruct = (instruct or "").strip() or None
+        if instruct:
+            parts = [p.strip().lower() for p in instruct.replace('，', ',').split(',')]
+            valid_parts = [p for p in parts if p in VALID_INSTRUCTS]
+            if not valid_parts:
+                logger.warning("[%s] Все теги дизайна голоса невалидны: '%s'. Использую fallback 'nova'.", self.name, instruct)
+                voice = os.getenv("OMNIVOICE_VOICE", "nova")
+                gen_kwargs["instruct"] = _VOICE_PRESETS.get(voice, voice)
+            else:
+                filtered_instruct = ", ".join(valid_parts)
+                gen_kwargs["instruct"] = filtered_instruct
+                logger.info("[%s] Режим Voice Design. Промпт (filtered): '%s' (orig: '%s')", self.name, filtered_instruct, instruct)
+        elif embedding_path:
             prompt = VoiceClonePrompt.load(embedding_path)
             gen_kwargs["voice_clone_prompt"] = prompt
-            logger.info("[%s] Синтез речи клоном диктора: embedding=%s", self.name, embedding_path)
+            logger.info("[%s] Режим Zero-Shot Clone, embedding=%s", self.name, embedding_path)
         else:
-            # Voice design "из коробки": дефолтный профиль голоса.
             voice = os.getenv("OMNIVOICE_VOICE", "nova")
-            instruct = _VOICE_PRESETS.get(voice, voice)
-            gen_kwargs["instruct"] = instruct
-            logger.info("[%s] Синтез речи (voice design): '%s'", self.name, text)
+            gen_kwargs["instruct"] = _VOICE_PRESETS.get(voice, voice)
+            logger.info("[%s] Авто-голос через preset '%s'", self.name, voice)
 
         speed = float(speed or 1.0)
-        if speed != 1.0:
-            gen_kwargs["speed"] = speed
+        gen_kwargs["speed"] = speed
+        if duration > 0:
+            gen_kwargs["duration"] = duration
 
         pitch = float(pitch or 1.0)
         if pitch != 1.0:

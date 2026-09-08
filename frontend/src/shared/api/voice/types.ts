@@ -57,15 +57,10 @@ export interface VoiceJobDto {
 }
 
 export interface DesignSpeakerPayload {
-  description: string
-  language: string
-  gender?: string
-  age_range?: string
-  accent?: string
-  emotion?: string
-  style?: string
-  speed?: number
-  engine?: string
+  name: string
+  engine: string                 // VoiceEngineType: 'LocalTts' (дизайн всегда локальный)
+  prompt: string                 // Свободный текстовый промпт (ACL — на стороне воркера)
+  local_engine_id?: string       // id локальной модели из /engines (например omni_voice_v1)
 }
 
 export interface SynthesizePayload {
@@ -74,8 +69,12 @@ export interface SynthesizePayload {
   mode?: VoiceMode                   // Опционально (бэкенд резолвит движок из профиля диктора)
   speed?: number
   pitch?: number
-  guidance_scale?: number            // CFG 1.0..10.0 (по умолчанию 2.0)
-  num_steps?: number                 // Шаги диффузии 8..128 (по умолчанию 24)
+  guidance_scale?: number            // CFG 1.0..10.0 (по умолчанию 3.0)
+  num_steps?: number                 // Шаги диффузии 8..128 (по умолчанию 32)
+  denoise?: boolean                  // Advanced: prepend <|denoise|> (по умолчанию true)
+  duration?: number                  // Advanced: фиксированная длительность, 0 = auto
+  preprocess_prompt?: boolean        // Advanced
+  postprocess_output?: boolean       // Advanced
   alignment_engine?: AlignmentEngineType
   reference_audio_path?: string | null
   backend_engine?: string            // EngineOverride — если не указан, бэкенд решит сам

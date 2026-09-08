@@ -604,20 +604,27 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                   <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
                 </div>
                 <FieldGroup label="Модель">
-                  <Input list="agent-models" value={agentEngine} onChange={e => taskModes.scenario === 'cloud' ? setCloudEngine('scenario', e.target.value) : setLocalEngine('scenario', e.target.value)} className="text-xs font-mono" />
-                  <datalist id="agent-models">
-                    {taskModes.scenario === 'cloud'
-                      ? cloudModels.map(m => (
+                  {taskModes.scenario === 'cloud' ? (
+                    <>
+                      <Input list="cloud-scen-models" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} className="text-xs font-mono" placeholder="Облачная модель" />
+                      <datalist id="cloud-scen-models">
+                        {cloudModels.map(m => (
                           <option key={m.id} value={m.id}>
                             {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
                           </option>
-                        ))
-                      : localModels.map(m => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
                         ))}
-                  </datalist>
+                      </datalist>
+                    </>
+                  ) : (
+                    <Select value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="text-xs font-mono">
+                      <option value="" disabled>Выберите локальную модель...</option>
+                      {localModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </FieldGroup>
               </div>
 

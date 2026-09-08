@@ -29,11 +29,21 @@ class BaseVoiceEngine:
         self,
         text: str,
         embedding_path: Optional[str],
+        instruct: Optional[str],
         output_path: str,
         speed: float = 1.0,
         pitch: float = 1.0,
+        gen_config: Optional[dict] = None,
     ):
-        """Генерирует речь. Если embedding_path указан, использует клон."""
+        """Генерирует речь.
+
+        Источник голоса взаимоисключающий:
+          * embedding_path — клон (Zero-Shot, .pt voice clone prompt);
+          * instruct — дизайн голоса (текстовое описание характеристик);
+          * ни один не передан — авто-голос модели.
+
+        gen_config — словарь тонких настроек диффузии (num_steps и т.д.).
+        """
         raise NotImplementedError()
 
     def clone_voice(

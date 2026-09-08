@@ -50,7 +50,7 @@ public class VoiceDbContext : SqliteDbContextBase
             b.Property(j => j.Spec)
                 .HasConversion(
                     spec => JsonSerializer.Serialize(spec, (JsonSerializerOptions?)null),
-                    json => JsonSerializer.Deserialize<VoiceSpec>(json, (JsonSerializerOptions?)null)!)
+                    json => JsonSerializer.Deserialize<VoiceSpec>(json.Replace("LocalOmniVoice", "LocalTts"), (JsonSerializerOptions?)null)!)
                 .HasColumnType("TEXT")
                 .IsRequired();
 
@@ -94,7 +94,9 @@ public class VoiceDbContext : SqliteDbContextBase
                 .IsRequired();
 
             b.Property(s => s.Engine)
-                .HasConversion<string>()
+                .HasConversion(
+                    v => v.ToString(),
+                    v => v == "LocalOmniVoice" ? VoiceEngineType.LocalTts : Enum.Parse<VoiceEngineType>(v, true))
                 .HasMaxLength(32)
                 .IsRequired();
 
@@ -111,6 +113,8 @@ public class VoiceDbContext : SqliteDbContextBase
             b.Property(s => s.CloneReferenceAudioPath).HasMaxLength(512);
             b.Property(s => s.CloneReferenceText).HasMaxLength(2000);
             b.Property(s => s.PreviewAudioPath).HasMaxLength(512);
+            b.Property(s => s.LocalEngineId).HasMaxLength(64);
+            b.Property(s => s.LocalEmbeddingPath).HasMaxLength(512);
 
             b.Property(s => s.CreatedAt).IsRequired();
             b.Property(s => s.UpdatedAt).IsRequired();

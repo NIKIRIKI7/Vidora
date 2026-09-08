@@ -6,5 +6,6 @@ namespace Voice.Domain;
 public enum VoiceEngineType
 {
     CloudOpenAi = 1,
-    CloudMiniMax = 2
+    CloudMiniMax = 2,
+    LocalTts = 3 // Универсальный тип для всех локальных моделей ML-воркера
 }

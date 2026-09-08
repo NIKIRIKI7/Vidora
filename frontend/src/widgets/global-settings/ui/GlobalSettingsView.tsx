@@ -189,24 +189,26 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                   </div>
                   <FieldGroup label={`Модель для сценариев (${taskModes.scenario === 'cloud' ? 'Облако' : 'Локально'})`}>
                     {taskModes.scenario === 'cloud' ? (
-                      <Input list="cloud-scen" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} className="font-mono text-sm" />
+                      <>
+                        <Input list="cloud-scen" value={cloudEngines.scenario} onChange={e => setCloudEngine('scenario', e.target.value)} className="font-mono text-sm" />
+                        <datalist id="cloud-scen">
+                          {cloudScenModels.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                            </option>
+                          ))}
+                        </datalist>
+                      </>
                     ) : (
-                      <Input list="loc-scen" value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="font-mono text-sm" />
+                      <Select value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="font-mono text-sm">
+                        <option value="" disabled>Выберите локальную модель...</option>
+                        {locScenModels.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </Select>
                     )}
-                    <datalist id="cloud-scen">
-                      {cloudScenModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
-                        </option>
-                      ))}
-                    </datalist>
-                    <datalist id="loc-scen">
-                      {locScenModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </datalist>
                   </FieldGroup>
                 </div>
 
@@ -222,24 +224,26 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                   </div>
                   <FieldGroup label={`Модель для генерации кода (${taskModes.visual === 'cloud' ? 'Облако' : 'Локально'})`}>
                     {taskModes.visual === 'cloud' ? (
-                      <Input list="cloud-vis" value={cloudEngines.visual} onChange={e => setCloudEngine('visual', e.target.value)} className="font-mono text-sm" />
+                      <>
+                        <Input list="cloud-vis" value={cloudEngines.visual} onChange={e => setCloudEngine('visual', e.target.value)} className="font-mono text-sm" />
+                        <datalist id="cloud-vis">
+                          {cloudVisModels.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                            </option>
+                          ))}
+                        </datalist>
+                      </>
                     ) : (
-                      <Input list="loc-vis" value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} className="font-mono text-sm" />
+                      <Select value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} className="font-mono text-sm">
+                        <option value="" disabled>Выберите локальную модель...</option>
+                        {locVisModels.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </Select>
                     )}
-                    <datalist id="cloud-vis">
-                      {cloudVisModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
-                        </option>
-                      ))}
-                    </datalist>
-                    <datalist id="loc-vis">
-                      {locVisModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </datalist>
                   </FieldGroup>
                 </div>
 
@@ -258,24 +262,26 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                   </div>
                   <FieldGroup label={`Модель для парсинга и подбора B-Roll (${taskModes.broll === 'cloud' ? 'Облако' : 'Локально'})`}>
                     {taskModes.broll === 'cloud' ? (
-                      <Input list="cloud-broll" value={cloudEngines.broll} onChange={e => setCloudEngine('broll', e.target.value)} className="font-mono text-sm" />
+                      <>
+                        <Input list="cloud-broll" value={cloudEngines.broll} onChange={e => setCloudEngine('broll', e.target.value)} className="font-mono text-sm" />
+                        <datalist id="cloud-broll">
+                          {cloudBrollModels.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                            </option>
+                          ))}
+                        </datalist>
+                      </>
                     ) : (
-                      <Input list="loc-broll" value={localEngines.broll} onChange={e => setLocalEngine('broll', e.target.value)} className="font-mono text-sm" />
+                      <Select value={localEngines.broll} onChange={e => setLocalEngine('broll', e.target.value)} className="font-mono text-sm">
+                        <option value="" disabled>Выберите локальную модель...</option>
+                        {locBrollModels.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </Select>
                     )}
-                    <datalist id="cloud-broll">
-                      {cloudBrollModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
-                        </option>
-                      ))}
-                    </datalist>
-                    <datalist id="loc-broll">
-                      {locBrollModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </datalist>
                   </FieldGroup>
                 </div>
 
@@ -291,24 +297,26 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                   </div>
                   <FieldGroup label={`Движок озвучки (${taskModes.audio === 'cloud' ? 'Облако' : 'Локально'})`}>
                     {taskModes.audio === 'cloud' ? (
-                      <Input list="cloud-aud" value={cloudEngines.audio} onChange={e => setCloudEngine('audio', e.target.value)} className="font-mono text-sm" />
+                      <>
+                        <Input list="cloud-aud" value={cloudEngines.audio} onChange={e => setCloudEngine('audio', e.target.value)} className="font-mono text-sm" />
+                        <datalist id="cloud-aud">
+                          {cloudAudioModels.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                            </option>
+                          ))}
+                        </datalist>
+                      </>
                     ) : (
-                      <Input list="loc-aud" value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} className="font-mono text-sm" />
+                      <Select value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} className="font-mono text-sm">
+                        <option value="" disabled>Выберите локальную модель...</option>
+                        {locAudioModels.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} {!m.is_available ? '(нет весов)' : '✓'}
+                          </option>
+                        ))}
+                      </Select>
                     )}
-                    <datalist id="cloud-aud">
-                      {cloudAudioModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
-                        </option>
-                      ))}
-                    </datalist>
-                    <datalist id="loc-aud">
-                      {locAudioModels.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {!m.is_available ? '(нет весов)' : '✓'}
-                        </option>
-                      ))}
-                    </datalist>
                   </FieldGroup>
                 </div>
 

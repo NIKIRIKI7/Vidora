@@ -66,9 +66,11 @@ async def synthesize(req: SynthesizeRequest):
             engine.synthesize,
             req.text,
             req.speaker_embedding_path,
+            req.instruct,
             req.output_audio_path,
             req.speed,
             req.pitch,
+            req.generation_config.model_dump(),
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("[Synthesize] Ошибка движка '%s'.", req.engine_id)

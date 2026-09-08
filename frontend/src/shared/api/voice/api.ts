@@ -98,7 +98,7 @@ export const voiceApi = {
     }
   },
 
-  // Voice Design (всегда локально на базе OmniVoice)
+  // Voice Design (всегда локально: engine=LocalTts + local_engine_id=omni_voice_v1)
   async designSpeaker(payload: DesignSpeakerPayload): Promise<SpeakerProfileDto> {
     const res = await fetch(`${VOICE_BASE}/speakers/profiles/design`, {
       method: 'POST',
@@ -126,10 +126,15 @@ export const voiceApi = {
     language?: string,
     engine?: string
   ): Promise<SpeakerProfileDto> {
-    const finalEngine = engine || (mode === 'local' ? 'LocalOmniVoice' : 'CloudMiniMax')
+    // Локальный клон: движок-переключатель VoiceEngineType=LocalTts, а конкретная
+    // модель воркера уходит отдельным полем localEngineId (id из /engines).
+    const localEngineId = mode === 'local' ? engine ?? undefined : undefined
+    const finalEngine = mode === 'local' ? 'LocalTts' : 'CloudMiniMax'
+
     const formData = new FormData()
     formData.append('name', name)
     formData.append('engine', finalEngine)
+    if (localEngineId) formData.append('localEngineId', localEngineId)
     formData.append('referenceAudio', audioFile)
     if (referenceText) formData.append('referenceText', referenceText)
     if (language) formData.append('language', language)
