@@ -164,68 +164,35 @@ public static class YouTubeAgentEndpoints
                     ["transcript_snippet"] = openingSnippet,
                     ["psychology"] = data.TryGetProperty("psychology", out var psy) ? psy.GetString() : "Удержание через когнитивный диссонанс и незакрытую петлю",
                     ["flaws_identified"] = data.TryGetProperty("flaws_identified", out var fl) ? fl.GetString() : "Недостаточно резкий визуальный хук в первые 2 секунды",
-                    ["stolen_hooks"] = data.TryGetProperty("stolen_hooks", out var sh) ? sh : null,
+                    ["stolen_hooks"] = data.TryGetProperty("stolen_hooks", out var sh) && sh.ValueKind == JsonValueKind.Array ? sh : JsonSerializedEmptyArray(),
                     ["heatmap"] = rawHeatmap.Count > 0
                         ? rawHeatmap.Select(h => (object)new { startSeconds = h.StartSeconds, endSeconds = h.EndSeconds, intensity = h.Intensity }).ToList()
-                        : GenerateRealisticHeatmap()
+                        : new object[] { }
                 };
                 return Results.Ok(new { status = "ok", data = responseObj });
             }
             catch
             {
-                // Динамическая адаптация хуков под конкретное название и суть видео
-                var topic = !string.IsNullOrWhiteSpace(request.Transcript) ? request.Transcript : "AI & Programming";
-                var cleanTitle = topic.Replace("..", "").Replace("Explained", "").Trim();
-                
-                var dynamicFallback = new
-                {
-                    original_hook = openingSnippet.Length > 15 ? openingSnippet : cleanTitle,
-                    transcript_snippet = openingSnippet,
-                    psychology = $"Разрушение иллюзии простоты вокруг «{cleanTitle}» с мгновенной интригой в первые 3 секунды.",
-                    flaws_identified = "Затянутый разгон: автор тратит первые 10 секунд на приветствие вместо демонстрации финального результата.",
-                    stolen_hooks = new[]
+                return Results.Json(
+                    new
                     {
-                        new
+                        status = "error",
+                        error_code = "HOOK_ANALYSIS_FAILED",
+                        data = new
                         {
-                            angle = "Контринтуитивный парадокс",
-                            hook_0_5s = $"90% людей применяют {cleanTitle} абсолютно неправильно.",
-                            hook_5_20s = "Пока все повторяют шаблонные туториалы, топовые инженеры используют этот скрытый протокол.",
-                            why_it_converts = "Удар по экспертному эго зрителя и разрыв привычного шаблона"
-                        },
-                        new
-                        {
-                            angle = "Жесткая смена правил (FOMO)",
-                            hook_0_5s = $"То, что работало в {cleanTitle} еще месяц назад, сегодня полностью обесценилось.",
-                            hook_5_20s = "Я протестировал это на реальном проекте, и вот 3 критических вывода, о которых молчат авторы релизов.",
-                            why_it_converts = "Страх упущенной выгоды и устаревания навыков"
-                        },
-                        new
-                        {
-                            angle = "Инсайдерский бенчмарк (Шоу-кейс)",
-                            hook_0_5s = $"Я сравнил {cleanTitle} в стресс-тесте лицом к лицу, и результат шокирует.",
-                            hook_5_20s = "Никакого маркетинга: вот сырые цифры производительности и где архитектура ломается под нагрузкой.",
-                            why_it_converts = "Обещание честного практического опыта без рекламной воды"
+                            original_hook = "",
+                            transcript_snippet = openingSnippet,
+                            psychology = "",
+                            flaws_identified = "",
+                            stolen_hooks = Array.Empty<object>(),
+                            heatmap = Array.Empty<object>()
                         }
                     },
-                    heatmap = rawHeatmap.Count > 0
-                        ? rawHeatmap.Select(h => (object)new { startSeconds = h.StartSeconds, endSeconds = h.EndSeconds, intensity = h.Intensity }).ToList()
-                        : GenerateRealisticHeatmap()
-                };
-                return Results.Ok(new { status = "ok", data = dynamicFallback });
+                    statusCode: StatusCodes.Status502BadGateway);
             }
         });
 
-        static List<object> GenerateRealisticHeatmap() => new()
-        {
-            new { startSeconds = 0.0, endSeconds = 4.0, intensity = 0.98 },
-            new { startSeconds = 4.0, endSeconds = 8.0, intensity = 0.86 },
-            new { startSeconds = 8.0, endSeconds = 14.0, intensity = 0.93 },
-            new { startSeconds = 14.0, endSeconds = 25.0, intensity = 0.79 },
-            new { startSeconds = 25.0, endSeconds = 45.0, intensity = 0.74 },
-            new { startSeconds = 45.0, endSeconds = 90.0, intensity = 0.68 },
-            new { startSeconds = 90.0, endSeconds = 150.0, intensity = 0.62 },
-            new { startSeconds = 150.0, endSeconds = 300.0, intensity = 0.54 }
-        };
+        static JsonElement JsonSerializedEmptyArray() => JsonDocument.Parse("[]").RootElement.Clone();
 
         // 5. Script drafting
         group.MapPost("/agent/draft-script", async (

@@ -36,7 +36,8 @@ public sealed record YouTubeCommentItem(
     string Text,
     int LikeCount,
     string PublishedTime,
-    string CommentId);
+    string CommentId,
+    string Category = "general");
 
 public sealed class YouTubeSearchFilter
 {

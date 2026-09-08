@@ -45,6 +45,7 @@ public static class SystemServiceExtensions
         // Модуль и сервисы мониторинга
         services.AddSingleton<HardwareMonitorService>();
         services.AddScoped<ISystemModule, SystemModule>();
+        services.AddScoped<IModelCatalogService, ModelCatalogService>();
 
         return services;
     }

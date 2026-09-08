@@ -31,6 +31,11 @@ export const STAGE_CONFIG: Record<SkillStage, { label: string; color: string; de
     color: 'bg-lime-500/10 text-lime-400 border-lime-500/30',
     desc: 'Анализ хуков, превью и удержания',
   },
+  broll_matching: {
+    label: 'B-Roll Matcher',
+    color: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+    desc: 'Подбор и встраивание B-Roll видео по семантике фрагмента',
+  },
   general: {
     label: 'General / Global',
     color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30',

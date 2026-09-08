@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Sparkles, Brain, AlertTriangle, ArrowRight, Check, Zap } from 'lucide-react'
 import type { HookAnalysisData, StolenHook } from '@shared/api/youtube'
 import { analyzeHook } from '@shared/api/youtube'
+import { WORDS_PER_SECOND } from '@shared/config'
 
 interface HookDeconstructionPanelProps {
   initialTranscript?: string
@@ -19,7 +20,7 @@ export const HookDeconstructionPanel = ({
   const [appliedIndex, setAppliedIndex] = useState<number | null>(null)
 
   const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length
-  const estimatedSeconds = (wordCount / 2).toFixed(1)
+  const estimatedSeconds = (wordCount / WORDS_PER_SECOND).toFixed(1)
 
   const handleRunAnalysis = async () => {
     if (!transcript.trim()) return

@@ -15,6 +15,7 @@ import {
   type EarlySignalItem, type DeepTrendAnalysis,
   type CommentGoldmineVideoEntry, type BlueOceanOpportunity
 } from '@entities/project'
+import { useModelCatalog } from '@entities/project/model/useModelCatalog'
 
 interface Props {
   onSelectIdea: (idea: IdeaFormat, videos: VideoResult[]) => void
@@ -34,12 +35,24 @@ const NICHE_PRESETS: Record<string, { id: string; label: string; enQuery: string
     { id: 'IT, Программирование, Нейросети', label: '💻 IT и Программирование', enQuery: 'AI programming software development' },
     { id: 'Кибербезопасность, Хакинг, Инфобез', label: '🔐 Кибербезопасность', enQuery: 'cybersecurity ethical hacking' },
     { id: 'Криптовалюта, Инвестиции, Трейдинг', label: '📈 Крипта и Финансы', enQuery: 'crypto trading investing' },
+    { id: 'Здоровье, Фитнес, Питание', label: '🏋️ Здоровье и Фитнес', enQuery: 'fitness health nutrition workout' },
+    { id: 'Саморазвитие, Психология, Продуктивность', label: '🧠 Саморазвитие', enQuery: 'self improvement psychology productivity' },
+    { id: 'Бизнес, Предпринимательство, Маркетинг', label: '📊 Бизнес и Маркетинг', enQuery: 'business entrepreneurship marketing growth' },
+    { id: 'Образование, Наука, Факты', label: '🎓 Образование и Наука', enQuery: 'education science facts learning' },
+    { id: 'Кулинария, Рецепты, Лайфхаки', label: '🍳 Кулинария и Лайфхаки', enQuery: 'cooking recipes food hacks' },
+    { id: 'Путешествия, Хобби, Лайфстайл', label: '✈️ Путешествия и Лайфстайл', enQuery: 'travel lifestyle hobbies adventure' },
   ],
   en: [
     { id: 'custom', label: '✍️ Custom topic...', enQuery: '' },
     { id: 'AI, Programming, Software Engineering', label: '💻 AI & Programming', enQuery: 'AI, Programming, Software Engineering' },
     { id: 'Cybersecurity, Ethical Hacking, InfoSec', label: '🔐 Cybersecurity & Hacking', enQuery: 'Cybersecurity, Ethical Hacking, InfoSec' },
     { id: 'Crypto, DeFi, Trading Strategies', label: '📈 Crypto & Trading', enQuery: 'Crypto, DeFi, Trading Strategies' },
+    { id: 'Health, Fitness, Nutrition, Workout', label: '🏋️ Health & Fitness', enQuery: 'Health, Fitness, Nutrition, Workout' },
+    { id: 'Self Improvement, Psychology, Productivity', label: '🧠 Self Improvement', enQuery: 'Self Improvement, Psychology, Productivity' },
+    { id: 'Business, Entrepreneurship, Marketing', label: '📊 Business & Marketing', enQuery: 'Business, Entrepreneurship, Marketing' },
+    { id: 'Education, Science, Facts, Learning', label: '🎓 Education & Science', enQuery: 'Education, Science, Facts, Learning' },
+    { id: 'Cooking, Recipes, Food Hacks', label: '🍳 Cooking & Recipes', enQuery: 'Cooking, Recipes, Food Hacks' },
+    { id: 'Travel, Lifestyle, Hobbies, Adventure', label: '✈️ Travel & Lifestyle', enQuery: 'Travel, Lifestyle, Hobbies, Adventure' },
   ],
 }
 
@@ -74,6 +87,7 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
 export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
   const { apiKeys, cloudEngines, localEngines, cloudProvider, taskModes, setTaskMode, setCloudEngine, setLocalEngine } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
+  const { localModels, cloudModels } = useModelCatalog('ScenarioDrafting')
 
   const activeApiKeys = {
     ...apiKeys,
@@ -592,19 +606,17 @@ export const YoutubeIdeasView = ({ onSelectIdea, onBack }: Props) => {
                 <FieldGroup label="Модель">
                   <Input list="agent-models" value={agentEngine} onChange={e => taskModes.scenario === 'cloud' ? setCloudEngine('scenario', e.target.value) : setLocalEngine('scenario', e.target.value)} className="text-xs font-mono" />
                   <datalist id="agent-models">
-                    {taskModes.scenario === 'cloud' ? (
-                      <>
-                        <option value="anthropic/claude-sonnet-5" />
-                        <option value="openai/gpt-4o" />
-                        <option value="google/gemini-2.5-pro" />
-                      </>
-                    ) : (
-                      <>
-                        <option value="gemma3:4b" />
-                        <option value="qwen2.5-coder" />
-                        <option value="llama3.1-8b" />
-                      </>
-                    )}
+                    {taskModes.scenario === 'cloud'
+                      ? cloudModels.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                          </option>
+                        ))
+                      : localModels.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
                   </datalist>
                 </FieldGroup>
               </div>

@@ -25,12 +25,11 @@ public sealed class YouTubeBrollCatalog : IYouTubeBrollCatalog
         };
 
         var results = await _ytClient.SearchFilteredAsync(query, filter, maxResults, "en", ct);
-
         return results.Select(v => new YouTubeBrollCandidate(
             v.VideoId,
             v.Title,
             v.ChannelTitle,
-            v.ThumbnailUrl,
+            v.ThumbnailUrl ?? string.Empty,
             (int)v.Duration.TotalSeconds,
             v.ViewCount,
             license)).ToList();
@@ -43,7 +42,7 @@ public sealed class YouTubeBrollCatalog : IYouTubeBrollCatalog
             metadata.VideoId,
             metadata.Title,
             metadata.ChannelTitle,
-            metadata.ThumbnailUrl,
+            metadata.ThumbnailUrl ?? string.Empty,
             (int)metadata.Duration.TotalSeconds,
             metadata.ViewCount,
             "unknown");

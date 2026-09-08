@@ -30,6 +30,8 @@ public static class MediaServiceExtensions
         services.AddSingleton<IMusicCatalogProvider, LocalMusicCatalogProvider>();
         services.AddScoped<IYouTubeBrollCatalog, YouTubeBrollCatalog>();
         services.AddScoped<IMediaModule, MediaModule>();
+        services.AddOptions<BrollNormalizationOptions>()
+            .Bind(configuration.GetSection(BrollNormalizationOptions.SectionName));
         // services.AddHostedService<MediaDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 
         return services;

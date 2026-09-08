@@ -5,20 +5,25 @@ namespace Voice.Application.Commands;
 
 public sealed record SynthesizeSpeechCommand(
     string Text,
-    VoiceEngineType Engine,
     string SpeakerId,
+    VoiceEngineType? Engine = null,
     AlignmentEngineType AlignmentEngine = AlignmentEngineType.Whisper,
     double Speed = 1.0,
     double Pitch = 1.0,
     string? ReferenceAudioPath = null,
-    AudioFilterSpec? Filters = null);
+    AudioFilterSpec? Filters = null,
+    double GuidanceScale = 2.0,
+    int NumSteps = 24);
 
 public sealed record BatchItemSpec(
     string Text,
-    VoiceEngineType Engine,
     string SpeakerId,
+    VoiceEngineType? Engine = null,
     AlignmentEngineType AlignmentEngine = AlignmentEngineType.Whisper,
-    double Speed = 1.0);
+    double Speed = 1.0,
+    double Pitch = 1.0,
+    double GuidanceScale = 2.0,
+    int NumSteps = 24);
 
 public sealed record BatchSynthesizeVoiceCommand(
     IReadOnlyList<BatchItemSpec> Items,

@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Skills.Contracts;
+using Skills.Domain;
 
 namespace Api.Endpoints.Motion;
 
@@ -110,11 +112,34 @@ public static class MotionEndpoints
             [FromBody] JsonElement payload,
             ILlmClient llm,
             ILlmCodeExtractor extractor,
+            ISkillsCatalog skillsCatalog,
+            IPackageCapabilityRegistry capabilityRegistry,
             CancellationToken ct) =>
         {
             var prompt = payload.GetProperty("prompt").GetString()!;
+
+            var bundle = await skillsCatalog.GetSkillBundleForStageAsync(
+                SkillStage.SceneGeneration,
+                maxTokenLimit: 4000,
+                customHeaderInstructions: null,
+                cancellationToken: ct);
+
+            var capabilityGuidelines = capabilityRegistry.GetCombinedPromptGuidelines();
+
+            var systemPrompt = string.Join(
+                "\n\n",
+                new[]
+                {
+                    bundle.SystemPrompt,
+                    capabilityGuidelines
+                }.Where(p => !string.IsNullOrWhiteSpace(p)));
+
             var spec = new LlmPromptSpec(
-                Messages: [new LlmPromptMessage("user", prompt)],
+                Messages:
+                [
+                    new LlmPromptMessage("system", systemPrompt),
+                    new LlmPromptMessage("user", prompt)
+                ],
                 Temperature: 0.2f,
                 MaxTokens: 4000);
 
@@ -124,7 +149,9 @@ public static class MotionEndpoints
             return Results.Ok(new
             {
                 status = "ok",
-                tsx_code = sanitized.SanitizedCode.Value
+                tsx_code = sanitized.SanitizedCode.Value,
+                applied_stage = SkillStage.SceneGeneration.ToSnakeCase(),
+                included_skills = bundle.IncludedSkills.Select(s => s.Id).ToArray()
             });
         });
 

@@ -1,5 +1,9 @@
 using Integrations.LLM;
 using Integrations.LLM.Local;
+using Integrations.OmniVoice.Config;
+using Integrations.OmniVoice.Contracts;
+using Integrations.OmniVoice.Diagnostics;
+using Integrations.OmniVoice.Native;
 using Integrations.Pexels;
 using Integrations.Whisper.Config;
 using Integrations.YouTube.Innertube;
@@ -36,6 +40,12 @@ public static class IntegrationsServiceExtensions
 
         // 6. Native Whisper (CTranslate2) configuration
         services.Configure<WhisperOptions>(configuration.GetSection(WhisperOptions.SectionName));
+
+        // 7. Native OmniVoice (GGUF + нативный GGML-рантайм) - заменяет Python subprocess
+        services.Configure<OmniVoiceOptions>(configuration.GetSection(OmniVoiceOptions.SectionName));
+        services.AddSingleton<OmniVoiceNativeRuntime>();
+        services.AddSingleton<OmniVoiceEventLogger>();
+        services.AddSingleton<IOmniVoiceEngine, NativeOmniVoiceEngine>();
 
         return services;
     }

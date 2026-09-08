@@ -132,7 +132,7 @@ public class SpeakerProfile : BaseEntity<string>
         AddDomainEvent(new SpeakerUpdatedEvent(Id));
     }
 
-    public void SetPreviewAudio(string previewPath)
+    public void SetPreviewAudio(string? previewPath)
     {
         PreviewAudioPath = string.IsNullOrWhiteSpace(previewPath) ? null : previewPath.Trim();
         UpdatedAt = DateTimeOffset.UtcNow;

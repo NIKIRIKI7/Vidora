@@ -62,7 +62,7 @@ public sealed class FfmpegAudioDuckingService : IAudioDuckingService
 
         var attack = duckingSpec.AttackMs.ToString(CultureInfo.InvariantCulture);
         var release = duckingSpec.ReleaseMs.ToString(CultureInfo.InvariantCulture);
-        var filter = $"[0:a][1:a]sidechaincompress=threshold=0.08:ratio=4:attack={attack}:release={release}[ducked];[ducked][1:a]amix=inputs=2:duration=first:dropout_transition=2[out]";
+        var filter = $"[0:a][1:a]sidechaincompress=threshold={duckingSpec.ThresholdInvariantText}:ratio={duckingSpec.CompressionRatioInvariantText}:attack={attack}:release={release}[ducked];[ducked][1:a]amix=inputs=2:duration=first:dropout_transition=2[out]";
         var args = $"-y -i \"{safeBgm}\" -i \"{safeVoice}\" -filter_complex \"{filter}\" -map \"[out]\" -ar 48000 -c:a aac -b:a 192k \"{safeOutput}\"";
 
         _logger.LogInformation("[AudioDSP] Применение Sidechain Ducking BGM под голос");

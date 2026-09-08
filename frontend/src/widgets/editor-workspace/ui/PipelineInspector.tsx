@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, type DragEvent } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, type DragEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
 import { Button, FieldGroup, Select, Spinner, Switch, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
@@ -6,6 +6,7 @@ import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, Sliders
 import { DEFAULT_BACKGROUND_MUSIC } from '@shared/config'
 import { generateProjectPrompt, generateRemotionPrompt } from '@widgets/editor-workspace/lib/generateRemotionPrompt'
 import { getProjectPath, API, isAudioDirty, isCodeDirty, extractCleanVoiceText, getSceneTeleprompterScript, getProjectTeleprompterScript } from '@widgets/editor-workspace/lib/helpers'
+import { voiceApi, type SpeakerProfileDto } from '@shared/api/voice'
 
 interface FragmentCardProps {
   frag: SceneFragment
@@ -232,6 +233,33 @@ export const PipelineInspector = React.memo(({
   const anyAudioDirty = project.scenes.some(s => s.fragments.some(isAudioDirty))
   const codeDirty = activeScene ? isCodeDirty(project, activeScene) : false
 
+  // Динамический список дикторов из бэкенда (SSOT)
+  const [speakerProfiles, setSpeakerProfiles] = useState<SpeakerProfileDto[]>([])
+  const [speakersLoaded, setSpeakersLoaded] = useState(false)
+  const loadSpeakerProfiles = useCallback(async () => {
+    try {
+      const profiles = await voiceApi.getSpeakerProfiles()
+      setSpeakerProfiles(profiles)
+    } catch {
+      setSpeakerProfiles([])
+    } finally {
+      setSpeakersLoaded(true)
+    }
+  }, [])
+  useEffect(() => {
+    const t = setTimeout(() => { void loadSpeakerProfiles() }, 0)
+    return () => clearTimeout(t)
+  }, [loadSpeakerProfiles])
+
+  const builtInSpeakers = useMemo(
+    () => speakerProfiles.filter(s => s.source_type === 'BuiltIn'),
+    [speakerProfiles]
+  )
+  const designedClonedSpeakers = useMemo(
+    () => speakerProfiles.filter(s => s.source_type === 'Designed' || s.source_type === 'Cloned'),
+    [speakerProfiles]
+  )
+
   const [copyEmotionTags, setCopyEmotionTags] = useState(() => {
     return localStorage.getItem('vidora:copy-emotion-tags') === 'true'
   })
@@ -396,7 +424,7 @@ export const PipelineInspector = React.memo(({
               </Button>
               <FieldGroup label="Голосовая модель">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel) || globalVoices.find(v => v.id === project.activeGlobalVoiceId); const url = isCustom?.refAudioPath ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : `/samples/${voiceModel}.wav`; void new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
+                  <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel) || globalVoices.find(v => v.id === project.activeGlobalVoiceId); const profile = speakerProfiles.find(s => s.speaker_id === voiceModel); const url = isCustom?.refAudioPath ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : profile?.preview_audio_path ? `${API}/api/v1/render/media?path=${encodeURIComponent(profile.preview_audio_path)}` : `/samples/${voiceModel}.wav`; void new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
                   <Select
                     value={project.activeGlobalVoiceId ? `global_${project.activeGlobalVoiceId}` : voiceModel}
                     onChange={e => {
@@ -410,12 +438,28 @@ export const PipelineInspector = React.memo(({
                     }}
                     className="flex-1 min-w-0 font-medium"
                   >
-                    <optgroup label="Базовые голоса (OmniVoice)">
-                      <option value="aria">Neural - Aria (Женский)</option>
-                      <option value="marcus">Neural - Marcus (Мужской)</option>
-                      <option value="nova">Expressive - Nova (Энергичный)</option>
-                      <option value="Russian_ReliableMan">MiniMax - Russian Reliable</option>
-                    </optgroup>
+                    {builtInSpeakers.length > 0 ? (
+                      <optgroup label="Базовые голоса (Vidora)">
+                        {builtInSpeakers.map(s => (
+                          <option key={s.speaker_id} value={s.speaker_id} title={s.description || undefined}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : speakersLoaded ? (
+                      <optgroup label="Базовые голоса">
+                        <option value="" disabled>Нет доступных дикторов</option>
+                      </optgroup>
+                    ) : null}
+                    {designedClonedSpeakers.length > 0 && (
+                      <optgroup label="Профили дикторов (Design / Clone)">
+                        {designedClonedSpeakers.map(s => (
+                          <option key={s.speaker_id} value={s.speaker_id} title={s.description || undefined}>
+                            {s.source_type === 'Cloned' ? '🎙️ Cloned - ' : '✨ Designed - '}{s.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                     {globalVoices.length > 0 && (
                       <optgroup label="Глобальные голоса (Audio Hub)">
                         {globalVoices.map(v => <option key={`global_${v.id}`} value={`global_${v.id}`}>🌐 {v.name}</option>)}

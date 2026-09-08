@@ -3,7 +3,9 @@ using Kernel.Events;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using SystemContext.Application.Services;
 using SystemContext.Contracts;
+using SystemContext.Domain;
 
 namespace Api.Endpoints.System;
 
@@ -46,6 +48,16 @@ public static class SystemEndpoints
         {
             var models = await system.GetAiModelsAsync(ct);
             return Results.Ok(models);
+        });
+
+        // Единый каталог моделей по ролям конвейера
+        group.MapGet("/models/catalog", async (
+            ModelTaskRole? role,
+            IModelCatalogService catalog,
+            CancellationToken ct) =>
+        {
+            var entries = await catalog.GetCatalogAsync(role, ct);
+            return Results.Ok(entries);
         });
 
         // Запуск загрузки весов модели

@@ -35,7 +35,8 @@ public sealed record InnerTubeComment(
     int LikeCount,
     string PublishedTime,
     string CommentId,
-    string? ContinuationToken = null);
+    string? ContinuationToken = null,
+    string Category = "general");
 
 public sealed record InnerTubeHeatmapPoint(
     double StartSeconds,

@@ -59,7 +59,7 @@ public sealed class InnerTubeModuleTests
             new InnerTubeClientProfile
             {
                 ClientName = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-                ClientVersion = "2.0",
+                ClientVersion = "2.20240825.01.00",
                 Priority = 3
             }
         ]

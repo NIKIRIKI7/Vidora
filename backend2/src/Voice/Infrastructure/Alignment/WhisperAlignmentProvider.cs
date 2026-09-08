@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Integrations.Whisper.Audio;
 using Integrations.Whisper.Config;
 using Integrations.Whisper.Native;
 using Kernel.Platform.Config;
@@ -155,8 +156,7 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
         long estimatedDurationMs = 2000;
         if (File.Exists(audioPath))
         {
-            var len = new FileInfo(audioPath).Length;
-            estimatedDurationMs = Math.Max(500, (long)(len / (48000.0 * 2) * 1000));
+            estimatedDurationMs = Math.Max(500, (long)(WavAudioDecoder.ProbeWavDuration(audioPath) * 1000));
         }
 
         long step = estimatedDurationMs / tokens.Length;

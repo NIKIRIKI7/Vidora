@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Integrations.LLM.Local;
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Ports;
@@ -24,6 +25,7 @@ public sealed class LlmClient : ILlmClient, IDisposable
 
     private LLamaWeights? _weights;
     private ModelParams? _modelParams;
+    private IChatTemplateFormatter _templateFormatter = new ChatMlFormatter();
     private bool _initialized;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -58,11 +60,11 @@ public sealed class LlmClient : ILlmClient, IDisposable
             if (!File.Exists(fullPath))
             {
                 throw new FileNotFoundException(
-                    $"Model file not found: {fullPath}. Download Gemma 3 GGUF to {_storageConfig.GetModelsDirectory()}/.");
+                    $"Файл модели не найден: {fullPath}. Поместите GGUF модель в {_storageConfig.GetModelsDirectory()}/.");
             }
 
             _logger.LogInformation(
-                "[LLamaSharp] Loading GGUF: {Path} (GPU Layers: {Layers}, Context: {Ctxt})",
+                "[LLamaSharp] Загрузка GGUF: {Path} (GPU Layers: {Layers}, Context: {Ctxt})",
                 Path.GetFileName(fullPath), _options.GpuLayers, _options.ContextSize);
 
             _modelParams = new ModelParams(fullPath)
@@ -72,9 +74,13 @@ public sealed class LlmClient : ILlmClient, IDisposable
             };
 
             _weights = LLamaWeights.LoadFromFile(_modelParams);
+            _templateFormatter = ChatTemplateResolver.Resolve(_weights, fullPath);
             _initialized = true;
 
-            _logger.LogInformation("[LLamaSharp] Model loaded into memory");
+            _logger.LogInformation(
+                "[LLamaSharp] Модель загружена в память. Применен шаблон разметки: {Template}, Стоп-токены: {Stops}",
+                _templateFormatter.GetType().Name,
+                string.Join(", ", _templateFormatter.StopTokens));
         }
     }
 
@@ -122,7 +128,7 @@ public sealed class LlmClient : ILlmClient, IDisposable
     {
         EnsureModelLoaded();
 
-        var prompt = FormatGemmaPrompt(spec);
+        var prompt = _templateFormatter.Format(spec.Messages);
         var responseBuilder = new System.Text.StringBuilder();
 
         await _semaphore.WaitAsync(cancellationToken);
@@ -134,7 +140,7 @@ public sealed class LlmClient : ILlmClient, IDisposable
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = spec.MaxTokens ?? 2048,
-                AntiPrompts = new List<string> { "<end_of_turn>", "<eos>", "<|im_start|>" },
+                AntiPrompts = _templateFormatter.StopTokens.ToList(),
                 SamplingPipeline = new DefaultSamplingPipeline { Temperature = spec.Temperature }
             };
 
@@ -174,7 +180,7 @@ public sealed class LlmClient : ILlmClient, IDisposable
     {
         EnsureModelLoaded();
 
-        var prompt = FormatGemmaPrompt(spec);
+        var prompt = _templateFormatter.Format(spec.Messages);
 
         await _semaphore.WaitAsync(cancellationToken);
         try
@@ -185,7 +191,7 @@ public sealed class LlmClient : ILlmClient, IDisposable
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = spec.MaxTokens ?? 2048,
-                AntiPrompts = new List<string> { "<end_of_turn>", "<eos>", "<|im_start|>" },
+                AntiPrompts = _templateFormatter.StopTokens.ToList(),
                 SamplingPipeline = new DefaultSamplingPipeline { Temperature = spec.Temperature }
             };
 
@@ -198,28 +204,6 @@ public sealed class LlmClient : ILlmClient, IDisposable
         {
             _semaphore.Release();
         }
-    }
-
-    private static string FormatGemmaPrompt(LlmPromptSpec spec)
-    {
-        var sb = new System.Text.StringBuilder();
-
-        var systemMsg = spec.Messages.FirstOrDefault(m => m.Role.Equals("system", StringComparison.OrdinalIgnoreCase))?.Content;
-        var userMessages = spec.Messages.Where(m => m.Role.Equals("user", StringComparison.OrdinalIgnoreCase)).ToList();
-
-        sb.Append("<start_of_turn>user\n");
-        if (!string.IsNullOrWhiteSpace(systemMsg))
-        {
-            sb.Append("[System Instructions]\n").Append(systemMsg.Trim()).Append("\n\n");
-        }
-
-        foreach (var msg in userMessages)
-        {
-            sb.Append(msg.Content.Trim()).Append("\n");
-        }
-
-        sb.Append("<end_of_turn>\n<start_of_turn>model\n");
-        return sb.ToString();
     }
 
     private static string ExtractCleanJson(string text)

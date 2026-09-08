@@ -2,6 +2,7 @@ using System.Text.Json;
 using Integrations.YouTube.Innertube.Config;
 using Integrations.YouTube.Innertube.Contracts;
 using Integrations.YouTube.Innertube.Extractors;
+using Research.Domain.Services;
 
 namespace Integrations.YouTube.Innertube.Extractors;
 
@@ -272,7 +273,8 @@ public sealed class WatchNextResponseExtractor : IWatchNextResponseExtractor
                 Text: text,
                 LikeCount: likeCount,
                 PublishedTime: pubTime,
-                CommentId: commentId));
+                CommentId: commentId,
+                Category: ConfusionDetector.ClassifyCommentCategory(text)));
         }
     }
 

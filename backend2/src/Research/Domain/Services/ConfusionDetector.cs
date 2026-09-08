@@ -74,6 +74,35 @@ public sealed partial class ConfusionDetector
         return new ConfusionAnalysisResult(finalIndex, status, questions, frustrations, debates, fix);
     }
 
+    /// <summary>
+    /// Классифицирует комментарий в одну из категорий фрикции.
+    /// Паттерны 1:1 синхронизированы с frontend detective (FrictionBadge.detectFrictionCategory),
+    /// порядок проверки вопрос → проблема → спор → механизм → general такой же, как в UI.
+    /// </summary>
+    public static string ClassifyCommentCategory(string text)
+    {
+        var lower = text.ToLowerInvariant();
+
+        if (CategoryQuestionRegex().IsMatch(lower)) return "question";
+        if (CategoryProblemRegex().IsMatch(lower)) return "problem";
+        if (CategoryDebateRegex().IsMatch(lower)) return "debate";
+        if (CategoryMechanismRegex().IsMatch(lower)) return "mechanism";
+
+        return "general";
+    }
+
+    [GeneratedRegex(@"как (правильно|сделать|настроить)|how to|how do i|\?")]
+    private static partial Regex CategoryQuestionRegex();
+
+    [GeneratedRegex(@"не работает|ошибка|баг|сломалось|doesn't work|bug|failed|error")]
+    private static partial Regex CategoryProblemRegex();
+
+    [GeneratedRegex(@"на самом деле|не согласен|вранье|лучше бы|instead of|disagree|wrong")]
+    private static partial Regex CategoryDebateRegex();
+
+    [GeneratedRegex(@"почему|в чем причина|зачем|why does|nobody explains")]
+    private static partial Regex CategoryMechanismRegex();
+
     [GeneratedRegex(@"(как (на самом деле|правильно|сделать|настроить)|how (do you|to actually|can i))", RegexOptions.IgnoreCase)]
     private static partial Regex HowToRegex();
 

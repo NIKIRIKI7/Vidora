@@ -22,7 +22,6 @@ public sealed class VoiceGateway : IVoiceGateway
     {
         var cmd = new SynthesizeSpeechCommand(
             Text: text,
-            Engine: VoiceEngineType.CloudOpenAi,
             SpeakerId: speakerId,
             AlignmentEngine: AlignmentEngineType.Whisper,
             Speed: speed);

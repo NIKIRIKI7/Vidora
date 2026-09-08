@@ -4,6 +4,7 @@ using Kernel.Platform.Process;
 using MediaContext.Domain.Exceptions;
 using MediaContext.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MediaContext.Infrastructure.Normalization;
 
@@ -15,15 +16,18 @@ public sealed class FfmpegBrollNormalizer : IBrollNormalizer
 {
     private readonly IProcessSupervisor _processSupervisor;
     private readonly IPathResolver _pathResolver;
+    private readonly BrollNormalizationOptions _normalizationOptions;
     private readonly ILogger<FfmpegBrollNormalizer> _logger;
 
     public FfmpegBrollNormalizer(
         IProcessSupervisor processSupervisor,
         IPathResolver pathResolver,
+        IOptions<BrollNormalizationOptions> normalizationOptions,
         ILogger<FfmpegBrollNormalizer> logger)
     {
         _processSupervisor = processSupervisor;
         _pathResolver = pathResolver;
+        _normalizationOptions = normalizationOptions.Value;
         _logger = logger;
     }
 
@@ -52,7 +56,9 @@ public sealed class FfmpegBrollNormalizer : IBrollNormalizer
                                $"[0:v]scale={targetW}:{targetH}:force_original_aspect_ratio=decrease[fg]; " +
                                $"[bg][fg]overlay=(W-w)/2:(H-h)/2,fps={fpsStr},format=yuv420p[outv]\"";
 
-        string arguments = $"-y -i \"{safeSource}\" -filter_complex {filterComplex} -map \"[outv]\" -an -c:v libx264 -preset veryfast -crf 22 \"{safeDest}\"";
+        string arguments = $"-y -i \"{safeSource}\" -filter_complex {filterComplex} -map \"[outv]\" -an " +
+                           $"-c:v {_normalizationOptions.VideoCodec} -preset {_normalizationOptions.Preset} " +
+                           $"-crf {_normalizationOptions.CrfInvariantText} \"{safeDest}\"";
 
         _logger.LogInformation("[Normalizer] Запуск нормализации видео {Source} -> {Dest} ({Dimensions}, {Fps} fps)",
             Path.GetFileName(safeSource), Path.GetFileName(safeDest), targetDimensions, targetFps);

@@ -124,111 +124,6 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   }
 }))
 
-const REMOTION_EXPERT_PROMPT = `# Remotion World-Class Motion Graphics Generator
-
-You are a top-tier motion designer (Vox, Magnates Media, Nike commercials, Apple keynote level). Generate production-ready, highly artistic and visually DIVERSE TSX components in Remotion.
-
-## ⛔ CRITICAL NEGATIVE CONSTRAINT (DO NOT GENERATE GENERIC CARDS)
-- DO NOT default to stacked grey/glass rounded "UI cards" with borders and shadows.
-- DO NOT put every sentence into a floating widget or panel.
-- DO NOT reuse the same layout for every fragment — each fragment gets a distinct composition.
-- Match the visual archetype requested in the fragment's visual note. If none is named, pick the archetype that best fits the topic.
-- DO NOT generate burned-in subtitles/captions. No subtitle text overlays by default — only render text that is a deliberate part of the motion design (titles, headers, labels, counters). Voiceover carries the narration.
-
-## 🎨 5 MANDATORY VISUAL ARCHETYPES (CHOOSE PER FRAGMENT)
-
-### 1. POSTER & SPLIT CONTRAST
-- High-contrast geometric background: giant half-black/half-white circle, diagonal split, hard-edged shapes.
-- One central cutout focal element breaking out of its mask.
-- Massive kinetic typography, outline-stroke text flipping to solid fill.
-- Floating metallic/3D accent badges with sharp realistic drop shadows.
-
-### 2. KINETIC EDITORIAL / MINIMAL METAPHOR
-- Clean textured background (cream with grain, or deep obsidian).
-- A single powerful central subject / isolated 3D metaphor (stopwatch, scales, crystal, notebook).
-- Extreme type scale contrast: giant magazine headline + tiny clean metadata.
-- Slow continuous camera drift (Ken Burns) and gentle sine-wave float of the object.
-
-### 3. ACID / STREETWEAR / DYNAMIC COLLAGE
-- Rotated kinetic ribbon stripes with contrasting text (e.g. -5deg / +3deg).
-- Pop-art accents: asterisks ✳, starbursts ✹, stamps, retro halftone dots, noise grain.
-- Cutout photo styling with chromatic aberration and sticker badges.
-
-### 4. GLOWING DARK NEON & HOLOGRAPHIC
-- Deep dark space with atmospheric radial glows and moving light beams.
-- Neon strokes and glowing shapes with intense drop-shadow / box-shadow (NO heavy grey blocks).
-- Clean particle grids, laser pointer sweeps, fluid floating spheres.
-
-### 5. MOTION INFOGRAPHICS & DYNAMIC PATHWAYS
-- Animated SVG maps (country fills), growing bar charts, dotted trajectory lines with moving pointers.
-- Giant animated counters via interpolate() formatted with suffixes ("$44B", "+340%").
-- No frames or boxes around numbers — let them breathe on the background.
-
-## ⚙️ TECHNICAL ANIMATION RULES (STRICT)
-1. **Frame is the only source of truth**: derive every opacity, transform, scale, and filter from \`useCurrentFrame()\`.
-2. **Spring first, interpolate second**: use \`spring({ frame: frame - delay, fps, config })\` for a 0→1 progress, then \`interpolate()\` to map onto visual ranges.
-3. **No static CSS motion**: never use CSS \`transition\` or Tailwind \`animate-*\` classes. Motion lives in the \`style\` prop.
-4. **Stagger everything**: characters, words, ribbons, objects (e.g. \`frame - i * 4\`).
-5. **Layer with AbsoluteFill**: Layer 0 background (gradients, splits, glows, grids) → Layer 1 hero objects / cutouts / metaphors / ribbons → Layer 2 kinetic typography & badges → Layer 3 overlay (vignette, grain, \`pointer-events-none\`).
-6. **Always clamp**: every \`interpolate()\` MUST have \`extrapolateLeft: 'clamp'\` and \`extrapolateRight: 'clamp'\`.
-7. **Responsive layout**: use percentages or \`useVideoConfig()\`, never pixel-positions hard-coded for 1920x1080 only.
-
-## CODE STRUCTURE (MANDATORY)
-\`\`\`tsx
-import React from 'react';
-import {
-  AbsoluteFill,
-  Sequence,
-  useCurrentFrame,
-  useVideoConfig,
-  spring,
-  interpolate,
-  Easing,
-} from 'remotion';
-import { Sparkles, Activity, ShieldCheck, Zap } from 'lucide-react';
-
-export const compositionConfig = {
-  id: 'Scene',
-  durationInFrames: 150,
-  fps: 30,
-  width: 1920,
-  height: 1080,
-};
-
-const COLORS = {
-  primary: '#ddb7ff',
-  secondary: '#4fdbc8',
-  background: '#0b1326',
-  surface: '#171f33',
-  accent: '#ffb4ab',
-  text: '#dae2fd',
-} as const;
-
-const TYPOGRAPHY = {
-  fontFamily: 'Inter, system-ui, sans-serif',
-} as const;
-
-export const Scene: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
-
-  return (
-    <AbsoluteFill className="overflow-hidden" style={{ backgroundColor: COLORS.background, fontFamily: TYPOGRAPHY.fontFamily }}>
-      {/* Layer 0: Background — gradient, geometric split, glow, grid */}
-      <AbsoluteFill />
-      {/* Layer 1: Hero object / metaphor / video / ribbons */}
-      <AbsoluteFill />
-      {/* Layer 2: Kinetic typography, badges */}
-      <AbsoluteFill />
-      {/* Layer 3: Overlay — vignette, grain (pointer-events-none) */}
-      <AbsoluteFill className="pointer-events-none" />
-    </AbsoluteFill>
-  );
-};
-
-export default Scene;
-\`\`\``;
-
 export const getActivePrompt = (category?: PromptCategory): string => {
   if (!category || !category.versions) return ''
   const active = category.versions.find(v => v.id === category.activeId)
@@ -241,9 +136,7 @@ const createDefaultCategory = (content: string, name = 'Default'): PromptCategor
 })
 
 export const DEFAULT_PROMPTS: GlobalPromptSettings = {
-  scene: createDefaultCategory(`${REMOTION_EXPERT_PROMPT}
-
-{{USE_3D_INSTRUCTION}}
+  scene: createDefaultCategory(`{{USE_3D_INSTRUCTION}}
 
 ---
 
@@ -271,9 +164,7 @@ export const compositionConfig = {
 {{FRAGMENTS}}
 
 Generate ONLY the complete TSX code for this scene. No markdown wrapping outside the code block, no explanations.`, 'Default Scene (TSX)'),
-  fragment: createDefaultCategory(`${REMOTION_EXPERT_PROMPT}
-
-{{USE_3D_INSTRUCTION}}
+  fragment: createDefaultCategory(`{{USE_3D_INSTRUCTION}}
 
 ---
 
@@ -301,9 +192,7 @@ export const compositionConfig = {
 **Voiceover:** "{{TEXT}}"
 
 Generate ONLY the complete TSX code for this fragment. No markdown wrapping outside the code block, no explanations.`, 'Default Fragment (TSX)'),
-  project: createDefaultCategory(`${REMOTION_EXPERT_PROMPT}
-
-{{USE_3D_INSTRUCTION}}
+  project: createDefaultCategory(`{{USE_3D_INSTRUCTION}}
 
 ---
 

@@ -1,14 +1,9 @@
-using System.Text.Json;
-using Kernel.Exceptions;
-using Kernel.Platform.Config;
+using Integrations.OmniVoice.Audio;
+using Integrations.OmniVoice.Contracts;
 using Kernel.Platform.FileSystem;
-using Kernel.Platform.Process;
+using Kernel.Platform.Gpu;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using SystemContext.Domain;
-using SystemContext.Domain.Ports;
 using Voice.Domain;
-using Voice.Domain.Exceptions;
 using Voice.Domain.ValueObjects;
 
 namespace Voice.Infrastructure.Providers.Local;
@@ -17,94 +12,59 @@ public sealed class OmniVoiceTtsProvider : ITtsEngineProvider
 {
     public VoiceEngineType EngineType => VoiceEngineType.LocalOmniVoice;
 
-    private readonly IMlProcessHost _mlHost;
+    private readonly IOmniVoiceEngine _engine;
+    private readonly IGpuManager _gpuManager;
     private readonly IPathResolver _pathResolver;
-    private readonly IAiModelRepository _modelRepo;
-    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<OmniVoiceTtsProvider> _logger;
 
     public OmniVoiceTtsProvider(
-        IMlProcessHost mlHost,
+        IOmniVoiceEngine engine,
+        IGpuManager gpuManager,
         IPathResolver pathResolver,
-        IAiModelRepository modelRepo,
-        IOptions<AppStorageConfig> storageConfig,
         ILogger<OmniVoiceTtsProvider> logger)
     {
-        _mlHost = mlHost;
+        _engine = engine;
+        _gpuManager = gpuManager;
         _pathResolver = pathResolver;
-        _modelRepo = modelRepo;
-        _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
     public async Task<RawSynthesisResult> SynthesizeAsync(string text, VoiceSpec spec, string destinationPath, CancellationToken ct)
     {
-        var modelTarget = _storageConfig.GetModelPath("omnivoice");
-        var model = await _modelRepo.GetByIdAsync("omnivoice", ct);
-        if (model != null && !string.IsNullOrWhiteSpace(model.TargetDirectory))
-        {
-            modelTarget = model.TargetDirectory;
-        }
-
-        var resolvedModelDir = ModelPathResolver.Locate(modelTarget, _storageConfig.DataStorageDir);
-        if (string.IsNullOrEmpty(resolvedModelDir))
-        {
-            throw new DomainConflictException($"Локальная модель OmniVoice не найдена на диске (ожидается в '{modelTarget}').", "OMNIVOICE_NOT_FOUND");
-        }
-
-        if (model != null && model.Status != ModelDownloadStatus.Ready)
-        {
-            var size = Directory.EnumerateFiles(resolvedModelDir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
-            model.MarkReady(size);
-            await _modelRepo.UpdateAsync(model, ct);
-            await _modelRepo.SaveChangesAsync(ct);
-        }
-
         var safeDest = _pathResolver.ResolveSafePath(destinationPath);
         var dir = Path.GetDirectoryName(safeDest);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-
-        var payload = new
+        if (!string.IsNullOrEmpty(dir))
         {
-            text,
-            speaker_id = spec.SpeakerId,
-            speed = spec.Speed,
-            pitch = spec.Pitch,
-            reference_audio = spec.ReferenceAudioPath,
-            output_path = safeDest,
-            model_dir = resolvedModelDir
-        };
-
-        var result = await _mlHost.ExecuteScriptAsync(
-            scriptRelativePath: _storageConfig.GetScriptPath("omnivoice_tts.py"),
-            jsonPayload: payload,
-            contextName: "TTS_OmniVoice",
-            acquireGpuLock: true,
-            cancellationToken: ct);
-
-        if (!File.Exists(safeDest))
-        {
-            throw new VoiceSynthesisException("Скрипт OmniVoice завершился успешно, но итоговый файл не был записан.", safeDest);
+            Directory.CreateDirectory(dir);
         }
 
-        var fileInfo = new FileInfo(safeDest);
-        double durationSeconds = ExtractDuration(result.StandardOutput, fileInfo.Length);
+        _logger.LogInformation(
+            "[Voice:OmniVoice] Synthesis request: Speaker='{Speaker}', Speed={Speed:F2}, Pitch={Pitch:F2}, CFG={Cfg:F2}, Steps={Steps}",
+            spec.SpeakerId, spec.Speed, spec.Pitch, spec.GuidanceScale, spec.NumSteps);
 
-        return new RawSynthesisResult(safeDest, durationSeconds, fileInfo.Length);
-    }
-
-    private static double ExtractDuration(string standardOutput, long fileSizeBytes)
-    {
-        try
+        await using (await _gpuManager.AcquireGpuLockAsync("OmniVoice_TTS", ct))
         {
-            using var doc = JsonDocument.Parse(standardOutput);
-            if (doc.RootElement.TryGetProperty("duration_seconds", out var d))
+            OmniVoiceSynthesisResult result;
+
+            if (!string.IsNullOrWhiteSpace(spec.ReferenceAudioPath) && File.Exists(spec.ReferenceAudioPath))
             {
-                return d.GetDouble();
+                result = await _engine.SynthesizeWithCloneAsync(
+                    text, spec.ReferenceAudioPath, null, spec.Speed, spec.Pitch, spec.NumSteps, spec.GuidanceScale, ct);
             }
-        }
-        catch { }
+            else
+            {
+                result = await _engine.SynthesizeSpeechAsync(
+                    text, spec.SpeakerId, spec.Speed, spec.Pitch, spec.NumSteps, spec.GuidanceScale, ct);
+            }
 
-        return fileSizeBytes / (24000.0 * 2);
+            await WavAudioEncoder.WriteWavFileAsync(safeDest, result.Samples, result.SampleRate, ct);
+
+            var fileInfo = new FileInfo(safeDest);
+            _logger.LogInformation(
+                "[Voice:OmniVoice] File saved: {Path} ({Bytes} bytes, {Duration:F2} s)",
+                safeDest, fileInfo.Length, result.DurationSeconds);
+
+            return new RawSynthesisResult(safeDest, result.DurationSeconds, fileInfo.Length);
+        }
     }
 }

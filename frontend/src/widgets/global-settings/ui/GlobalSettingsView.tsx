@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
 import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, Plus, Trash2, Video } from 'lucide-react'
 import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory } from '@entities/project'
+import { useModelCatalog } from '@entities/project/model/useModelCatalog'
 import { SkillsSettingsView } from '@features/settings'
 import { API } from '@shared/lib'
 
@@ -62,6 +63,11 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
   } = useSettingsStore()
 
   const showNotification = useNotificationStore(s => s.showNotification)
+
+  const { localModels: locScenModels, cloudModels: cloudScenModels } = useModelCatalog('ScenarioDrafting')
+  const { localModels: locVisModels, cloudModels: cloudVisModels } = useModelCatalog('SceneCodeGeneration')
+  const { localModels: locBrollModels, cloudModels: cloudBrollModels } = useModelCatalog('BRollMatching')
+  const { localModels: locAudioModels, cloudModels: cloudAudioModels } = useModelCatalog('TtsVoice')
 
   const [activeTab, setActiveTab] = useState<'ai' | 'prompts' | 'skills' | 'audio' | 'voices'>('ai')
   const [showKey, setShowKey] = useState(false)
@@ -187,8 +193,20 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                     ) : (
                       <Input list="loc-scen" value={localEngines.scenario} onChange={e => setLocalEngine('scenario', e.target.value)} className="font-mono text-sm" />
                     )}
-                    <datalist id="cloud-scen"><option value="anthropic/claude-sonnet-5" /><option value="anthropic/claude-3.5-sonnet" /><option value="openai/gpt-4o" /><option value="deepseek/deepseek-r1" /></datalist>
-                    <datalist id="loc-scen"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="llama3.1-8b" /></datalist>
+                    <datalist id="cloud-scen">
+                      {cloudScenModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                        </option>
+                      ))}
+                    </datalist>
+                    <datalist id="loc-scen">
+                      {locScenModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </FieldGroup>
                 </div>
 
@@ -208,8 +226,20 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                     ) : (
                       <Input list="loc-vis" value={localEngines.visual} onChange={e => setLocalEngine('visual', e.target.value)} className="font-mono text-sm" />
                     )}
-                    <datalist id="cloud-vis"><option value="anthropic/claude-sonnet-5" /><option value="google/gemini-2.5-flash" /><option value="openai/gpt-4o" /><option value="deepseek/deepseek-v4-pro" /></datalist>
-                    <datalist id="loc-vis"><option value="gemma3:4b" /><option value="qwen2.5-coder" /><option value="deepseek-coder-v2" /></datalist>
+                    <datalist id="cloud-vis">
+                      {cloudVisModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                        </option>
+                      ))}
+                    </datalist>
+                    <datalist id="loc-vis">
+                      {locVisModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </FieldGroup>
                 </div>
 
@@ -232,8 +262,20 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                     ) : (
                       <Input list="loc-broll" value={localEngines.broll} onChange={e => setLocalEngine('broll', e.target.value)} className="font-mono text-sm" />
                     )}
-                    <datalist id="cloud-broll"><option value="anthropic/claude-sonnet-5" /><option value="anthropic/claude-3.5-sonnet" /><option value="openai/gpt-4o-mini" /><option value="deepseek/deepseek-chat" /></datalist>
-                    <datalist id="loc-broll"><option value="qwen2.5-coder" /><option value="gemma3:4b" /><option value="llama3.1-8b" /></datalist>
+                    <datalist id="cloud-broll">
+                      {cloudBrollModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                        </option>
+                      ))}
+                    </datalist>
+                    <datalist id="loc-broll">
+                      {locBrollModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </FieldGroup>
                 </div>
 
@@ -253,8 +295,20 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                     ) : (
                       <Input list="loc-aud" value={localEngines.audio} onChange={e => setLocalEngine('audio', e.target.value)} className="font-mono text-sm" />
                     )}
-                    <datalist id="cloud-aud"><option value="minimax/speech-2.8-hd" /><option value="minimax/speech-2.8-turbo" /><option value="minimax/speech-2.6-hd" /><option value="openai/tts-1-hd" /></datalist>
-                    <datalist id="loc-aud"><option value="k2-fsa/OmniVoice" /><option value="fishaudio/s2-pro" /><option value="FunAudioLLM/Fun-CosyVoice3-0.5B" /><option value="qwen-tts/voice-design" /><option value="qwen-tts/clone" /><option value="qwen-tts/custom-voice" /><option value="moss-tts/local" /><option value="snakers4/silero-models" /></datalist>
+                    <datalist id="cloud-aud">
+                      {cloudAudioModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                        </option>
+                      ))}
+                    </datalist>
+                    <datalist id="loc-aud">
+                      {locAudioModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {!m.is_available ? '(нет весов)' : '✓'}
+                        </option>
+                      ))}
+                    </datalist>
                   </FieldGroup>
                 </div>
 

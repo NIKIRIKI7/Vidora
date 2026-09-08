@@ -89,18 +89,6 @@ public static class ModelPathResolver
             }
         }
 
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (cleanTarget.Contains("whisper", StringComparison.OrdinalIgnoreCase))
-        {
-            results.Add(Path.Combine(userProfile, ".cache", "whisper", Path.GetFileName(cleanTarget)));
-            results.Add(Path.Combine(userProfile, ".cache", "whisper", "small.pt"));
-        }
-
-        if (cleanTarget.Contains("omnivoice", StringComparison.OrdinalIgnoreCase))
-        {
-            results.Add(Path.Combine(userProfile, ".cache", "huggingface", "hub", "models--k2-fsa--OmniVoice"));
-        }
-
         return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }

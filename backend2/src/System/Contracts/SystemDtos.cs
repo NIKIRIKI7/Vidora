@@ -57,3 +57,12 @@ public sealed record SystemLogEntryDto(
     [property: JsonPropertyName("event_id")] int EventId,
     [property: JsonPropertyName("message")] string Message,
     [property: JsonPropertyName("exception")] object? Exception);
+
+public sealed record ModelCatalogEntryDto(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("provider")] string Provider, // "local_gguf" | "local_voice" | "routerai" | "aitunnel" | "openai" | "minimax"
+    [property: JsonPropertyName("mode")] string Mode,         // "local" | "cloud"
+    [property: JsonPropertyName("roles")] IReadOnlyList<ModelTaskRole> Roles,
+    [property: JsonPropertyName("is_available")] bool IsAvailable,
+    [property: JsonPropertyName("status_details")] string? StatusDetails = null);

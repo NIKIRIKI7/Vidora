@@ -171,7 +171,7 @@ public class ProductionTests
         await File.WriteAllTextAsync(dummyMasterVideo, "dummy-master-mp4");
 
         videoStitcher.Setup(v => v.ConcatenateScenesAsync(It.IsAny<IReadOnlyList<StitchVideoItem>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<string, string, CancellationToken>((items, outputPath, ct) =>
+            .Returns<IReadOnlyList<StitchVideoItem>, string, CancellationToken>((items, outputPath, ct) =>
             {
                 File.WriteAllText(outputPath, "dummy-stitched-video");
                 return Task.FromResult(outputPath);

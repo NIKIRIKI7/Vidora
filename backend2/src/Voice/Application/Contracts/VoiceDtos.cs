@@ -119,6 +119,18 @@ public sealed record SpeakerProfileDto
     };
 }
 
+public sealed record VoiceEngineInfoDto(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("mode")] string Mode,
+    [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities,
+    [property: JsonPropertyName("supports_clone")] bool SupportsClone,
+    [property: JsonPropertyName("supports_design")] bool SupportsDesign,
+    [property: JsonPropertyName("supports_synthesis")] bool SupportsSynthesis,
+    [property: JsonPropertyName("is_available")] bool IsAvailable,
+    [property: JsonPropertyName("status_message")] string? StatusMessage,
+    [property: JsonPropertyName("description")] string Description);
+
 public sealed record DesignSpeakerRequest(
     [property: JsonPropertyName("description")] string Description,
     [property: JsonPropertyName("language")] string Language,
@@ -127,7 +139,8 @@ public sealed record DesignSpeakerRequest(
     [property: JsonPropertyName("accent")] string? Accent,
     [property: JsonPropertyName("emotion")] string? Emotion,
     [property: JsonPropertyName("style")] string? Style,
-    [property: JsonPropertyName("speed")] double Speed = 1.0);
+    [property: JsonPropertyName("speed")] double Speed = 1.0,
+    [property: JsonPropertyName("engine")] VoiceEngineType? Engine = null);
 
 public sealed record CloneSpeakerRequest(
     [property: JsonPropertyName("name")] string Name,

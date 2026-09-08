@@ -21,7 +21,10 @@ public enum SkillStage
     VisualAnalysis,
 
     [JsonStringEnumMemberName("trend_research")]
-    TrendResearch
+    TrendResearch,
+
+    [JsonStringEnumMemberName("broll_matching")]
+    BrollMatching
 }
 
 public static class SkillStageExtensions
@@ -33,6 +36,7 @@ public static class SkillStageExtensions
         SkillStage.ScriptDrafting => "script_drafting",
         SkillStage.VisualAnalysis => "visual_analysis",
         SkillStage.TrendResearch => "trend_research",
+        SkillStage.BrollMatching => "broll_matching",
         _ => stage.ToString().ToLowerInvariant()
     };
 
@@ -66,6 +70,10 @@ public static class SkillStageExtensions
             case "trend_research":
             case "trendresearch":
                 stage = SkillStage.TrendResearch;
+                return true;
+            case "broll_matching":
+            case "brollmatching":
+                stage = SkillStage.BrollMatching;
                 return true;
             default:
                 return Enum.TryParse(value, true, out stage);

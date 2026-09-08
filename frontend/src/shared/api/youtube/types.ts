@@ -18,6 +18,12 @@ export interface DetailedComment {
   likeCount: number
   publishedTime: string
   commentId: string
+  category?:
+    | 'question'
+    | 'problem'
+    | 'debate'
+    | 'mechanism'
+    | 'general'
 }
 
 export interface StolenHook {

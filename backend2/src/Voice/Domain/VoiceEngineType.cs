@@ -6,8 +6,6 @@ namespace Voice.Domain;
 public enum VoiceEngineType
 {
     LocalOmniVoice,
-    LocalCosyVoice,
-    LocalFishAudio,
     CloudOpenAi,
     CloudMiniMax
 }

@@ -23,5 +23,6 @@ public interface IVoiceModule
     Task<string> TranscribeAudioAsync(string audioFilePath, CancellationToken ct = default);
     Task<ProcessAudioDspResponse> ProcessAudioDspAsync(ProcessAudioDspRequest request, CancellationToken ct = default);
     Task<string> ConcatenateAudioAsync(IReadOnlyList<string> audioPaths, string outputPath, CancellationToken ct = default);
+    Task<IReadOnlyList<VoiceEngineInfoDto>> GetAvailableEnginesAsync(CancellationToken ct = default);
     Task UnloadVramAsync(CancellationToken ct = default);
 }

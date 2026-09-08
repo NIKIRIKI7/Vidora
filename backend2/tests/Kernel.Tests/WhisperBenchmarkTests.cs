@@ -78,9 +78,7 @@ public class WhisperBenchmarkTests : IDisposable
             TempDir = "temp",
             MusicDir = "music",
             ToolsDir = "tools",
-            ScriptsDir = "tools/scripts",
-            RemotionWorkspaceDir = "tools/remotion_workspace",
-            PythonVenvName = ".venv-voice"
+            RemotionWorkspaceDir = "tools/remotion_workspace"
         };
 
         var pathResolver = new BenchmarkPathResolver();

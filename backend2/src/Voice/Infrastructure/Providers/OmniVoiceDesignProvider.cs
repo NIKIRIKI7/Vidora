@@ -1,8 +1,10 @@
+using Integrations.OmniVoice.Audio;
+using Integrations.OmniVoice.Contracts;
 using Kernel.Platform.Config;
-using Kernel.Platform.Process;
+using Kernel.Platform.FileSystem;
+using Kernel.Platform.Gpu;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Voice.Domain;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 
@@ -10,59 +12,63 @@ namespace Voice.Infrastructure.Providers;
 
 public sealed class OmniVoiceDesignProvider : IVoiceDesignProvider
 {
-    private readonly IMlProcessHost _mlHost;
+    private readonly IOmniVoiceEngine _engine;
+    private readonly IGpuManager _gpuManager;
+    private readonly IPathResolver _pathResolver;
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<OmniVoiceDesignProvider> _logger;
 
     public OmniVoiceDesignProvider(
-        IMlProcessHost mlHost,
+        IOmniVoiceEngine engine,
+        IGpuManager gpuManager,
+        IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
         ILogger<OmniVoiceDesignProvider> logger)
     {
-        _mlHost = mlHost;
+        _engine = engine;
+        _gpuManager = gpuManager;
+        _pathResolver = pathResolver;
         _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
     public async Task<DesignVoiceResult> DesignVoiceAsync(VoiceDesignSpec spec, CancellationToken ct = default)
     {
-        _logger.LogInformation("[OmniVoiceDesign] Дизайн голоса: '{Desc}', язык={Lang}, пол={Gender}",
-            spec.Description, spec.Language, spec.Gender);
-
-        var payload = new
-        {
-            description = spec.Description,
-            language = spec.Language,
-            gender = spec.Gender,
-            age_range = spec.AgeRange,
-            accent = spec.Accent,
-            emotion = spec.Emotion,
-            style = spec.Style,
-            speed = spec.Speed
-        };
-
-        var result = await _mlHost.ExecuteScriptAsync(
-            scriptRelativePath: _storageConfig.GetScriptPath("omnivoice_design.py"),
-            jsonPayload: payload,
-            contextName: "VoiceDesign_OmniVoice",
-            acquireGpuLock: true,
-            cancellationToken: ct);
+        _logger.LogInformation(
+            "[Voice:OmniVoice:Design] Voice design by attributes: '{Desc}', Language: {Lang}",
+            spec.Description, spec.Language);
 
         var speakerId = $"designed_{Guid.NewGuid():N}"[..16];
-        var previewPath = ExtractPreviewPath(result.StandardOutput);
+        var promptParts = new List<string> { spec.Description };
 
-        return new DesignVoiceResult(speakerId, spec.Description, previewPath);
-    }
+        if (!string.IsNullOrWhiteSpace(spec.Gender)) promptParts.Add(spec.Gender);
+        if (!string.IsNullOrWhiteSpace(spec.AgeRange)) promptParts.Add(spec.AgeRange);
+        if (!string.IsNullOrWhiteSpace(spec.Accent)) promptParts.Add(spec.Accent);
+        if (!string.IsNullOrWhiteSpace(spec.Emotion)) promptParts.Add(spec.Emotion);
+        if (!string.IsNullOrWhiteSpace(spec.Style)) promptParts.Add(spec.Style);
+        promptParts.Add($"{spec.Language} language");
 
-    private static string? ExtractPreviewPath(string standardOutput)
-    {
-        try
+        var combinedPrompt = string.Join(", ", promptParts);
+
+        await using (await _gpuManager.AcquireGpuLockAsync("OmniVoice_Design", ct))
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(standardOutput);
-            if (doc.RootElement.TryGetProperty("preview_audio_path", out var path))
-                return path.GetString();
+            var previewText = spec.Language.StartsWith("ru", StringComparison.OrdinalIgnoreCase)
+                ? "Это демонстрация тембра, созданного в конструкторе голоса Vidora."
+                : "This is a demonstration of the custom voice designed inside Vidora.";
+
+            var synthesis = await _engine.SynthesizeWithDesignAsync(previewText, combinedPrompt, spec.Speed, 1.0, null, null, ct);
+
+            var previewDir = _pathResolver.ResolveSafePath(Path.Combine(_storageConfig.DataStorageDir, "temp", "voice", "previews"));
+            Directory.CreateDirectory(previewDir);
+            var previewPath = Path.Combine(previewDir, $"{speakerId}_preview.wav");
+
+            await WavAudioEncoder.WriteWavFileAsync(previewPath, synthesis.Samples, synthesis.SampleRate, ct);
+
+            _logger.LogInformation(
+                "[Voice:OmniVoice:Design] Voice designed: {SpeakerId}, Preview={Path}",
+                speakerId, previewPath);
+
+            return new DesignVoiceResult(speakerId, combinedPrompt, previewPath);
         }
-        catch { }
-        return null;
     }
 }

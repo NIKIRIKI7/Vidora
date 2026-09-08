@@ -1,3 +1,4 @@
+using Integrations.Whisper.Audio;
 using Microsoft.Extensions.Logging;
 using Voice.Domain;
 using Voice.Domain.Ports;
@@ -25,7 +26,7 @@ public sealed class NativeFallbackAlignmentProvider : IForcedAlignmentProvider
         long totalDurationMs = 1500;
         if (File.Exists(audioFilePath))
         {
-            totalDurationMs = Math.Max(400, (long)(new FileInfo(audioFilePath).Length / (44100.0 * 2) * 1000));
+            totalDurationMs = Math.Max(400, (long)(WavAudioDecoder.ProbeWavDuration(audioFilePath) * 1000));
         }
 
         long step = totalDurationMs / tokens.Length;

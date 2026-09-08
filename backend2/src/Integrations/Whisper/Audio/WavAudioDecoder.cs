@@ -129,4 +129,68 @@ public static class WavAudioDecoder
         var duration = TimeSpan.FromSeconds((double)final16k.Length / 16000.0);
         return new DecodedAudio(final16k, 16000, duration);
     }
+
+    /// <summary>
+    /// Определяет длительность WAV (в секундах) по RIFF-заголовку без чтения звуковых данных.
+    /// Точное значение берётся из data-чанка; если заголовок битый/не-WAV, используется
+    /// консервативная оценка 48kHz/16bit mono (мусорный заголовок всё равно не декодируется).
+    /// </summary>
+    public static double ProbeWavDuration(string wavFilePath)
+    {
+        using var stream = new FileStream(wavFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var reader = new BinaryReader(stream);
+
+        if (stream.Length < 12) return EstimateFromFileSize(stream.Length);
+
+        var riff = new string(reader.ReadChars(4));
+        _ = reader.ReadInt32();
+        var wave = new string(reader.ReadChars(4));
+
+        if (riff != "RIFF" || wave != "WAVE") return EstimateFromFileSize(stream.Length);
+
+        short channels = 1;
+        uint sampleRate = 16000;
+        short bitsPerSample = 16;
+        long dataSize = 0;
+
+        try
+        {
+            while (stream.Position + 8 <= stream.Length)
+            {
+                var chunkId = new string(reader.ReadChars(4));
+                var chunkSize = reader.ReadInt32();
+
+                if (chunkId == "fmt ")
+                {
+                    _ = reader.ReadInt16(); // audioFormat
+                    channels = reader.ReadInt16();
+                    sampleRate = (uint)reader.ReadInt32();
+                    _ = reader.ReadInt32(); // byteRate
+                    _ = reader.ReadInt16(); // blockAlign
+                    bitsPerSample = reader.ReadInt16();
+                    if (chunkSize > 16) reader.BaseStream.Seek(chunkSize - 16, SeekOrigin.Current);
+                }
+                else if (chunkId == "data")
+                {
+                    dataSize = chunkSize;
+                    break;
+                }
+                else
+                {
+                    reader.BaseStream.Seek(chunkSize, SeekOrigin.Current);
+                }
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            return EstimateFromFileSize(stream.Length);
+        }
+
+        long bytesPerSecond = (long)sampleRate * channels * (Math.Max(bitsPerSample, (short)16) / 8);
+        if (bytesPerSecond <= 0 || dataSize <= 0) return EstimateFromFileSize(stream.Length);
+
+        return dataSize / (double)bytesPerSecond;
+    }
+
+    private static double EstimateFromFileSize(long bytes) => bytes / (48000.0 * 2.0);
 }

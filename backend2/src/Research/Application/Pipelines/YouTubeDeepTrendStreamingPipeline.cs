@@ -74,12 +74,8 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         {
             try
             {
-                var effectiveQuery = Regex.Replace(options.Query, @"[,;]+", " ").Trim();
-                effectiveQuery = Regex.Replace(effectiveQuery, @"\s+", " ");
-                if (options.Language.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(options.Query, @"[\u0400-\u04FF]"))
-                {
-                    effectiveQuery = SignalIngestor.ToEnglishTechQuery(options.Query);
-                }
+                var nicheContext = await _signalIngestor.ResolveNicheContextAsync(options.Query, options.Language, ct);
+                var effectiveQuery = nicheContext.EffectiveQuery;
 
                 var formatTitle = options.VideoType == "short" ? "Shorts (<=60s)" : options.VideoType == "long" ? "Длинные (>60s)" : "Все";
                 await EmitLog(EmitAsync, $"[DeepTrend] Поиск: '{effectiveQuery}' | за {options.DaysBack} дн. | Сабы: {options.MinSubs:N0} - {options.MaxSubs:N0} | Ratio >{options.MinRatio:F1}x | {formatTitle} | Язык: {options.Language.ToUpper()}");

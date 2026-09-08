@@ -1,544 +1,1166 @@
-import { useState, useRef } from 'react'
-import { Button, Input, Select, FieldGroup, Slider, Spinner, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
-import { ArrowLeft, Mic, Plus, Trash2, Upload, Play, AudioLines, BrainCircuit, Wand2, Save, Dices, Sparkles, Wand } from 'lucide-react'
-import { useSettingsStore, useNotificationStore, type GlobalVoice } from '@entities/project'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import {
+  Button,
+  Input,
+  Slider,
+  Switch,
+  Select,
+  Spinner,
+  VoiceTagToolbar,
+  useVoiceTagInserter,
+} from '@shared/ui'
+import {
+  ArrowLeft,
+  Mic,
+  Play,
+  RefreshCw,
+  Cpu,
+  Sparkles,
+  Wand2,
+  Upload,
+  SlidersHorizontal,
+  Trash2,
+  Dices,
+  ChevronDown,
+  FileAudio,
+  Cloud,
+  Server,
+} from 'lucide-react'
+import { useNotificationStore } from '@entities/project'
 import { API } from '@shared/lib'
+import {
+  voiceApi,
+  type SpeakerProfileDto,
+  type AiModelDto,
+  type VoiceMode,
+  type AlignmentEngineType,
+  type TimedWord,
+  type VoiceEngineInfoDto,
+} from '@shared/api/voice'
 
-const RANDOM_DESIGN_PROMPTS = [
-  'Глубокий мужской голос, спокойный, с легкой хрипотцой, рассказывает документальный фильм, русский язык',
-  'Энергичный женский голос, радостный, говорит быстро, интонация блогера, русский язык',
-  'Низкий мужской голос, уставший, говорит медленно, русский язык',
-  'Звонкий женский голос, очень эмоциональный, русский язык',
-  'Спокойный женский голос, ASMR, говорит тихо с придыханием, русский язык',
-  'Молодой парень, гик, увлеченно рассказывает про программирование, русский язык',
+type StudioAction = 'synthesize' | 'design' | 'clone'
+
+const RANDOM_PRESETS = [
+  'male, deep resonant voice, calm authoritative documentary tone, clear diction, russian language',
+  'female, warm melodic podcast host voice, friendly tone, clear diction, russian language',
+  'young male, tech enthusiast, energetic presentation style, fast-paced, russian language',
+  'neutral studio narrator, balanced timbre, professional presentation style, english language',
+  'female expressive voice, bright tone, smooth articulation, english language',
+  'male baritone, confident presentation style, clear diction, english language',
 ]
 
 export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
-  const { globalVoices, setGlobalVoices, taskModes, cloudEngines, localEngines, apiKeys, cloudProvider } = useSettingsStore()
-  const showNotification = useNotificationStore(s => s.showNotification)
-  const activeApiKeys = {
-    ...apiKeys,
-    routerai: cloudProvider === 'routerai' ? apiKeys.routerai : undefined,
-    aitunnel: cloudProvider === 'aitunnel' ? apiKeys.aitunnel : undefined,
-  }
+  const showNotification = useNotificationStore((s) => s.showNotification)
 
-  const [activeVoiceId, setActiveVoiceId] = useState<string | null>(globalVoices[0]?.id || null)
-  const activeVoice = globalVoices.find(v => v.id === activeVoiceId)
+  // 1. Данные дикторов и моделей
+  const [speakers, setSpeakers] = useState<SpeakerProfileDto[]>([])
+  const [aiModels, setAiModels] = useState<AiModelDto[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const [search, setSearch] = useState('')
+  // 1b. Список движков и выбранные движки для clone/design
+  const [engines, setEngines] = useState<VoiceEngineInfoDto[]>([])
+  const [cloneEngine, setCloneEngine] = useState<string>('LocalOmniVoice')
+  const [designEngine, setDesignEngine] = useState<string>('LocalOmniVoice')
 
-  const [isTesting, setIsTesting] = useState(false)
-  const [testText, setTestText] = useState('Всем привет, сегодня мы проверим этот голос в деле.')
-  const [testAudioPath, setTestAudioPath] = useState<string | null>(null)
+  // 2. Текущее действие студии
+  const [activeAction, setActiveAction] = useState<StudioAction>('synthesize')
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
+  // 3. Выбор диктора и фильтрация среды
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string | null>(null)
+  const [activeEnv, setActiveEnv] = useState<VoiceMode>('local')
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'BuiltIn' | 'custom'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
 
-  const testTextRef = useRef<HTMLTextAreaElement>(null)
-  const { insertTag, toggleCaps, hasSelection } = useVoiceTagInserter(testTextRef)
+  // Диагностическое выпадающее меню в шапке
+  const [isStatusOpen, setIsStatusOpen] = useState(false)
+  const statusMenuRef = useRef<HTMLDivElement>(null)
 
-  const isCosyVoice = activeVoice?.ttsEngine.toLowerCase().includes('cosyvoice')
+  // 4. Параметры инференса (Инспектор справа)
+  const [guidanceScale, setGuidanceScale] = useState(2.0)
+  const [numSteps, setNumSteps] = useState(24)
+  const [speed, setSpeed] = useState(1.0)
+  const [pitch, setPitch] = useState(1.0)
+  const [enableDenoise, setEnableDenoise] = useState(true)
+  const [alignmentEngine, setAlignmentEngine] = useState<AlignmentEngineType>('Whisper')
 
-  const [isSwapping, setIsSwapping] = useState(false)
-  const [swapOriginalAudio, setSwapOriginalAudio] = useState<string | null>(null)
-  const [swapNewAudio, setSwapNewAudio] = useState<string | null>(null)
-  const swapInputRef = useRef<HTMLInputElement>(null)
+  // 5. Синтез речи (Playground)
+  const [testText, setTestText] = useState(
+    'Добро пожаловать в Vidora Voice Studio! Это тест звукового движка.'
+  )
+  const [isSynthesizing, setIsSynthesizing] = useState(false)
+  const [audioResultUrl, setAudioResultUrl] = useState<string | null>(null)
+  const [audioDuration, setAudioDuration] = useState<number | null>(null)
+  const [timedWords, setTimedWords] = useState<TimedWord[]>([])
+  const textEditorRef = useRef<HTMLTextAreaElement>(null)
+  const { insertTag, toggleCaps, hasSelection } = useVoiceTagInserter(textEditorRef)
 
-  const handleAddVoice = () => {
-    const newId = crypto.randomUUID()
-    const newVoice: GlobalVoice = {
-      id: newId,
-      name: 'Новый голос',
-      ttsEngine: taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio,
-      voiceModel: 'aria',
-      settings: { speed: 1.0, guidanceScale: 3.0, numSteps: 32 }
-    }
-    setGlobalVoices([...globalVoices, newVoice])
-    setActiveVoiceId(newId)
-  }
+  // 6. Форма Voice Design (Конструктор)
+  const [designPrompt, setDesignPrompt] = useState(RANDOM_PRESETS[0])
+  const [designLanguage, setDesignLanguage] = useState('ru-RU')
+  const [designGender, setDesignGender] = useState('Male')
+  const [isDesigning, setIsDesigning] = useState(false)
 
-  const updateActiveVoice = (updates: Partial<GlobalVoice>) => {
-    if (!activeVoiceId) return
-    setGlobalVoices(globalVoices.map(v => v.id === activeVoiceId ? { ...v, ...updates } : v))
-  }
+  // 7. Форма Voice Clone (Клонирование)
+  const [cloneName, setCloneName] = useState('')
+  const [cloneMode, setCloneMode] = useState<VoiceMode>('local')
+  const [cloneFile, setCloneFile] = useState<File | null>(null)
+  const [cloneRefText, setCloneRefText] = useState('')
+  const [isCloning, setIsCloning] = useState(false)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
-  const handleRandomDesignPrompt = () => {
-    if (!activeVoice) return
-    const prompt = RANDOM_DESIGN_PROMPTS[Math.floor(Math.random() * RANDOM_DESIGN_PROMPTS.length)]
-    updateActiveVoice({ designPrompt: prompt })
-  }
+  // Загрузка данных
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true)
+    else setIsRefreshing(true)
 
-  const handleUploadRef = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('project_path', 'vidora_projects')
-    fd.append('folder', 'refs')
     try {
-      const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
-      const data = await res.json()
-      if (data.status === 'ok') {
-        updateActiveVoice({ refAudioPath: data.path, voiceModel: 'clone' })
-        showNotification('Референс загружен!', 'success')
-      }
-    } catch {
-      showNotification('Ошибка загрузки', 'error')
-    }
-    e.target.value = ''
-  }
+      const [models, profiles, fetchedEngines] = await Promise.all([
+        voiceApi.getAiModels(),
+        voiceApi.getSpeakerProfiles(),
+        voiceApi.getEngines(),
+      ])
+      setAiModels(models)
+      setSpeakers(profiles)
+      setEngines(fetchedEngines)
 
-  const handleDenoiseRef = async () => {
-    if (!activeVoice?.refAudioPath) return
-    setIsProcessing(true)
-    try {
-      const res = await fetch(`${API}/api/v1/audio/process`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_id: 'global_voice',
-          audio_path: activeVoice.refAudioPath,
-          action: 'enhance',
-          project_path: 'vidora_projects'
-        })
+      const localClone =
+        fetchedEngines.find((e) => e.mode === 'local' && e.supports_clone && e.is_available) ||
+        fetchedEngines.find((e) => e.mode === 'local' && e.supports_clone)
+      if (localClone) setCloneEngine(localClone.id)
+      const design =
+        fetchedEngines.find((e) => e.supports_design && e.is_available) ||
+        fetchedEngines.find((e) => e.supports_design)
+      if (design) setDesignEngine(design.id)
+
+      setSelectedSpeakerId((prev) => {
+        if (prev && profiles.some((p) => p.speaker_id === prev)) return prev
+        if (profiles.length === 0) return null
+        const firstLocal = profiles.find((p) => p.mode === 'local')
+        return firstLocal ? firstLocal.speaker_id : profiles[0].speaker_id
       })
-      const data = await res.json()
-      if (data.status === 'ok') {
-        showNotification('Шум подавлен!', 'success')
-        updateActiveVoice({ refAudioPath: data.processed_audio_path })
-      }
-    } catch {
-      showNotification('Ошибка обработки', 'error')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка связи с бэкендом: ${msg}`, 'error')
     } finally {
-      setIsProcessing(false)
+      setIsLoading(false)
+      setIsRefreshing(false)
     }
-  }
+  }, [showNotification])
 
-  const handleSaveVoice = async () => {
-    if (!activeVoice) return
-    if (!activeVoice.name.trim()) {
-      showNotification('Укажите имя голоса перед сохранением', 'error'); return
-    }
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void loadData()
+    }, 0)
+    return () => clearTimeout(t)
+  }, [loadData])
 
-    if (activeVoice.voiceModel === 'clone') {
-      if (!activeVoice.refAudioPath) {
-        showNotification('Для клонирования необходимо загрузить аудио-референс', 'error'); return
-      }
-      if (!activeVoice.refText || !activeVoice.refText.trim()) {
-        showNotification('Текст референса пуст. Запускаю авто-транскрибацию (Whisper)...', 'info')
-        setIsProcessing(true)
-        try {
-          const res = await fetch(`${API}/api/v1/audio/transcribe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audio_path: activeVoice.refAudioPath, whisper_model: 'small' })
-          })
-          const data = await res.json()
-          if (data.status === 'ok') {
-            updateActiveVoice({ refText: data.text })
-            showNotification('Голос успешно сохранен и транскрибирован!', 'success')
-          } else {
-            showNotification('Ошибка транскрибации: ' + data.detail, 'error')
-          }
-        } catch {
-          showNotification('Ошибка сети при транскрибации', 'error')
-        } finally {
-          setIsProcessing(false)
-        }
-        return
-      }
-    } else if (activeVoice.voiceModel === 'design') {
-      if (!activeVoice.designPrompt || !activeVoice.designPrompt.trim()) {
-        showNotification('Введите промпт для дизайна голоса', 'error'); return
+  // Закрытие popover кликом вовне
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
+        setIsStatusOpen(false)
       }
     }
-    showNotification('Голос успешно сохранен и готов к работе в проектах!', 'success')
-  }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [])
 
-  const handleTestVoice = async () => {
-    if (!activeVoice) return
-    setIsTesting(true)
-    setTestAudioPath(null)
+  // Активный диктор
+  const activeSpeaker = useMemo(() => {
+    return (
+      speakers.find((s) => s.speaker_id === selectedSpeakerId) ||
+      speakers.find((s) => s.mode === activeEnv) ||
+      speakers[0] ||
+      null
+    )
+  }, [speakers, selectedSpeakerId, activeEnv])
+
+  // Фильтрация дикторов каталога
+  const filteredSpeakers = useMemo(() => {
+    return speakers.filter((s) => {
+      const matchesEnv = s.mode === activeEnv
+      const matchesCategory =
+        categoryFilter === 'all'
+          ? true
+          : categoryFilter === 'BuiltIn'
+          ? s.source_type === 'BuiltIn'
+          : s.source_type !== 'BuiltIn'
+
+      const matchesSearch =
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.speaker_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+
+      return matchesEnv && matchesCategory && matchesSearch
+    })
+  }, [speakers, activeEnv, categoryFilter, searchQuery])
+
+  // Локальные модели и статус готовности
+  const localModels = useMemo(
+    () => aiModels.filter((m) => m.category === 'Tts' || m.category === 'Stt'),
+    [aiModels]
+  )
+  const isLocalGpuReady = useMemo(
+    () => aiModels.some((m) => m.id.includes('omnivoice') && m.status === 'Ready'),
+    [aiModels]
+  )
+
+  // Динамическая фильтрация движков по среде и возможностям (из бэкенда)
+  const availableCloneEngines = useMemo(
+    () => engines.filter((e) => e.mode === cloneMode && e.supports_clone),
+    [engines, cloneMode]
+  )
+  const availableDesignEngines = useMemo(
+    () => engines.filter((e) => e.supports_design),
+    [engines]
+  )
+
+  // Запуск синтеза
+  const handleSynthesize = async () => {
+    if (!activeSpeaker || !testText.trim()) return
+    setIsSynthesizing(true)
+    setAudioResultUrl(null)
+    setAudioDuration(null)
+    setTimedWords([])
+
     try {
-      const payload = {
-        fragment_id: `test_${activeVoice.id}`,
-        text: testText,
-        voice_model: activeVoice.voiceModel,
-        ref_audio_path: activeVoice.refAudioPath ? activeVoice.refAudioPath.split('?')[0] : null,
-        ref_text: activeVoice.refText || null,
-        design_prompt: activeVoice.designPrompt || null,
-        speed: activeVoice.settings.speed,
-        guidance_scale: activeVoice.settings.guidanceScale,
-        num_steps: activeVoice.settings.numSteps,
-        duration: 0.0,
-        denoise: true,
-        preprocess_prompt: true,
-        postprocess_output: true,
-        project_path: 'vidora_projects',
-        auto_offload_vram: true,
-        engine: activeVoice.ttsEngine,
-        api_keys: activeApiKeys,
-      }
-
-      const res = await fetch(`${API}/api/v1/audio/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      const result = await voiceApi.synthesize({
+        text: testText.trim(),
+        mode: activeSpeaker.mode,
+        speaker_id: activeSpeaker.speaker_id,
+        speed,
+        pitch,
+        guidance_scale: guidanceScale,
+        num_steps: numSteps,
+        alignment_engine: alignmentEngine,
+        backend_engine: activeSpeaker.backend_engine,
       })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
-        setTestAudioPath(`${API}/api/v1/render/media?path=${encodeURIComponent('vidora_projects/assets/voice/' + data.audio_url)}`)
+
+      if (result.audio_path) {
+        const streamUrl = `${API}/api/v1/render/media?path=${encodeURIComponent(result.audio_path)}`
+        setAudioResultUrl(streamUrl)
+        setAudioDuration(result.duration_seconds || null)
+        setTimedWords(result.words || [])
+        showNotification(
+          `Синтез завершен (${result.duration_seconds?.toFixed(2)} с, слов: ${result.words?.length || 0})`,
+          'success'
+        )
       } else {
-        showNotification('Ошибка генерации. Проверьте консоль бэкенда.', 'error')
+        throw new Error('Файл аудиозаписи не сформирован')
       }
-    } catch {
-      showNotification('Ошибка связи с API', 'error')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка синтеза: ${msg}`, 'error')
     } finally {
-      setIsTesting(false)
+      setIsSynthesizing(false)
     }
   }
 
-  const handleVoiceSwapUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('project_path', 'vidora_projects')
-    fd.append('folder', 'swaps')
+  // Очистка VRAM
+  const handleUnloadVram = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
-      const data = await res.json()
-      if (data.status === 'ok') {
-        setSwapOriginalAudio(data.path)
-        setSwapNewAudio(null)
-        showNotification('Аудио для замены загружено', 'success')
-      }
-    } catch {
-      showNotification('Ошибка загрузки', 'error')
+      await voiceApi.unloadVram()
+      showNotification('VRAM память видеокарты очищена', 'success')
+      await loadData(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка очистки VRAM: ${msg}`, 'error')
     }
-    e.target.value = ''
   }
 
-  const handleExecuteVoiceSwap = async () => {
-    if (!swapOriginalAudio || !activeVoice) return
-    setIsSwapping(true)
-    try {
-      showNotification('Распознавание оригинального аудио...', 'info')
-      const resTrans = await fetch(`${API}/api/v1/audio/transcribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio_path: swapOriginalAudio, whisper_model: 'small' })
-      })
-      const dataTrans = await resTrans.json()
-      if (dataTrans.status !== 'ok') throw new Error(dataTrans.detail)
+  // Смена среды клонирования с переключением движка (сначала готовые к работе)
+  const handleCloneModeChange = (mode: VoiceMode) => {
+    setCloneMode(mode)
+    const availableForMode = engines.filter((e) => e.mode === mode && e.supports_clone)
+    if (availableForMode.length > 0) {
+      const ready = availableForMode.find((e) => e.is_available) || availableForMode[0]
+      setCloneEngine(ready.id)
+    } else {
+      setCloneEngine(mode === 'local' ? 'LocalOmniVoice' : 'CloudMiniMax')
+    }
+  }
 
-      showNotification('Генерация новым голосом...', 'info')
-      const payload = {
-        fragment_id: `swap_${activeVoice.id}`,
-        text: dataTrans.text,
-        voice_model: activeVoice.voiceModel,
-        ref_audio_path: activeVoice.refAudioPath ? activeVoice.refAudioPath.split('?')[0] : null,
-        ref_text: activeVoice.refText || null,
-        design_prompt: activeVoice.designPrompt || null,
-        speed: activeVoice.settings.speed,
-        guidance_scale: activeVoice.settings.guidanceScale,
-        num_steps: activeVoice.settings.numSteps,
-        duration: 0.0,
-        denoise: true,
-        preprocess_prompt: true,
-        postprocess_output: true,
-        project_path: 'vidora_projects',
-        auto_offload_vram: true,
-        engine: activeVoice.ttsEngine,
-        api_keys: activeApiKeys,
-      }
-      const resGen = await fetch(`${API}/api/v1/audio/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+  // Создание дизайна голоса
+  const handleCreateDesign = async () => {
+    if (!designPrompt.trim()) {
+      showNotification('Заполните описание тембра', 'error')
+      return
+    }
+    setIsDesigning(true)
+    try {
+      const profile = await voiceApi.designSpeaker({
+        description: designPrompt.trim(),
+        language: designLanguage,
+        gender: designGender,
+        speed: 1.0,
+        engine: designEngine,
       })
-      const dataGen = await resGen.json()
-      if (dataGen.status === 'ok') {
-        setSwapNewAudio(`${API}/api/v1/render/media?path=${encodeURIComponent('vidora_projects/assets/voice/' + dataGen.audio_url)}`)
-        showNotification('Голос успешно заменен!', 'success')
-      } else throw new Error(dataGen.detail)
-    } catch {
-      showNotification('Ошибка замены голоса', 'error')
+      showNotification(`Голос "${profile.name}" успешно задизайнен!`, 'success')
+      setActiveEnv('local')
+      setActiveAction('synthesize')
+      await loadData(true)
+      setSelectedSpeakerId(profile.speaker_id)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка создания дизайна: ${msg}`, 'error')
     } finally {
-      setIsSwapping(false)
+      setIsDesigning(false)
     }
   }
 
-  const filteredVoices = globalVoices.filter(v => v.name.toLowerCase().includes(search.toLowerCase()))
+  // Клонирование голоса
+  const handleCreateClone = async () => {
+    if (!cloneName.trim()) {
+      showNotification('Укажите название клонированного голоса', 'error')
+      return
+    }
+    if (!cloneFile) {
+      showNotification('Выберите аудиофайл референса (WAV/MP3)', 'error')
+      return
+    }
+    setIsCloning(true)
+    try {
+      const profile = await voiceApi.cloneSpeaker(
+        cloneName.trim(),
+        cloneMode,
+        cloneFile,
+        cloneRefText.trim() || undefined,
+        'ru-RU',
+        cloneEngine
+      )
+      showNotification(`Голос "${profile.name}" успешно клонирован!`, 'success')
+      setCloneName('')
+      setCloneFile(null)
+      setCloneRefText('')
+      setActiveEnv(cloneMode)
+      setActiveAction('synthesize')
+      await loadData(true)
+      setSelectedSpeakerId(profile.speaker_id)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка клонирования: ${msg}`, 'error')
+    } finally {
+      setIsCloning(false)
+    }
+  }
+
+  // Удаление диктора
+  const handleDeleteSpeaker = async (id: string, name: string) => {
+    if (!window.confirm(`Удалить диктора "${name}"?`)) return
+    try {
+      await voiceApi.deleteSpeaker(id)
+      showNotification(`Диктор "${name}" удален`, 'info')
+      await loadData(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showNotification(`Ошибка удаления: ${msg}`, 'error')
+    }
+  }
 
   return (
-    <div className="flex h-dvh w-full bg-background animate-in fade-in duration-300">
-      <div className="w-[320px] shrink-0 border-r border-white/10 bg-surface-container/40 flex flex-col">
-        <div className="h-16 border-b border-white/5 flex items-center px-4 gap-3 shrink-0 bg-surface-container-lowest/30">
-          <Button variant="icon" icon={ArrowLeft} onClick={onBack} className="p-2" />
-          <h1 className="font-title-md text-lg font-bold text-white flex items-center gap-2">
-            <Mic size={20} className="text-accent" /> Vidora Audio
-          </h1>
-        </div>
-        <div className="p-4 border-b border-white/5 flex flex-col gap-3">
-          <Input placeholder="Поиск голоса..." value={search} onChange={e => setSearch(e.target.value)} className="text-xs" />
-          <Button variant="dashed" onClick={handleAddVoice} className="w-full text-xs text-primary border-primary/30 hover:bg-primary/10">
-            <Plus size={16} /> Создать новый голос
-          </Button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 custom-scrollbar">
-          {filteredVoices.map(v => (
-            <div
-              key={v.id}
-              onClick={() => setActiveVoiceId(v.id)}
-              className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1 ${activeVoiceId === v.id ? 'bg-primary/10 border-primary text-primary shadow-[0_0_15px_rgba(221,183,255,0.1)]' : 'bg-surface-container border-white/5 hover:border-white/20 text-on-surface'}`}
-            >
-              <span className="font-bold text-sm truncate">{v.name}</span>
-              <span className="text-[10px] opacity-60 font-mono truncate">{v.voiceModel === 'clone' ? 'Клонированный' : v.voiceModel} • {v.ttsEngine.split('/').pop()}</span>
+    <div className="flex flex-col h-dvh w-full bg-surface text-on-surface overflow-hidden select-none">
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 1. Минималистичная верхняя панель (Хедер) */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      <header className="h-14 shrink-0 border-b border-white/10 bg-surface-container-lowest/80 backdrop-blur-xl px-6 flex items-center justify-between z-30">
+        <div className="flex items-center gap-3">
+          <Button variant="icon" icon={ArrowLeft} onClick={onBack} className="p-1.5" />
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+              <Mic size={15} className="text-primary" />
             </div>
-          ))}
-          {filteredVoices.length === 0 && <span className="text-xs text-on-surface-variant text-center mt-4">Голоса не найдены</span>}
+            <span className="font-bold text-sm text-white tracking-tight">Voice Studio</span>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 flex flex-col bg-surface-container-lowest/50 overflow-hidden">
-        {activeVoice ? (
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-            <div className="max-w-4xl mx-auto flex flex-col gap-8 pb-10">
+        {/* Четкий переключатель главных действий */}
+        <div className="flex bg-surface-container-lowest border border-white/10 p-1 rounded-xl shadow-inner">
+          <button
+            type="button"
+            onClick={() => setActiveAction('synthesize')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              activeAction === 'synthesize'
+                ? 'bg-primary/20 text-primary border border-primary/30 shadow-sm'
+                : 'text-on-surface-variant hover:text-white'
+            }`}
+          >
+            <Play size={13} className="fill-current" /> Озвучка &amp; Тест
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveAction('design')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              activeAction === 'design'
+                ? 'bg-secondary/20 text-secondary border border-secondary/30 shadow-sm'
+                : 'text-on-surface-variant hover:text-white'
+            }`}
+          >
+            <Wand2 size={13} /> Voice Design
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveAction('clone')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              activeAction === 'clone'
+                ? 'bg-accent/20 text-accent border border-accent/30 shadow-sm'
+                : 'text-on-surface-variant hover:text-white'
+            }`}
+          >
+            <Upload size={13} /> Voice Clone
+          </button>
+        </div>
 
-              <div className="flex justify-between items-center bg-surface-container p-6 rounded-2xl border border-white/5 shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-2 h-full bg-accent" />
-                <div className="flex flex-col gap-2 flex-1 pl-4">
-                  <input
-                    className="bg-transparent font-title-md text-3xl font-black text-white outline-none placeholder-white/30"
-                    value={activeVoice.name}
-                    onChange={e => updateActiveVoice({ name: e.target.value })}
-                    placeholder="Имя голоса"
-                  />
-                  <div className="flex gap-4 items-center">
-                    <span className="text-xs font-mono text-on-surface-variant bg-black/50 px-2 py-1 rounded">ID: {activeVoice.id.slice(0,8)}</span>
-                    <button className="text-xs text-error hover:underline flex items-center gap-1" onClick={() => {
-                      setGlobalVoices(globalVoices.filter(v => v.id !== activeVoice.id))
-                      setActiveVoiceId(null)
-                    }}>
-                      <Trash2 size={14} /> Удалить голос
-                    </button>
-                  </div>
-                </div>
+        {/* Правый блок: компактный индикатор нейросетей */}
+        <div className="flex items-center gap-2 relative" ref={statusMenuRef}>
+          <button
+            type="button"
+            onClick={() => setIsStatusOpen(!isStatusOpen)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all ${
+              isLocalGpuReady
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isLocalGpuReady ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-amber-400'
+              }`}
+            />
+            <span>{isLocalGpuReady ? 'GPU Ready' : 'GPU Offline'}</span>
+            <ChevronDown size={14} className="opacity-70" />
+          </button>
+
+          <Button
+            variant="ghost"
+            onClick={() => loadData(true)}
+            className="p-1.5 text-on-surface-variant hover:text-white"
+            title="Обновить статусы"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+          </Button>
+
+          {/* Диагностическое окно */}
+          {isStatusOpen && (
+            <div className="absolute right-0 top-full mt-2 w-72 bg-surface-container border border-white/15 rounded-2xl p-4 shadow-2xl z-50 flex flex-col gap-3 text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <span className="font-bold text-white uppercase text-[11px] font-mono">
+                  Локальные модели
+                </span>
+                <span className="text-secondary font-mono text-[10px]">
+                  Готово: {localModels.filter((m) => m.status === 'Ready').length}/{localModels.length}
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-surface-container/40 p-6 rounded-2xl border border-white/5 flex flex-col gap-5">
-                  <h3 className="text-sm font-label uppercase text-primary tracking-wider flex items-center gap-2">
-                    <BrainCircuit size={18} /> Движок и Модель
-                  </h3>
-                  <FieldGroup label="TTS Engine">
-                    <Input
-                      value={activeVoice.ttsEngine}
-                      onChange={e => updateActiveVoice({ ttsEngine: e.target.value })}
-                      className="text-xs font-mono"
-                      list="tts-engines"
-                    />
-                    <datalist id="tts-engines">
-                      <option value="k2-fsa/OmniVoice" />
-                      <option value="fishaudio/s2-pro" />
-                      <option value="FunAudioLLM/Fun-CosyVoice3-0.5B" />
-                      <option value="qwen-tts/voice-design" />
-                      <option value="qwen-tts/clone" />
-                      <option value="qwen-tts/custom-voice" />
-                      <option value="moss-tts/local" />
-                      <option value="minimax/speech-2.8-hd" />
-                      <option value="openai/tts-1-hd" />
-                    </datalist>
-                  </FieldGroup>
-                  <FieldGroup label="Voice Model">
-                    <Select value={activeVoice.voiceModel} onChange={e => updateActiveVoice({ voiceModel: e.target.value })} className="text-xs font-mono">
-                      <optgroup label="Базовые голоса">
-                        <option value="aria">aria (OmniVoice)</option>
-                        <option value="marcus">marcus (OmniVoice)</option>
-                        <option value="nova">nova (OmniVoice/OpenAI)</option>
-                        <option value="Russian_ReliableMan">Russian_ReliableMan (MiniMax)</option>
-                      </optgroup>
-                      <optgroup label="Генерация и Копирование">
-                        <option value="clone">Клонирование по аудио (Voice Cloning)</option>
-                        <option value="design">Дизайн голоса по промпту (Voice Design)</option>
-                      </optgroup>
-                    </Select>
-                  </FieldGroup>
-                </div>
-
-                <div className="bg-surface-container/40 p-6 rounded-2xl border border-white/5 flex flex-col gap-5">
-                  <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
-                    <AudioLines size={18} /> Настройки инференса
-                  </h3>
-                  <FieldGroup label={`Скорость (Speed): ${activeVoice.settings.speed.toFixed(2)}x`}>
-                    <Slider min={0.5} max={2.0} step={0.05} value={activeVoice.settings.speed} onChange={e => updateActiveVoice({ settings: { ...activeVoice.settings, speed: Number(e.target.value) } })} />
-                  </FieldGroup>
-                  <FieldGroup label={`Guidance Scale: ${activeVoice.settings.guidanceScale.toFixed(1)}`}>
-                    <Slider min={0} max={10} step={0.1} value={activeVoice.settings.guidanceScale} onChange={e => updateActiveVoice({ settings: { ...activeVoice.settings, guidanceScale: Number(e.target.value) } })} />
-                  </FieldGroup>
-                  <FieldGroup label={`Шаги (Num Steps): ${activeVoice.settings.numSteps}`}>
-                    <Slider min={8} max={64} step={1} value={activeVoice.settings.numSteps} onChange={e => updateActiveVoice({ settings: { ...activeVoice.settings, numSteps: Number(e.target.value) } })} />
-                  </FieldGroup>
-                  {isCosyVoice && (
-                    <div className="p-3 bg-black/20 border border-white/5 rounded-lg text-xs text-on-surface-variant font-mono">
-                      CosyVoice3 — LLM-движок: Guidance Scale и Steps применяются к diffusion-части (flow-декодер), а стиль/эмоция задаются инструкцией в режиме «Дизайн голоса». Параметры передаются в worker.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {activeVoice.voiceModel === 'clone' && (
-                <div className="bg-surface-container/40 p-6 rounded-2xl border border-warning/30 flex flex-col gap-5 shadow-[0_0_20px_rgba(250,204,21,0.05)]">
-                  <h3 className="text-sm font-label uppercase text-warning tracking-wider flex items-center gap-2">
-                    <Wand2 size={18} /> Данные для клонирования
-                  </h3>
-                  <FieldGroup label="Аудио-референс (.wav / .mp3)">
-                    <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleUploadRef} />
-                    <div className="flex gap-2">
-                      <Button variant="secondary" className="text-xs" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> {activeVoice.refAudioPath ? 'Заменить референс' : 'Загрузить файл'}</Button>
-                      {activeVoice.refAudioPath && (
-                        <Button variant="dashed" className="text-xs text-warning border-warning/50 hover:bg-warning/10" disabled={isProcessing} onClick={handleDenoiseRef}>
-                          {isProcessing ? <Spinner /> : 'Удалить шум (AI)'}
-                        </Button>
-                      )}
-                    </div>
-                    {activeVoice.refAudioPath && (
-                      <div className="mt-3 flex items-center gap-2 bg-black/40 p-2 rounded-lg">
-                        <audio src={`${API}/api/v1/render/media?path=${encodeURIComponent(activeVoice.refAudioPath)}`} controls className="h-8 flex-1" />
+              <div className="flex flex-col gap-1.5">
+                {localModels.map((m) => {
+                  const isReady = m.status === 'Ready'
+                  return (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between p-2 rounded-xl bg-surface-container-lowest border border-white/5"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-bold text-white text-[11px]">{m.name.split(' ')[0]}</span>
+                        <span className="text-[10px] text-on-surface-variant font-mono">
+                          {m.category === 'Stt' ? 'Whisper STT' : 'TTS Модель'}
+                        </span>
                       </div>
-                    )}
-                  </FieldGroup>
-                  <FieldGroup label="Текст референса (Опционально)">
-                    <textarea
-                      className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:border-warning/50"
-                      rows={2}
-                      value={activeVoice.refText || ''}
-                      onChange={e => updateActiveVoice({ refText: e.target.value })}
-                      placeholder="Напишите, что именно говорится в аудиофайле (помогает ИИ лучше клонировать интонацию)..."
-                    />
-                  </FieldGroup>
-                  {isCosyVoice && (
-                    <FieldGroup label="Инструкция стиля клона (Instruct Text)">
-                      <Input
-                        value={activeVoice.designPrompt || ''}
-                        onChange={e => updateActiveVoice({ designPrompt: e.target.value })}
-                        placeholder="Например: Please speak in a happy tone."
-                        className="text-xs border-warning/30"
-                      />
-                    </FieldGroup>
-                  )}
-                </div>
-              )}
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                          isReady
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : 'bg-white/5 text-on-surface-variant/60 border-white/10'
+                        }`}
+                      >
+                        {isReady ? 'Готов' : 'Нет файлов'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
 
-              {activeVoice.voiceModel === 'design' && (
-                <div className="bg-surface-container/40 p-6 rounded-2xl border border-secondary/30 flex flex-col gap-5 shadow-[0_0_20px_rgba(79,219,200,0.05)]">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
-                      <Wand2 size={18} /> Дизайн голоса
-                    </h3>
-                    <Button variant="dashed" onClick={handleRandomDesignPrompt} className="text-xs text-secondary border-secondary/30 hover:bg-secondary/10 py-1 px-2 h-auto">
-                      <Dices size={14} className="mr-1" /> Случайный промпт
-                    </Button>
-                  </div>
-                  <FieldGroup label="Описание голоса (Промпт)">
-                    <textarea
-                      className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:border-secondary/50"
-                      rows={3}
-                      value={activeVoice.designPrompt || ''}
-                      onChange={e => updateActiveVoice({ designPrompt: e.target.value })}
-                      placeholder={isCosyVoice
-                        ? "You are a helpful assistant. Please speak with a calm and warm tone."
-                        : "Например: Глубокий мужской голос, спокойный, с легкой хрипотцой, подходит для документалок..."}
-                    />
-                    <p className="text-[10px] text-on-surface-variant mt-2">
-                      {isCosyVoice
-                        ? "CosyVoice: инструкция на естественном языке (эмоция, скорость, диалект). Токен <|endofprompt|> добавится автоматически."
-                        : "OmniVoice: атрибуты через запятую — пол (male/female), возраст, высота (low/high pitch), акцент (british)."}
-                    </p>
-                  </FieldGroup>
-                  <div className="text-[10px] text-on-surface-variant/80 bg-black/20 p-3 rounded-lg border border-white/5 leading-relaxed">
-                    💡 <b>Совет для Qwen/Moss 1.7b:</b> модели чувствительны к описанию. Добавляйте «русский язык, четкая дикция» в конец описания, чтобы избежать случайного акцента.
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-4 mt-6">
-                <Button variant="primary" onClick={handleSaveVoice} className="flex-1 shadow-lg py-3 text-sm" disabled={isProcessing}>
-                  <Save size={18} className="mr-1" /> Сохранить и проверить голос
+              <div className="pt-2 border-t border-white/10">
+                <Button
+                  variant="ghost"
+                  onClick={handleUnloadVram}
+                  className="w-full text-xs text-secondary border border-secondary/20 hover:bg-secondary/10 py-1.5"
+                >
+                  <Cpu size={13} className="mr-1.5" /> Очистить память VRAM
                 </Button>
               </div>
+            </div>
+          )}
+        </div>
+      </header>
 
-              <div className="bg-primary/10 p-6 rounded-2xl border border-primary/20 flex flex-col gap-4 mt-6">
-                <h3 className="text-sm font-label uppercase text-primary tracking-wider flex items-center gap-2">
-                  <Play size={18} /> Тест-Драйв и Шпаргалка Суфлера
-                </h3>
-                <div className="text-xs font-mono text-primary/80 bg-black/20 p-3 rounded-lg border border-primary/20 leading-relaxed">
-                  <span className="font-bold text-primary">Для MiniMax и OmniVoice:</span><br/>
-                  • Эмоция: <code className="bg-black/40 px-1 rounded">[emotion: happy|sad|angry|fearful|disgusted|surprised|calm]</code> в начале.<br/>
-                  • Паузы: <code className="bg-black/40 px-1 rounded">&lt;#1.5#&gt;</code> (от 0.1 до 3.0 сек) между словами.<br/>
-                  • Звуки: <code className="bg-black/40 px-1 rounded">(breath)</code>, <code className="bg-black/40 px-1 rounded">(sighs)</code>, <code className="bg-black/40 px-1 rounded">(chuckle)</code>, <code className="bg-black/40 px-1 rounded">(laughs)</code>.
-                </div>
-                <VoiceTagToolbar
-                  onInsertTag={insertTag}
-                  onToggleCaps={toggleCaps}
-                  hasSelection={hasSelection}
-                  voiceEngineMode={isCosyVoice ? 'cosyvoice' : 'omnivoice'}
-                  className="w-full"
-                />
-                <textarea
-                  ref={testTextRef}
-                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-3 px-4 text-sm text-on-surface resize-none focus:border-primary/50 shadow-inner"
-                  rows={2}
-                  value={testText}
-                  onChange={e => setTestText(e.target.value)}
-                  placeholder="Введите текст для проверки голоса..."
-                />
-                <div className="flex items-center gap-4">
-                  <Button variant="primary" onClick={handleTestVoice} disabled={isTesting || !testText.trim()} className="px-8 shadow-lg">
-                    {isTesting ? <Spinner /> : 'Озвучить'}
-                  </Button>
-                  {testAudioPath && (
-                    <audio src={testAudioPath} autoPlay controls className="h-10 flex-1" />
-                  )}
-                </div>
-              </div>
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 2. Рабочая область (3 колонки) */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ЛЕВАЯ КОЛОНКА: Каталог дикторов (310px) */}
+        <aside className="w-[310px] shrink-0 border-r border-white/10 bg-surface-container-lowest/40 flex flex-col">
+          {/* Разграничение: Локально vs Облако */}
+          <div className="p-3 border-b border-white/5 flex flex-col gap-2.5">
+            <Input
+              placeholder="Поиск диктора..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="text-xs py-1.5"
+            />
 
-              <div className="bg-gradient-to-br from-secondary/5 to-surface-container-lowest p-6 rounded-2xl border border-secondary/20 flex flex-col gap-4 mt-2">
-                <h3 className="text-sm font-label uppercase text-secondary tracking-wider flex items-center gap-2">
-                  <Sparkles size={18} /> Замена голоса в аудиофайле (Voice Swap)
-                </h3>
-                <p className="text-xs text-on-surface-variant mb-2">
-                  Загрузите аудио с чужим голосом — ИИ распознает текст и переозвучит его текущим активным голосом.
-                </p>
-                <div className="flex gap-4 items-center">
-                  <input type="file" ref={swapInputRef} className="hidden" accept="audio/*" onChange={handleVoiceSwapUpload} />
-                  <Button variant="secondary" onClick={() => swapInputRef.current?.click()}>
-                    <Upload size={14} className="mr-1" /> Загрузить исходник
-                  </Button>
-                  {swapOriginalAudio && (
-                    <audio src={`${API}/api/v1/render/media?path=${encodeURIComponent(swapOriginalAudio)}`} controls className="h-8 flex-1" />
-                  )}
-                </div>
+            {/* Главные вкладки среды */}
+            <div className="flex bg-surface-container-lowest border border-white/10 p-0.5 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveEnv('local')}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  activeEnv === 'local'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                <Server size={13} /> Локальные
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveEnv('cloud')}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  activeEnv === 'cloud'
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                <Cloud size={13} /> Облачные
+              </button>
+            </div>
 
-                {swapOriginalAudio && (
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5">
-                    <Button variant="dashed" onClick={handleExecuteVoiceSwap} disabled={isSwapping} className="border-secondary/50 text-secondary hover:bg-secondary/10 px-6 py-2">
-                      {isSwapping ? <Spinner /> : <><Wand size={16} className="mr-2" /> Конвертировать голос</>}
-                    </Button>
-                    {swapNewAudio && (
-                      <audio src={swapNewAudio} controls className="h-10 flex-1" />
-                    )}
-                  </div>
-                )}
-              </div>
-
+            {/* Под-фильтр категорий */}
+            <div className="flex gap-1 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('all')}
+                className={`px-2 py-0.5 rounded-md transition-colors ${
+                  categoryFilter === 'all'
+                    ? 'bg-white/10 text-white font-bold'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                Все
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('BuiltIn')}
+                className={`px-2 py-0.5 rounded-md transition-colors ${
+                  categoryFilter === 'BuiltIn'
+                    ? 'bg-secondary/20 text-secondary font-bold'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                Заготовки
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('custom')}
+                className={`px-2 py-0.5 rounded-md transition-colors ${
+                  categoryFilter === 'custom'
+                    ? 'bg-accent/20 text-accent font-bold'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                Мои профили
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-on-surface-variant">
-            Выберите голос слева или создайте новый
+
+          {/* Список дикторов */}
+          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 custom-scrollbar">
+            {isLoading ? (
+              <div className="flex justify-center p-8 text-xs text-on-surface-variant">
+                <Spinner className="w-5 h-5" />
+              </div>
+            ) : filteredSpeakers.length === 0 ? (
+              <div className="text-center text-xs text-on-surface-variant/60 py-10">
+                Дикторы не найдены
+              </div>
+            ) : (
+              filteredSpeakers.map((spk) => {
+                const isSelected = activeSpeaker?.speaker_id === spk.speaker_id
+                const isLocal = spk.mode === 'local'
+
+                return (
+                  <div
+                    key={spk.id}
+                    onClick={() => {
+                      setSelectedSpeakerId(spk.speaker_id)
+                      setActiveAction('synthesize')
+                    }}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 group ${
+                      isSelected
+                        ? 'bg-primary/15 border-primary shadow-[0_0_15px_rgba(221,183,255,0.12)]'
+                        : 'bg-surface-container/40 border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                            isLocal
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-sky-500/20 text-sky-300'
+                          }`}
+                        >
+                          {spk.name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-xs text-white truncate group-hover:text-primary transition-colors">
+                            {spk.name}
+                          </span>
+                          <span className="text-[10px] font-mono text-on-surface-variant/70 truncate">
+                            {spk.speaker_id}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Быстрое прослушивание сэмпла */}
+                      {spk.preview_audio_path && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const streamUrl = `${API}/api/v1/render/media?path=${encodeURIComponent(
+                              spk.preview_audio_path!
+                            )}`
+                            const audio = new Audio(streamUrl)
+                            audio.play().catch(() => {})
+                          }}
+                          className="p-1 rounded bg-white/5 hover:bg-primary text-on-surface-variant hover:text-black transition-colors shrink-0"
+                          title="Прослушать сэмпл"
+                        >
+                          <Play size={11} className="fill-current" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] font-mono pt-1 border-t border-white/5 text-on-surface-variant/60">
+                      <span className={isLocal ? 'text-emerald-300/80' : 'text-sky-300/80'}>
+                        {isLocal ? 'Локально (GPU)' : 'Облако (API)'}
+                      </span>
+                      <span>
+                        {spk.language} • {spk.gender || 'Universal'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
-        )}
+        </aside>
+
+        {/* ЦЕНТРАЛЬНАЯ КОЛОНКА: Рабочая студия */}
+        <main className="flex-1 flex flex-col bg-surface-container-lowest/30 overflow-y-auto custom-scrollbar p-6">
+          <div className="max-w-3xl mx-auto w-full flex flex-col gap-6">
+            {/* РЕЖИМ 1: ОЗВУЧКА & СИНТЕЗ (PLAYGROUND) */}
+            {activeAction === 'synthesize' && activeSpeaker && (
+              <>
+                {/* Карточка активного диктора */}
+                <div className="p-5 bg-surface-container/60 rounded-2xl border border-white/10 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-primary/30 to-secondary/30 border border-white/10 flex items-center justify-center text-lg font-bold text-white shrink-0">
+                      {activeSpeaker.name.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base font-bold text-white">{activeSpeaker.name}</h2>
+                        <span
+                          className={`text-[9px] font-mono px-2 py-0.5 rounded-full border ${
+                            activeSpeaker.mode === 'local'
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                          }`}
+                        >
+                          {activeSpeaker.mode === 'local' ? 'Локальный GPU' : 'Облако API'}
+                        </span>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-on-surface-variant border border-white/10">
+                          {activeSpeaker.source_type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-on-surface-variant leading-relaxed">
+                        {activeSpeaker.description || 'Базовый диктор платформы Vidora.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {!activeSpeaker.is_default && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSpeaker(activeSpeaker.id, activeSpeaker.name)}
+                      className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                      title="Удалить диктора"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Редактор текста с интонационными тегами */}
+                <div className="bg-surface-container/40 border border-primary/20 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <Mic size={14} className="text-primary" /> Текст для синтеза
+                    </span>
+                    <span className="text-[11px] font-mono text-secondary">
+                      Диктор: <b className="text-white">{activeSpeaker.speaker_id}</b>
+                    </span>
+                  </div>
+
+                  <VoiceTagToolbar
+                    onInsertTag={insertTag}
+                    onToggleCaps={toggleCaps}
+                    hasSelection={hasSelection}
+                    className="w-full"
+                  />
+
+                  <textarea
+                    ref={textEditorRef}
+                    value={testText}
+                    onChange={(e) => setTestText(e.target.value)}
+                    rows={3}
+                    className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-primary/50 font-sans leading-relaxed resize-none shadow-inner"
+                    placeholder="Введите текст для озвучки диктором..."
+                  />
+
+                  {/* Кнопка запуска синтеза */}
+                  <div className="flex items-center justify-between gap-4 pt-1">
+                    <Button
+                      variant="primary"
+                      onClick={handleSynthesize}
+                      disabled={isSynthesizing || !testText.trim()}
+                      className="py-2.5 px-6 text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/20"
+                    >
+                      {isSynthesizing ? (
+                        <>
+                          <Spinner className="w-3.5 h-3.5" /> Синтез речи...
+                        </>
+                      ) : (
+                        <>
+                          <Play size={14} className="fill-current" /> Озвучить
+                        </>
+                      )}
+                    </Button>
+
+                    {audioResultUrl && (
+                      <div className="flex-1 flex items-center gap-3 bg-black/40 px-3 py-1.5 rounded-xl border border-secondary/30 animate-in fade-in">
+                        <audio src={audioResultUrl} autoPlay controls className="w-full h-7" />
+                        {audioDuration && (
+                          <span className="text-xs font-mono text-secondary whitespace-nowrap">
+                            {audioDuration.toFixed(2)} с
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Пословные таймкоды (Whisper) */}
+                  {timedWords.length > 0 && (
+                    <div className="pt-3 border-t border-white/5 flex flex-col gap-2">
+                      <span className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">
+                        Пословные таймкоды (Whisper Alignment):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto custom-scrollbar">
+                        {timedWords.map((w, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded bg-surface-container-lowest border border-white/10 text-[11px] font-mono text-slate-300 hover:border-primary/50 hover:text-primary transition-colors cursor-default"
+                            title={`${(w.start_ms / 1000).toFixed(2)}s - ${(w.end_ms / 1000).toFixed(2)}s (Уверенность: ${Math.round(w.confidence * 100)}%)`}
+                          >
+                            {w.word}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* РЕЖИМ 2: VOICE DESIGN (КОНСТРУКТОР ТЕМБРА) */}
+            {activeAction === 'design' && (
+              <div className="bg-surface-container/40 border border-secondary/20 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
+                <div className="border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Wand2 size={16} className="text-secondary" />
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+                      Конструктор тембра (Voice Design — Локально)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mt-1">
+                    Сгенерируйте уникальный голос по текстовому описанию без аудиозаписи. Нейросеть
+                    OmniVoice создаст акустический вектор прямо на видеокарте.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  {/* Динамический выбор движка дизайна с бэкенда */}
+                  <div className="space-y-1.5 bg-surface-container-lowest/60 p-3.5 rounded-xl border border-white/5">
+                    <div className="flex items-center justify-between text-xs">
+                      <label className="font-semibold text-slate-300">Движок генерации тембра</label>
+                      <span className="text-[10px] font-mono text-secondary">
+                        {availableDesignEngines.length > 0
+                          ? `${availableDesignEngines.length} доступно`
+                          : 'Нет движков'}
+                      </span>
+                    </div>
+                    <Select
+                      value={designEngine}
+                      onChange={(e) => setDesignEngine(e.target.value)}
+                      className="text-xs py-2 bg-surface-container-lowest"
+                    >
+                      {availableDesignEngines.map((eng) => (
+                        <option key={eng.id} value={eng.id} disabled={!eng.is_available}>
+                          {eng.name}{' '}
+                          {!eng.is_available
+                            ? `(Недоступен: ${eng.status_message || 'нет весов'})`
+                            : '✓ Готов'}
+                        </option>
+                      ))}
+                    </Select>
+                    {engines.find((e) => e.id === designEngine)?.description && (
+                      <p className="text-[11px] text-on-surface-variant/70 leading-relaxed">
+                        {engines.find((e) => e.id === designEngine)?.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-slate-300">
+                        Описание тембра и характера
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDesignPrompt(
+                            RANDOM_PRESETS[Math.floor(Math.random() * RANDOM_PRESETS.length)]
+                          )
+                        }
+                        className="text-[11px] text-secondary hover:underline flex items-center gap-1"
+                      >
+                        <Dices size={13} /> Случайный пресет
+                      </button>
+                    </div>
+                    <textarea
+                      value={designPrompt}
+                      onChange={(e) => setDesignPrompt(e.target.value)}
+                      rows={3}
+                      className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-secondary font-mono leading-relaxed"
+                      placeholder="male, deep resonant voice, calm authoritative documentary tone, clear diction, russian language"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-on-surface-variant">Язык</label>
+                      <Input
+                        value={designLanguage}
+                        onChange={(e) => setDesignLanguage(e.target.value)}
+                        className="text-xs py-2"
+                        placeholder="ru-RU или en-US"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-on-surface-variant">Пол</label>
+                      <Input
+                        value={designGender}
+                        onChange={(e) => setDesignGender(e.target.value)}
+                        className="text-xs py-2"
+                        placeholder="Male / Female"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex justify-end">
+                  <Button
+                    variant="primary"
+                    onClick={handleCreateDesign}
+                    disabled={isDesigning || !designPrompt.trim()}
+                    className="px-6 py-2 text-xs font-bold flex items-center gap-2 bg-gradient-to-r from-secondary to-primary text-black"
+                  >
+                    {isDesigning ? <Spinner className="w-3.5 h-3.5" /> : <Sparkles size={14} />}
+                    Сгенерировать профиль
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* РЕЖИМ 3: VOICE CLONE (КЛОНИРОВАНИЕ) */}
+            {activeAction === 'clone' && (
+              <div className="bg-surface-container/40 border border-accent/20 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
+                <div className="border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Upload size={16} className="text-accent" />
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+                      Клонирование голоса по аудио (Voice Clone)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mt-1">
+                    Создание цифрового клона голоса по короткому аудио-сэмплу (5–15 секунд чистой речи).
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Название голоса</label>
+                    <Input
+                      value={cloneName}
+                      onChange={(e) => setCloneName(e.target.value)}
+                      placeholder="Например: Мой студийный микрофон"
+                      className="text-xs py-2"
+                    />
+                  </div>
+
+                  {/* Четкий выбор: Локально или Облако */}
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-on-surface-variant">Среда клонирования</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleCloneModeChange('local')}
+                          className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                            cloneMode === 'local'
+                              ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-sm'
+                              : 'bg-surface-container-lowest border-white/10 text-on-surface-variant'
+                          }`}
+                        >
+                          <span className="text-xs font-bold flex items-center gap-1.5">
+                            <Server size={13} className="text-emerald-400" /> Локально (GPU)
+                          </span>
+                          <span className="text-[10px] opacity-70">Бесплатно на вашей видеокарте</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCloneModeChange('cloud')}
+                          className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                            cloneMode === 'cloud'
+                              ? 'bg-sky-500/20 border-sky-500 text-white shadow-sm'
+                              : 'bg-surface-container-lowest border-white/10 text-on-surface-variant'
+                          }`}
+                        >
+                          <span className="text-xs font-bold flex items-center gap-1.5">
+                            <Cloud size={13} className="text-sky-400" /> В облаке (API)
+                          </span>
+                          <span className="text-[10px] opacity-70">Высокоточный облачный клон</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Динамический выбор движка, полученного с бэкенда */}
+                    <div className="space-y-1.5 bg-surface-container-lowest/60 p-3 rounded-xl border border-white/5">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="font-semibold text-slate-300">Движок клонирования</label>
+                        <span className="text-[10px] font-mono text-secondary">
+                          {availableCloneEngines.length > 0
+                            ? `${availableCloneEngines.length} доступно`
+                            : 'Нет движков'}
+                        </span>
+                      </div>
+                      <Select
+                        value={cloneEngine}
+                        onChange={(e) => setCloneEngine(e.target.value)}
+                        className="text-xs py-2 bg-surface-container-lowest"
+                      >
+                        {availableCloneEngines.map((eng) => (
+                          <option key={eng.id} value={eng.id} disabled={!eng.is_available}>
+                            {eng.name}{' '}
+                            {!eng.is_available
+                              ? `(Недоступен: ${eng.status_message || 'настройте модель'})`
+                              : '✓ Готов к работе'}
+                          </option>
+                        ))}
+                      </Select>
+                      {engines.find((e) => e.id === cloneEngine)?.description && (
+                        <p className="text-[11px] text-on-surface-variant/70 leading-relaxed">
+                          {engines.find((e) => e.id === cloneEngine)?.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Выбор файла */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-on-surface-variant">
+                      Аудиофайл образца (.wav / .mp3)
+                    </label>
+                    <input
+                      type="file"
+                      ref={uploadInputRef}
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={(e) => e.target.files?.[0] && setCloneFile(e.target.files[0])}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => uploadInputRef.current?.click()}
+                      className="w-full p-4 rounded-xl border border-dashed border-accent/40 hover:bg-accent/10 text-accent transition-all flex items-center justify-center gap-2 text-xs font-semibold"
+                    >
+                      <FileAudio size={16} />
+                      {cloneFile ? cloneFile.name : 'Выбрать аудиофайл (5–15 сек)'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-on-surface-variant">
+                      Текст из аудиофайла (опционально)
+                    </label>
+                    <textarea
+                      value={cloneRefText}
+                      onChange={(e) => setCloneRefText(e.target.value)}
+                      rows={2}
+                      placeholder="Оставьте пустым или укажите текст, который звучит в файле..."
+                      className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex justify-end">
+                  <Button
+                    variant="primary"
+                    onClick={handleCreateClone}
+                    disabled={isCloning || !cloneName.trim() || !cloneFile}
+                    className="px-6 py-2 text-xs font-bold"
+                  >
+                    {isCloning ? <Spinner className="w-3.5 h-3.5 mr-1" /> : null}
+                    Клонировать голос
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+
+        {/* ПРАВАЯ КОЛОНКА: Инспектор параметров инференса (280px) */}
+        <aside className="w-[280px] shrink-0 border-l border-white/10 bg-surface-container-lowest/40 flex flex-col p-4 gap-5 overflow-y-auto custom-scrollbar">
+          <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+              <SlidersHorizontal size={14} className="text-secondary" /> Параметры инференса
+            </span>
+          </div>
+
+          {/* Параметры диффузии (Scale & Steps) */}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-300 font-medium">Guidance Scale (CFG)</span>
+                <span className="font-mono text-secondary font-bold">{guidanceScale.toFixed(1)}</span>
+              </div>
+              <Slider
+                min={1.0}
+                max={5.0}
+                step={0.1}
+                value={guidanceScale}
+                onChange={(e) => setGuidanceScale(Number(e.target.value))}
+              />
+              <span className="text-[10px] text-on-surface-variant/60 leading-tight">
+                Сила следования заданному тембру
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-300 font-medium">Шаги диффузии (Steps)</span>
+                <span className="font-mono text-primary font-bold">{numSteps}</span>
+              </div>
+              <Slider
+                min={16}
+                max={64}
+                step={2}
+                value={numSteps}
+                onChange={(e) => setNumSteps(Number(e.target.value))}
+              />
+              <span className="text-[10px] text-on-surface-variant/60 leading-tight">
+                Детализация звуковой волны (16 — быстро, 32 — оптимум)
+              </span>
+            </div>
+
+            {/* Скорость */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-300 font-medium">Скорость речи</span>
+                <span className="font-mono text-white font-bold">{speed.toFixed(2)}x</span>
+              </div>
+              <Slider
+                min={0.5}
+                max={2.0}
+                step={0.05}
+                value={speed}
+                onChange={(e) => setSpeed(Number(e.target.value))}
+              />
+            </div>
+
+            {/* Высота тона */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-300 font-medium">Высота тона (Pitch)</span>
+                <span className="font-mono text-white font-bold">{pitch.toFixed(2)}x</span>
+              </div>
+              <Slider
+                min={0.7}
+                max={1.4}
+                step={0.05}
+                value={pitch}
+                onChange={(e) => setPitch(Number(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="h-px bg-white/10" />
+
+          {/* Фильтры и DSP */}
+          <div className="flex flex-col gap-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Фильтры и Мастеринг
+            </span>
+
+            <Switch
+              label="Шумоподавление (Denoise)"
+              checked={enableDenoise}
+              onChange={setEnableDenoise}
+            />
+
+            <div className="flex flex-col gap-1.5 pt-1">
+              <label className="text-xs text-on-surface-variant">Forced Alignment (Слова)</label>
+              <Select
+                value={alignmentEngine}
+                onChange={(e) => setAlignmentEngine(e.target.value as AlignmentEngineType)}
+                className="text-xs py-1.5"
+              >
+                <option value="Whisper">Whisper (Пословные таймкоды)</option>
+                <option value="NativeTts">NativeTts (Оценка)</option>
+                <option value="Passthrough">Без выравнивания</option>
+              </Select>
+            </div>
+          </div>
+
+          {/* Кнопка сброса */}
+          <div className="mt-auto pt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => {
+                setGuidanceScale(2.0)
+                setNumSteps(24)
+                setSpeed(1.0)
+                setPitch(1.0)
+                setEnableDenoise(true)
+                setAlignmentEngine('Whisper')
+              }}
+              className="text-xs text-on-surface-variant hover:text-white transition-colors text-center w-full py-1"
+            >
+              Сбросить параметры к базовым
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   )

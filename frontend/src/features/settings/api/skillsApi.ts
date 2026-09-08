@@ -7,6 +7,7 @@ export type SkillStage =
   | 'tts'
   | 'script_drafting'
   | 'hook_analysis'
+  | 'broll_matching'
   | 'general'
 
 export interface SkillItem {

@@ -5,6 +5,7 @@ import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolut
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { API, formatTimecode } from '@shared/lib'
 import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt } from '@entities/project'
+import { useModelCatalog } from '@entities/project/model/useModelCatalog'
 import { useSkillsStore } from '@features/settings'
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   const { apiKeys, cloudEngines, localEngines, cloudProvider, taskModes, setTaskMode, setCloudEngine, setLocalEngine } = useSettingsStore()
   const showNotification = useNotificationStore(s => s.showNotification)
+  const { localModels, cloudModels } = useModelCatalog('ScenarioDrafting')
 
   const activeApiKeys = {
     ...apiKeys,
@@ -39,7 +41,6 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   const [customTopic, setCustomTopic] = useState('')
   const [genFormat, setGenFormat] = useState<'long' | 'short'>('long')
   const [genDuration, setGenDuration] = useState('3')
-  const [voiceTagMode, setVoiceTagMode] = useState<'omnivoice' | 'cosyvoice'>('omnivoice')
 
   const estimatedDuration = useMemo(() => {
     if (!markdown) return 0
@@ -57,9 +58,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
     const formatText = genFormat === 'short' ? 'Вертикальный Shorts/Reels (сверхбыстрый темп, без воды)' : 'Горизонтальное длинное видео';
     const wordsCount = Math.round(Number(genDuration) * 150);
 
-    const voiceRules = voiceTagMode === 'omnivoice'
-      ? `- Эмоция сцены: \`[emotion: happy]\` (sad, angry, fearful, disgusted, surprised, calm). Ставится в начале фрагмента.\n- Паузы: \`<#1.0#>\` (секунды от 0.1 до 3.0).\n- Междометия: \`(breath)\`, \`(sighs)\`, \`(laughs)\`.`
-      : `- Instruct-режим: \`[instruct: Speak with excitement and moderately fast]\`. Ставится в начале фрагмента для управления стилем, интонацией, скоростью или акцентом на естественном языке.`;
+    const voiceRules = `- Эмоция сцены: \`[emotion: happy]\` (sad, angry, fearful, disgusted, surprised, calm). Ставится в начале фрагмента.\n- Паузы: \`<#1.0#>\` (секунды от 0.1 до 3.0).\n- Междометия: \`(breath)\`, \`(sighs)\`, \`(laughs)\`.`;
 
     const injectedRules = SCENARIO_PARSER_RULES.replace('{{VOICE_RULES}}', voiceRules);
 
@@ -219,32 +218,23 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
               </FieldGroup>
             </div>
 
-            <FieldGroup label="Целевой движок голоса (для тегов ИИ)">
-              <Select value={voiceTagMode} onChange={e => setVoiceTagMode(e.target.value as 'omnivoice' | 'cosyvoice')} className="text-xs border-primary/30 bg-primary/5 text-primary font-medium">
-                <option value="omnivoice">OmniVoice / MiniMax (теги эмоций)</option>
-                <option value="cosyvoice">CosyVoice3 (instruct-инструкции)</option>
-              </Select>
-            </FieldGroup>
-
             <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
               <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
               <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
             </div>
             <Input list="agent-models" value={agentEngine} onChange={e => taskModes.scenario === 'cloud' ? setCloudEngine('scenario', e.target.value) : setLocalEngine('scenario', e.target.value)} className="text-xs font-mono" placeholder="LLM Движок (Агент)" />
             <datalist id="agent-models">
-              {taskModes.scenario === 'cloud' ? (
-                <>
-                  <option value="anthropic/claude-sonnet-5" />
-                  <option value="openai/gpt-4o" />
-                  <option value="google/gemini-2.5-pro" />
-                </>
-              ) : (
-                <>
-                  <option value="gemma3:4b" />
-                  <option value="qwen2.5-coder" />
-                  <option value="llama3.1-8b" />
-                </>
-              )}
+              {taskModes.scenario === 'cloud'
+                ? cloudModels.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} {!m.is_available ? '(требуется ключ)' : '✓'}
+                    </option>
+                  ))
+                : localModels.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
             </datalist>
             <div className="flex gap-2">
               <Button variant="primary" onClick={handleGenerateAI} disabled={isGenerating || (!idea && !customTopic.trim())} className="flex-1 text-xs px-2">
@@ -329,18 +319,13 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         <div className="w-full max-w-5xl bg-primary/10 border border-primary/20 p-3 rounded-xl flex items-center justify-between shadow-sm shrink-0">
           <div className="text-xs font-mono text-primary/80 leading-relaxed flex items-center gap-2">
             <Mic size={18} className="shrink-0" />
-            {voiceTagMode === 'omnivoice' ? (
-              <span><span className="font-bold">Шпаргалка (OmniVoice/MiniMax):</span> Эмоция: <code className="bg-black/30 px-1 rounded">[emotion: happy]</code> • Паузы: <code className="bg-black/30 px-1 rounded">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/30 px-1 rounded">(sighs)</code></span>
-            ) : (
-              <span><span className="font-bold">Instruct-режим (CosyVoice):</span> <code className="bg-black/30 px-1 rounded">[instruct: Speak softly and mysteriously]</code> — задаёт стиль и интонацию</span>
-            )}
+            <span><span className="font-bold">Шпаргалка (OmniVoice/MiniMax):</span> Эмоция: <code className="bg-black/30 px-1 rounded">[emotion: happy]</code> • Паузы: <code className="bg-black/30 px-1 rounded">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/30 px-1 rounded">(sighs)</code></span>
           </div>
         </div>
         <VoiceTagToolbar
           onInsertTag={insertTag}
           onToggleCaps={toggleCaps}
           hasSelection={hasSelection}
-          voiceEngineMode={voiceTagMode}
           className="w-full max-w-5xl shrink-0"
         />
         <textarea

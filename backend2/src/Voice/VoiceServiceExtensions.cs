@@ -32,8 +32,6 @@ public static class VoiceServiceExtensions
 
         // Движки TTS
         services.AddScoped<ITtsEngineProvider, OmniVoiceTtsProvider>();
-        services.AddScoped<ITtsEngineProvider, CosyVoiceTtsProvider>();
-        services.AddScoped<ITtsEngineProvider, FishAudioLocalTtsProvider>();
         services.AddHttpClient<ITtsEngineProvider, OpenAiSpeechProvider>();
         services.AddHttpClient<ITtsEngineProvider, MiniMaxSpeechProvider>();
         services.AddScoped<TtsProviderRegistry>();
@@ -43,12 +41,18 @@ public static class VoiceServiceExtensions
         services.AddScoped<IForcedAlignmentProvider, NativeFallbackAlignmentProvider>();
         services.AddScoped<AlignmentProviderRegistry>();
 
-        // Voice Design и Cloning
+        // Voice Design и Cloning (MiniMax через нативный HttpClient)
         services.AddScoped<IVoiceDesignProvider, OmniVoiceDesignProvider>();
         services.AddScoped<IVoiceCloneProvider, OmniVoiceCloneProvider>();
-        services.AddScoped<IVoiceCloneProvider, MiniMaxCloneProvider>();
+        services.AddHttpClient<IVoiceCloneProvider, MiniMaxCloneProvider>();
         services.AddScoped<VoiceDesignProviderRegistry>();
         services.AddScoped<VoiceCloneProviderRegistry>();
+
+        // Самоописывающиеся дескрипторы движков + каталог
+        services.AddScoped<IVoiceEngineDescriptor, OmniVoiceEngineDescriptor>();
+        services.AddScoped<IVoiceEngineDescriptor, MiniMaxEngineDescriptor>();
+        services.AddScoped<IVoiceEngineDescriptor, OpenAiEngineDescriptor>();
+        services.AddScoped<IVoiceEngineCatalog, VoiceEngineCatalog>();
 
         // DSP и обработка звука
         services.AddSingleton<IAudioDuckingService, FfmpegAudioDuckingService>();

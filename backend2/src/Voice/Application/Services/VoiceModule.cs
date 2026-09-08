@@ -1,8 +1,10 @@
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
+using Integrations.Whisper.Audio;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ProductionContext.Domain.ValueObjects;
 using Voice.Application.Commands;
 using Voice.Application.Contracts;
 using Voice.Application.Services;
@@ -28,6 +30,7 @@ public sealed class VoiceModule : IVoiceModule
     private readonly IPathResolver _pathResolver;
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<VoiceModule> _logger;
+    private readonly IVoiceEngineCatalog _engineCatalog;
 
     public VoiceModule(
         ITtsJobRepository repository,
@@ -36,6 +39,7 @@ public sealed class VoiceModule : IVoiceModule
         AlignmentProviderRegistry alignmentRegistry,
         VoiceDesignProviderRegistry designRegistry,
         VoiceCloneProviderRegistry cloneRegistry,
+        IVoiceEngineCatalog engineCatalog,
         IAudioDuckingService audioService,
         IVoiceMediaRegistrar mediaRegistrar,
         IPathResolver pathResolver,
@@ -48,6 +52,7 @@ public sealed class VoiceModule : IVoiceModule
         _alignmentRegistry = alignmentRegistry;
         _designRegistry = designRegistry;
         _cloneRegistry = cloneRegistry;
+        _engineCatalog = engineCatalog;
         _audioService = audioService;
         _mediaRegistrar = mediaRegistrar;
         _pathResolver = pathResolver;
@@ -57,15 +62,14 @@ public sealed class VoiceModule : IVoiceModule
 
     public async Task<VoiceJobDto> SynthesizeSpeechAsync(SynthesizeSpeechCommand cmd, CancellationToken ct = default)
     {
-        var refAudio = cmd.ReferenceAudioPath;
-        if (string.IsNullOrWhiteSpace(refAudio))
-        {
-            var speaker = await _speakerRepo.GetBySpeakerIdAsync(new SpeakerId(cmd.SpeakerId), ct);
-            if (speaker != null && speaker.SourceType == SpeakerSourceType.Cloned && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
-                refAudio = speaker.CloneReferenceAudioPath;
-        }
+        var speaker = await _speakerRepo.GetBySpeakerIdAsync(new SpeakerId(cmd.SpeakerId), ct);
 
-        var spec = new VoiceSpec(cmd.Engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio);
+        var refAudio = cmd.ReferenceAudioPath;
+        if (string.IsNullOrWhiteSpace(refAudio) && speaker != null && speaker.SourceType == SpeakerSourceType.Cloned && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
+            refAudio = speaker.CloneReferenceAudioPath;
+
+        var engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.LocalOmniVoice;
+        var spec = new VoiceSpec(engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio, cmd.GuidanceScale, cmd.NumSteps);
         var job = TtsJob.Create(TtsJobId.New(), cmd.Text, spec);
 
         await _repository.AddAsync(job, ct);
@@ -124,7 +128,10 @@ public sealed class VoiceModule : IVoiceModule
                 SpeakerId: item.SpeakerId,
                 AlignmentEngine: item.AlignmentEngine,
                 Speed: item.Speed,
-                Filters: cmd.Filters);
+                Pitch: item.Pitch,
+                Filters: cmd.Filters,
+                GuidanceScale: item.GuidanceScale,
+                NumSteps: item.NumSteps);
 
             var job = await SynthesizeSpeechAsync(singleCmd, ct);
             jobs.Add(job);
@@ -202,7 +209,8 @@ public sealed class VoiceModule : IVoiceModule
         var result = await provider.DesignVoiceAsync(spec, ct);
 
         var speakerId = new SpeakerId(result.SpeakerId);
-        var profile = SpeakerProfile.CreateDesigned(speakerId, spec.Description, VoiceEngineType.LocalOmniVoice, spec, result.Description);
+        var engineType = request.Engine ?? VoiceEngineType.LocalOmniVoice;
+        var profile = SpeakerProfile.CreateDesigned(speakerId, spec.Description, engineType, spec, result.Description);
 
         if (!string.IsNullOrWhiteSpace(result.PreviewAudioPath))
             profile.SetPreviewAudio(result.PreviewAudioPath);
@@ -292,7 +300,7 @@ public sealed class VoiceModule : IVoiceModule
         foreach (var frag in request.Fragments)
         {
             var words = frag.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            double dur = Math.Max(1.0, words.Length / 2.5);
+            double dur = Math.Max(SpeechPacingDefaults.MinFragmentSeconds, words.Length / SpeechPacingDefaults.WordsPerSecond);
 
             timings.Add(new FragmentTimingResultDto(
                 Id: frag.Id,
@@ -328,8 +336,7 @@ public sealed class VoiceModule : IVoiceModule
         };
 
         var processed = await _audioService.PostProcessVoiceAsync(safeInput, safeOutput, filterSpec, ct);
-        var fileInfo = new FileInfo(processed);
-        double estimatedDuration = fileInfo.Length / (48000.0 * 2.0);
+        double estimatedDuration = WavAudioDecoder.ProbeWavDuration(processed);
 
         return new ProcessAudioDspResponse("ok", processed, Math.Round(estimatedDuration, 2));
     }
@@ -369,6 +376,11 @@ public sealed class VoiceModule : IVoiceModule
     {
         _logger.LogInformation("[VoiceModule] Запрос выгрузки VRAM (делегирование GPU-менеджеру)");
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<VoiceEngineInfoDto>> GetAvailableEnginesAsync(CancellationToken ct = default)
+    {
+        return _engineCatalog.DiscoverEnginesAsync(ct);
     }
 
     private async Task<AlignmentData> DetermineAlignmentAsync(

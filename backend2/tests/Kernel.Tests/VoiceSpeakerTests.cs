@@ -214,4 +214,53 @@ public class VoiceSpeakerTests
         Assert.Equal("My Clone", spec.Name);
         Assert.Equal("Hello", spec.ReferenceText);
     }
+
+    [Fact]
+    public void VoiceSpec_ValidParameters_ShouldInstantiateSuccessfully()
+    {
+        var spec = new VoiceSpec(
+            VoiceEngineType.LocalOmniVoice,
+            "alloy",
+            AlignmentEngineType.Whisper,
+            speed: 1.25,
+            pitch: 0.8,
+            guidanceScale: 3.5,
+            numSteps: 40);
+
+        Assert.Equal(1.25, spec.Speed);
+        Assert.Equal(0.8, spec.Pitch);
+        Assert.Equal(3.5, spec.GuidanceScale);
+        Assert.Equal(40, spec.NumSteps);
+
+        var defaults = new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy");
+        Assert.Equal(2.0, defaults.GuidanceScale);
+        Assert.Equal(24, defaults.NumSteps);
+    }
+
+    [Fact]
+    public void VoiceSpec_InvalidGuidanceScale_ShouldThrowValidationException()
+    {
+        Assert.Throws<ValidationException>(() =>
+            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", guidanceScale: 0.9));
+        Assert.Throws<ValidationException>(() =>
+            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", guidanceScale: 10.5));
+    }
+
+    [Fact]
+    public void VoiceSpec_InvalidNumSteps_ShouldThrowValidationException()
+    {
+        Assert.Throws<ValidationException>(() =>
+            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", numSteps: 7));
+        Assert.Throws<ValidationException>(() =>
+            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", numSteps: 129));
+    }
+
+    [Fact]
+    public void VoiceSpec_InvalidPitch_ShouldThrowValidationException()
+    {
+        Assert.Throws<ValidationException>(() =>
+            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", pitch: 0.4));
+        Assert.Throws<ValidationException>(() =>
+            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", pitch: 2.5));
+    }
 }

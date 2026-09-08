@@ -237,44 +237,49 @@ public sealed class DeepTrendDagPipeline : IDeepTrendDagPipeline
         List<EarlySignal> signals,
         List<VideoCandidate> candidates)
     {
+        var opportunities = new List<Opportunity>();
         var refs = candidates.Take(2).Select(c => c.VideoId).ToList();
-        var signalTopics = signals.Take(3).Select(s => s.Topic).ToList();
 
-        var opportunities = new List<Opportunity>
-        {
-            Opportunity.Create(
-                runId,
-                $"The Counter-Intuitive Truth About {query}",
-                $"Stop doing {query} the old way — here is why 99% of people fail within 48 hours.",
-                "Ambitious Creators & Practitioners",
-                "Shorts 60s",
-                OpportunityScore.Create(90.0, 0.85, 0.92),
-                signals.FirstOrDefault()?.Topic ?? "Common Execution Blunders",
-                "Exploits cognitive dissonance and resolves the friction in under 60 seconds.",
-                refs),
-            Opportunity.Create(
-                runId,
-                $"How Top 1% Master {query} (Zero Budget Protocol)",
-                $"If I had to restart {query} from scratch today, this is the exact 3-step loop I would use.",
-                "Beginners looking for zero-fluff breakdown",
-                "Shorts 60s",
-                OpportunityScore.Create(82.0, 0.70, 0.88),
-                "Overcomplicated tutorials in market",
-                "Offers an ultra-minimalist actionable protocol.",
-                refs)
-        };
+        var ranked = signals
+            .OrderByDescending(s => s.GrowthVelocityPercent)
+            .ThenByDescending(s => s.Confidence)
+            .Take(5)
+            .ToList();
 
-        foreach (var topic in signalTopics)
+        if (ranked.Count == 0)
         {
             opportunities.Add(Opportunity.Create(
                 runId,
-                $"What Nobody Tells You About {topic}",
-                $"Everyone is talking about {topic} but nobody shows the real implementation. Here is the truth.",
-                "Tech practitioners frustrated by surface-level content",
-                "DeepDive 8m",
-                OpportunityScore.Create(88.0, 0.80, 0.91),
-                topic,
-                "Bridges the gap between hype and practical reality.",
+                $"Untapped Angle: {query}",
+                $"Decode \"{query}\" from first principles instead of repeating surface-level tutorials.",
+                "Practitioners researching the query",
+                "Shorts 60s",
+                OpportunityScore.Create(60.0, 0.5, 0.5),
+                query,
+                "Seed opportunity synthesized without external signals.",
+                refs));
+            return opportunities;
+        }
+
+        foreach (var signal in ranked)
+        {
+            double demand = Math.Round(Math.Clamp(50.0 + signal.GrowthVelocityPercent, 55.0, 95.0), 1);
+            double competition = Math.Round(Math.Clamp(1.0 - signal.Confidence, 0.15, 0.85), 2);
+            double confidence = Math.Clamp(signal.Confidence, 0.2, 1.0);
+            string audience = string.IsNullOrWhiteSpace(signal.SourcePlatform)
+                ? "Practitioners frustrated by surface-level content"
+                : $"Audience discovering the topic via {signal.SourcePlatform}";
+            string format = signal.AggregateVph > 0 ? "DeepDive 8m" : "Shorts 60s";
+
+            opportunities.Add(Opportunity.Create(
+                runId,
+                $"Unexplored Mechanics of {signal.Topic}",
+                $"Regarding \"{signal.Topic}\" — what practitioners actually miss beyond the canonical tutorials.",
+                audience,
+                format,
+                OpportunityScore.Create(demand, competition, confidence),
+                signal.Topic,
+                $"Derived from {signal.SupportingVideoCount} videos (VPH {signal.AggregateVph:F0}), growth {signal.GrowthVelocityPercent:F0}%, confidence {confidence:P0}, source {signal.SourcePlatform}.",
                 refs));
         }
 

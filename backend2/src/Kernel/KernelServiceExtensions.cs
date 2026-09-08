@@ -52,11 +52,9 @@ public static class KernelServiceExtensions
         services.AddSingleton<IPathResolver>(sp =>
             new PathResolver(sp.GetRequiredService<ILogger<PathResolver>>(), allowedRoots));
 
-        // 4. Системные супервайзеры
+        // 4. Системные супервайзеры (исключительно нативные CLI: FFmpeg, yt-dlp, Node.js)
         services.AddSingleton<IProcessSupervisor, ProcessSupervisor>();
         services.AddSingleton<IGpuManager, GpuManager>();
-        services.AddSingleton<IPythonEnvironmentResolver, PythonEnvironmentResolver>();
-        services.AddSingleton<IMlProcessHost, MlProcessHost>();
         services.AddSingleton<IWebSocketGateway, WebSocketGateway>();
 
         // 5. Шина событий и DLQ

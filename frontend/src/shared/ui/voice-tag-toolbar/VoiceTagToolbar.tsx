@@ -4,7 +4,6 @@ export interface VoiceTagToolbarProps {
   onInsertTag: (before: string, after?: string) => void
   onToggleCaps: () => void
   hasSelection?: boolean
-  voiceEngineMode?: 'omnivoice' | 'cosyvoice'
   className?: string
 }
 
@@ -39,18 +38,10 @@ const SOUNDS: Preset[] = [
   { label: '😤 стон', tag: '(groans)' },
 ]
 
-const INSTRUCTS: Preset[] = [
-  { label: 'Шепот', tag: '[instruct: Speak in a whisper]' },
-  { label: 'Энергично', tag: '[instruct: Speak with excitement and energy]' },
-  { label: 'Медленно', tag: '[instruct: Speak slowly and clearly]' },
-  { label: 'Таинственно', tag: '[instruct: Speak softly and mysteriously]' },
-]
-
 export const VoiceTagToolbar = ({
   onInsertTag,
   onToggleCaps,
   hasSelection = false,
-  voiceEngineMode = 'omnivoice',
   className = '',
 }: VoiceTagToolbarProps) => {
   const [open, setOpen] = useState<string | null>(null)
@@ -59,9 +50,7 @@ export const VoiceTagToolbar = ({
   const preventBlur = (e: MouseEvent) => e.preventDefault()
 
   const dropdowns = [
-    voiceEngineMode === 'cosyvoice'
-      ? { key: 'instruct', label: '🎙 Instruct', items: INSTRUCTS }
-      : { key: 'emotions', label: '😄 Эмоции', items: EMOTIONS },
+    { key: 'emotions', label: '😄 Эмоции', items: EMOTIONS },
     { key: 'sounds', label: '🗣 Звуки', items: SOUNDS },
   ]
 

@@ -1,0 +1,57 @@
+{
+    "extensions": ".py .toml .ini .tsx .env.example .cs .csproj .sln .json .config .env.example .dockerfile .yaml .ps1 .dockerfile .yaml .sh .md",
+    "ignored_paths": "__pycache__, .venv-voice, tools, venv, bin, obj, .venv, .git, .idea, .pytest_cache, venv-cosyvoice, .venv-vosyvoice, ai-models",
+    "minify": true,
+    "remove_comments": true,
+    "remove_secrets": true,
+    "include_tree": true,
+    "include_dependencies": false,
+    "include_mermaid": false,
+    "skeleton_mode": false,
+    "use_git": false,
+    "git_base": "",
+    "use_gitignore": true,
+    "system_prompt": "You are an expert software engineer. Analyze the following codebase structure and file contents.",
+    "output_format": "markdown",
+    "template_path": "",
+    "enable_logging": true,
+    "external_editor": "",
+    "receive_prereleases": false,
+    "llm_check_enabled": false,
+    "llm_base_url": "https://api.openai.com/v1",
+    "llm_model": "gpt-4o-mini",
+    "visible_tabs": [
+        "sources",
+        "filters",
+        "prompts",
+        "llm_os",
+        "appearance",
+        "plugins",
+        "hello_world"
+    ],
+    "visible_actions": [
+        "preview",
+        "clipboard",
+        "chat",
+        "editor",
+        "file",
+        "hello_world_say_hi"
+    ],
+    "visible_checkboxes": [
+        "dedup",
+        "aggressive",
+        "checkpoints",
+        "watch"
+    ],
+    "language": "",
+    "deduplicate": false,
+    "save_checkpoints": false,
+    "auto_watch": false,
+    "prioritize_entry_files": true,
+    "preserve_docstrings": false,
+    "preserve_imports": false,
+    "aggressive_minify": false,
+    "approved_plugins": [
+        "hello_world"
+    ]
+}

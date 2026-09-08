@@ -24,7 +24,7 @@ export const DetailedCommentsFeed = ({
   const categorizedComments = useMemo(() => {
     return comments.map((c) => ({
       ...c,
-      category: detectFrictionCategory(c.text),
+      category: c.category ?? detectFrictionCategory(c.text),
     }))
   }, [comments])
 

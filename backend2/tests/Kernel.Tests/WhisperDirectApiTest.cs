@@ -10,7 +10,7 @@ public class WhisperDirectApiTest
     private static readonly string DataStorage = Path.Combine(Backend2Root, "data_storage");
 
     [Fact]
-    public void DirectTranscribeTest()
+    public async Task DirectTranscribeTest()
     {
         var modelDir = Path.Combine(DataStorage, "ai-models", "whisper", "faster-whisper-small");
         if (!Directory.Exists(modelDir))
@@ -18,12 +18,10 @@ public class WhisperDirectApiTest
         if (!Directory.Exists(modelDir)) { Console.WriteLine("SKIP"); return; }
 
         var audioPath = Path.Combine(DataStorage, "temp", "voice", "tts-6866959b120d41dfaae78e4c0e179425_master.wav");
-        if (!File.Exists(audioPath))
-            audioPath = Path.Combine(Backend2Root, "ai-models", "CosyVoice", "asset", "cross_lingual_prompt.wav");
         if (!File.Exists(audioPath)) { Console.WriteLine("SKIP: no audio"); return; }
 
         Console.WriteLine($"Audio: {Path.GetFileName(audioPath)}");
-        var decoded = WavAudioDecoder.DecodeToMono16kHzAsync(audioPath).GetAwaiter().GetResult();
+        var decoded = await WavAudioDecoder.DecodeToMono16kHzAsync(audioPath);
         Console.WriteLine($"Decoded: {decoded.Samples.Length} samples, {decoded.Duration.TotalSeconds:F2}s");
 
         Console.WriteLine("\n=== GPU mode, float16 ===");

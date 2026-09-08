@@ -90,7 +90,7 @@ public class Scene : BaseEntity<string>
             if (duration <= 0.0)
             {
                 int words = frag.Text.Split([' ', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Length;
-                duration = Math.Max(1.2, Math.Round(words / 2.8, 2));
+                duration = Math.Max(SpeechPacingDefaults.MinFragmentSeconds, Math.Round(words / SpeechPacingDefaults.WordsPerSecond, 2));
             }
             frag.SetTiming(TimecodeSpan.FromDuration(offset, duration));
             offset += duration;

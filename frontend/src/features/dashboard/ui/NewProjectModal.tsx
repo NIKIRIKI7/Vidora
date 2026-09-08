@@ -1,12 +1,7 @@
 import React, { useState } from 'react'
 import { Monitor, Smartphone, Sparkles, X } from 'lucide-react'
+import { THEME_PRESETS, type ThemePreset } from '@shared/config'
 import { useDashboardStore } from '../model/useDashboardStore'
-
-const COLOR_PRESETS = [
-  { id: 'cyber', name: 'Cyber Neon', primary: '#38bdf8', secondary: '#818cf8', background: '#020617', surface: '#0f172a', accent: '#f43f5e', text: '#f8fafc' },
-  { id: 'emerald', name: 'Tech Mint', primary: '#10b981', secondary: '#059669', background: '#022c22', surface: '#064e3b', accent: '#34d399', text: '#ecfdf5' },
-  { id: 'purple', name: 'Deep Violet', primary: '#a855f7', secondary: '#7c3aed', background: '#0f0728', surface: '#1e1145', accent: '#ec4899', text: '#faf5ff' },
-]
 
 export const NewProjectModal: React.FC = () => {
   const { activeModal, selectedFormatForNew, closeModal, createProject } = useDashboardStore()
@@ -15,7 +10,7 @@ export const NewProjectModal: React.FC = () => {
   const [format, setFormat] = useState<'16:9' | '9:16'>(selectedFormatForNew || '16:9')
   const [fps, setFps] = useState(30)
   const [animationStyle, setAnimationStyle] = useState('cinematic_smooth')
-  const [selectedPalette, setSelectedPalette] = useState(COLOR_PRESETS[0])
+  const [selectedPalette, setSelectedPalette] = useState<ThemePreset>(THEME_PRESETS[0])
 
   if (activeModal !== 'new_project') return null
 
@@ -27,7 +22,7 @@ export const NewProjectModal: React.FC = () => {
       format,
       fps,
       animationStyle,
-      colors: selectedPalette,
+      colors: selectedPalette.colors,
     })
   }
 
@@ -126,7 +121,7 @@ export const NewProjectModal: React.FC = () => {
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-300">Палитра бренда</label>
             <div className="flex gap-2">
-              {COLOR_PRESETS.map((p) => (
+              {THEME_PRESETS.map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -138,9 +133,9 @@ export const NewProjectModal: React.FC = () => {
                   }`}
                 >
                   <div className="flex gap-1 mb-1.5">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.primary }} />
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.accent }} />
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.surface }} />
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colors.primary }} />
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colors.accent }} />
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colors.surface }} />
                   </div>
                   <span className="text-[11px] font-bold text-white block truncate">{p.name}</span>
                 </button>

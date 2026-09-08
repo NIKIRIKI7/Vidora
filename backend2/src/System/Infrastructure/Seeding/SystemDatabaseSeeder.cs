@@ -40,8 +40,7 @@ public sealed class SystemDatabaseSeeder
             SystemSetting.Create("voice.alignment_engine_default", "Whisper", "Движок выравнивания", "string"),
             SystemSetting.Create("voice.whisper_model_path", _storageConfig.GetModelPath("whisper/faster-whisper-small"), "Путь к директории модели faster-whisper (CTranslate2)", "string"),
             SystemSetting.Create("voice.whisper_device", "cuda", "Устройство инференса Whisper", "string"),
-            SystemSetting.Create("voice.omnivoice_dir", _storageConfig.GetModelPath("omnivoice"), "Директория модели OmniVoice", "string"),
-            SystemSetting.Create("voice.cosyvoice_dir", _storageConfig.GetModelPath("cosyvoice"), "Директория модели CosyVoice", "string"),
+            SystemSetting.Create("voice.omnivoice_dir", _storageConfig.GetModelPath("omnivoice-gguf"), "Директория модели OmniVoice (GGUF)", "string"),
             SystemSetting.Create("gpu.vram_headroom_mb", "1024", "Резервный буфер VRAM (МБ)", "int"),
             SystemSetting.Create("logging.retention_days", "14", "Срок ротации логов", "int")
         };
@@ -78,41 +77,11 @@ public sealed class SystemDatabaseSeeder
                 id: "omnivoice",
                 name: "OmniVoice Diffusion Zero-Shot TTS",
                 category: ModelCategory.Tts,
-                targetDirectory: _storageConfig.GetModelPath("omnivoice"),
-                downloadUrl: "",
-                expectedSizeBytes: 1_850_000_000,
-                version: "1.0",
+                targetDirectory: _storageConfig.GetModelPath("omnivoice-gguf"),
+                downloadUrl: "https://huggingface.co/cstr/omnivoice-GGUF",
+                expectedSizeBytes: 3_370_000_000,
+                version: "1.0-gguf",
                 isRequired: false),
-
-            AiModelArtifact.Create(
-                id: "cosyvoice-300m",
-                name: "CosyVoice 300M Instruct",
-                category: ModelCategory.Tts,
-                targetDirectory: _storageConfig.GetModelPath("cosyvoice"),
-                downloadUrl: "",
-                expectedSizeBytes: 1_288_490_188,
-                version: "1.0",
-                isRequired: false),
-
-            AiModelArtifact.Create(
-                id: "fishaudio-local",
-                name: "Fish Audio Local",
-                category: ModelCategory.Tts,
-                targetDirectory: _storageConfig.GetModelPath("fishaudio"),
-                downloadUrl: "",
-                expectedSizeBytes: 1_500_000_000,
-                version: "1.4",
-                isRequired: false),
-
-            AiModelArtifact.Create(
-                id: "kokoro-v0_19",
-                name: "Kokoro TTS Engine",
-                category: ModelCategory.Tts,
-                targetDirectory: _storageConfig.GetModelPath("kokoro"),
-                downloadUrl: "",
-                expectedSizeBytes: 335_544_320,
-                version: "0.19",
-                isRequired: true),
 
             AiModelArtifact.Create(
                 id: "remotion-chromium",
@@ -131,6 +100,16 @@ public sealed class SystemDatabaseSeeder
             if (existing == null)
             {
                 await _modelRepo.AddAsync(model, ct);
+            }
+            else if (existing.Id == "omnivoice"
+                     && existing.TargetDirectory.Replace('\\', '/').TrimEnd('/').EndsWith("/omnivoice"))
+            {
+                // Миграция с ONNX-каталога ai-models/omnivoice на GGUF ai-models/omnivoice-gguf
+                _logger.LogInformation(
+                    "[SystemSeeder] Мигрирую путь модели 'omnivoice': {Old} -> {New}",
+                    existing.TargetDirectory, model.TargetDirectory);
+                existing.UpdateTargetDirectory(model.TargetDirectory);
+                await _modelRepo.UpdateAsync(existing, ct);
             }
             else if (!existing.TargetDirectory.StartsWith(_storageConfig.GetModelsDirectory(), StringComparison.OrdinalIgnoreCase))
             {

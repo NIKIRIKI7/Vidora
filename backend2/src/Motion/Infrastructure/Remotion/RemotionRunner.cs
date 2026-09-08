@@ -3,27 +3,41 @@ using Kernel.Exceptions;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Process;
 using Kernel.Ports;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MotionContext.Domain.Ports;
+using SystemContext.Domain.Ports;
 
 namespace MotionContext.Infrastructure.Remotion;
 
 public sealed partial class RemotionRunner : IRemotionRunner
 {
+    private const int MinConcurrency = 1;
+    private const int MaxConcurrency = 16;
+    private const string DefaultGlBackend = "swangle";
+    private const int DefaultConcurrency = 2;
+
     private readonly INodeEnvironmentResolver _nodeResolver;
     private readonly IProcessSupervisor _processSupervisor;
     private readonly IPathResolver _pathResolver;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<RemotionRunner> _logger;
 
     public RemotionRunner(
         INodeEnvironmentResolver nodeResolver,
         IProcessSupervisor processSupervisor,
         IPathResolver pathResolver,
+        IServiceProvider serviceProvider,
+        IConfiguration configuration,
         ILogger<RemotionRunner> logger)
     {
         _nodeResolver = nodeResolver;
         _processSupervisor = processSupervisor;
         _pathResolver = pathResolver;
+        _serviceProvider = serviceProvider;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -41,17 +55,19 @@ public sealed partial class RemotionRunner : IRemotionRunner
         var envVars = _nodeResolver.BuildExecutionEnvironment(nodeExe);
 
         var propsPath = Path.Combine(workingDir, "inputProps.json");
+        var (glBackend, concurrency) = await ResolveRenderSettingsAsync(cancellationToken);
 
         var arguments = $"\"{remotionJs}\" render \"{safeEntry}\" \"{spec.CompositionId}\" \"{safeOutput}\" " +
                         $"--props=\"{propsPath}\" " +
-                        "--gl=swangle " +
-                        "--concurrency=2 " +
+                        $"--gl={glBackend} " +
+                        $"--concurrency={concurrency} " +
                         "--headless " +
                         "--disable-dev-shm-usage " +
                         "--no-sandbox " +
                         "--disable-gpu-sandbox";
 
-        _logger.LogInformation("[RemotionRunner] Старт рендера → {Output}", safeOutput);
+        _logger.LogInformation("[RemotionRunner] Старт рендера ({GlBackend}, concurrency={Concurrency}) → {Output}",
+            glBackend, concurrency, safeOutput);
 
         var result = await _processSupervisor.RunAsync(
             nodeExe,
@@ -86,4 +102,36 @@ public sealed partial class RemotionRunner : IRemotionRunner
 
     [GeneratedRegex(@"(?:Rendered|Rendering frames)\s+(\d+)\/(\d+)")]
     private static partial Regex ProgressRegex();
+
+    private async Task<(string GlBackend, int Concurrency)> ResolveRenderSettingsAsync(CancellationToken ct)
+    {
+        string glBackend = _configuration["Motion:GlBackend"] ?? DefaultGlBackend;
+        int concurrency = int.TryParse(_configuration["Motion:Concurrency"], out var configConcurrency) && configConcurrency > 0
+            ? configConcurrency
+            : DefaultConcurrency;
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var settings = scope.ServiceProvider.GetService<ISystemSettingRepository>();
+            if (settings is null) return (glBackend, concurrency);
+
+            var backendSetting = await settings.GetByKeyAsync("motion.gl_backend", ct);
+            if (!string.IsNullOrWhiteSpace(backendSetting?.Value))
+                glBackend = backendSetting.Value;
+
+            var concurrencySetting = await settings.GetByKeyAsync("motion.concurrency", ct);
+            if (concurrencySetting is not null &&
+                int.TryParse(concurrencySetting.Value, out var settingConcurrency) &&
+                settingConcurrency > 0)
+                concurrency = settingConcurrency;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[RemotionRunner] Не удалось прочитать motion-настройки, используются конфиг/дефолты");
+        }
+
+        concurrency = Math.Clamp(concurrency, MinConcurrency, MaxConcurrency);
+        return (glBackend, concurrency);
+    }
 }

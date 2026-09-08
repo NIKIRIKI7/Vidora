@@ -26,14 +26,8 @@ public sealed class AppStorageConfig
     [Required(ErrorMessage = "В appsettings.json отсутствует обязательный параметр Storage:ToolsDir")]
     public string ToolsDir { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "В appsettings.json отсутствует обязательный параметр Storage:ScriptsDir")]
-    public string ScriptsDir { get; set; } = string.Empty;
-
     [Required(ErrorMessage = "В appsettings.json отсутствует обязательный параметр Storage:RemotionWorkspaceDir")]
     public string RemotionWorkspaceDir { get; set; } = string.Empty;
-
-    [Required(ErrorMessage = "В appsettings.json отсутствует обязательный параметр Storage:PythonVenvName")]
-    public string PythonVenvName { get; set; } = string.Empty;
 
     public string GetModelsDirectory() =>
         Path.Combine(DataStorageDir, ModelsDir).Replace('\\', '/');
@@ -55,17 +49,11 @@ public sealed class AppStorageConfig
     public string GetDatabasePath(string dbName) =>
         Path.Combine(DataStorageDir, $"{dbName}.db").Replace('\\', '/');
 
-    public string GetScriptPath(string scriptName) =>
-        Path.Combine(ScriptsDir, scriptName).Replace('\\', '/');
-
     public string GetToolPath(string toolName) =>
         Path.Combine(ToolsDir, toolName).Replace('\\', '/');
 
     public string GetLogFilePath() =>
         Path.Combine(DataStorageDir, "app_events.jsonl").Replace('\\', '/');
-
-    public string GetScriptsDirectory() =>
-        ScriptsDir.Replace('\\', '/');
 
     public string GetRemotionWorkspace() =>
         RemotionWorkspaceDir.Replace('\\', '/');

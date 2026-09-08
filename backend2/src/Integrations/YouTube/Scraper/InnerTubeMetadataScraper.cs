@@ -356,7 +356,8 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
                 c.Text,
                 c.LikeCount,
                 c.PublishedTime,
-                c.CommentId)).ToList();
+                c.CommentId,
+                c.Category)).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

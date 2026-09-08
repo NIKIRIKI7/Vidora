@@ -11,179 +11,53 @@ using Xunit;
 
 namespace Kernel.Tests;
 
-public sealed class WhisperNativeIntegrationTests
+public sealed class WhisperNativeIntegrationTests : IDisposable
 {
     private static readonly string Backend2Root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
     private static readonly string DataStorage = Path.Combine(Backend2Root, "data_storage");
 
-    private static readonly string[] TestAudioFiles =
-    [
-        Path.Combine(Backend2Root, "ai-models", "CosyVoice", "asset", "cross_lingual_prompt.wav"),
-        Path.Combine(Backend2Root, "ai-models", "CosyVoice", "asset", "zero_shot_prompt.wav"),
-        Path.Combine(DataStorage, "temp", "voice", "tts-95b07de6631041599a7b79c1ad343f0d_raw.wav"),
-        Path.Combine(DataStorage, "temp", "voice", "tts-b525587e70534458873f842afdb5bbfa_raw.wav"),
-        Path.Combine(DataStorage, "temp", "voice", "tts-6866959b120d41dfaae78e4c0e179425_master.wav"),
-    ];
+    private readonly List<string> _tempFiles = [];
+    private readonly string _generatedMonoWav;
+    private readonly string _generatedStereoWav;
 
-    private static readonly string[] TestExpectedTexts =
-    [
-        "This is a cross lingual prompt for voice cloning.",
-        "This is a zero shot prompt for voice synthesis.",
-        "Добро пожаловать в мир создания видео.",
-        "Сегодня мы рассмотрим как создать вирусный контент.",
-        "Анализ трендов показывает рост вовлечённости аудитории.",
-    ];
-
-    [Fact]
-    public void WavAudioDecoder_ShouldDecodeRealWavFiles()
+    public WhisperNativeIntegrationTests()
     {
-        var results = new List<(string File, DecodedAudio Audio)>();
-
-        foreach (var audioPath in TestAudioFiles)
-        {
-            if (!File.Exists(audioPath))
-            {
-                Output($"SKIP: {Path.GetFileName(audioPath)} not found");
-                continue;
-            }
-
-            Output($"--- Decoding: {Path.GetFileName(audioPath)} ({new FileInfo(audioPath).Length / 1024} KB) ---");
-
-            var sw = Stopwatch.StartNew();
-            var decoded = WavAudioDecoder.DecodeToMono16kHzAsync(audioPath).GetAwaiter().GetResult();
-            sw.Stop();
-
-            Output($"  SampleRate: {decoded.SampleRate} Hz");
-            Output($"  Duration: {decoded.Duration.TotalSeconds:F2} sec");
-            Output($"  Samples: {decoded.Samples.Length:N0}");
-            Output($"  DecodeTime: {sw.ElapsedMilliseconds} ms");
-
-            Assert.Equal(16000, decoded.SampleRate);
-            Assert.True(decoded.Samples.Length > 0, "Must contain samples");
-            Assert.True(decoded.Duration.TotalSeconds > 0.1, "Duration > 0.1 sec");
-
-            bool hasNonZero = decoded.Samples.Any(s => Math.Abs(s) > 0.001);
-            Assert.True(hasNonZero, "Audio must contain non-zero samples");
-
-            float maxAmp = decoded.Samples.Max(s => Math.Abs(s));
-            Output($"  MaxAmplitude: {maxAmp:F4}");
-
-            results.Add((Path.GetFileName(audioPath), decoded));
-        }
-
-        Assert.True(results.Count > 0, "At least one file must be decoded");
-        Output($"\n=== Total decoded: {results.Count} files ===\n");
+        _generatedMonoWav = CreateSyntheticWav(16000, channels: 1, durationSeconds: 2.0);
+        _generatedStereoWav = CreateSyntheticWav(44100, channels: 2, durationSeconds: 1.5);
     }
 
     [Fact]
-    public void WavAudioDecoder_ShouldHandleStereoToMono()
+    public async Task WavAudioDecoder_ShouldDecodeSyntheticWavFiles()
     {
-        var stereoFile = TestAudioFiles.FirstOrDefault(f => File.Exists(f));
-        if (stereoFile == null)
-        {
-            Output("SKIP: No WAV files for stereo test");
-            return;
-        }
+        var sw = Stopwatch.StartNew();
+        var decodedMono = await WavAudioDecoder.DecodeToMono16kHzAsync(_generatedMonoWav);
+        sw.Stop();
 
-        var decoded = WavAudioDecoder.DecodeToMono16kHzAsync(stereoFile).GetAwaiter().GetResult();
+        Assert.Equal(16000, decodedMono.SampleRate);
+        Assert.True(decodedMono.Samples.Length > 0, "Mono WAV must contain samples");
+        Assert.InRange(decodedMono.Duration.TotalSeconds, 1.8, 2.2);
+        Assert.True(decodedMono.Samples.Any(s => Math.Abs(s) > 0.01f), "Audio must contain non-zero wave data");
+    }
 
-        Output($"File: {Path.GetFileName(stereoFile)}");
-        Output($"Result: mono {decoded.SampleRate} Hz, {decoded.Samples.Length} samples");
+    [Fact]
+    public async Task WavAudioDecoder_ShouldHandleStereoToMono()
+    {
+        var decoded = await WavAudioDecoder.DecodeToMono16kHzAsync(_generatedStereoWav);
 
         Assert.Equal(16000, decoded.SampleRate);
-    }
+        Assert.True(decoded.Samples.Length > 0, "Stereo WAV must produce samples after downmix");
+        Assert.InRange(decoded.Duration.TotalSeconds, 1.3, 1.7);
+        Assert.True(decoded.Samples.Any(s => Math.Abs(s) > 0.01f), "Stereo audio must contain non-zero wave data");
 
-    [Fact]
-    public async Task NativeWhisperModel_ShouldLoadAndAlignOnRealAudio()
-    {
-        var modelDir = FindModelDirectory();
-        if (modelDir == null)
-        {
-            Output("SKIP: faster-whisper model directory not found. Run download-whisper-model.ps1.");
-            Output($"Expected: data_storage/ai-models/whisper/faster-whisper-small/");
-            return;
-        }
-
-        Output($"Model found: {modelDir}");
-        Output($"Contents: {string.Join(", ", Directory.GetFiles(modelDir).Select(Path.GetFileName))}");
-
-        var options = new WhisperOptions
-        {
-            Model = new WhisperModelOptions { DirectoryPath = modelDir, Name = "small" },
-            Hardware = new WhisperHardwareOptions
-            {
-                Device = "cuda",
-                ComputeType = "float16",
-                CpuThreads = 2
-            },
-            Inference = new WhisperInferenceOptions { BeamSize = 1, WordTimestamps = true },
-            MemoryManagement = new WhisperMemoryOptions { RetentionPolicy = "UnloadImmediately" }
-        };
-
-        var logger = new TestLogger<NativeWhisperModel>();
-        using var model = new NativeWhisperModel(options, modelDir, logger);
-
-        Output("\n--- Loading model ---");
-        var loadSw = Stopwatch.StartNew();
-        await model.EnsureLoadedAsync();
-        loadSw.Stop();
-        Output($"Model loaded in {loadSw.ElapsedMilliseconds} ms");
-
-        var audioPath = TestAudioFiles.FirstOrDefault(f => File.Exists(f));
-        if (audioPath == null)
-        {
-            Output("SKIP: No WAV files for inference");
-            return;
-        }
-
-        var expectedText = TestExpectedTexts[Array.IndexOf(TestAudioFiles, audioPath)];
-        Output($"\n--- Inference: {Path.GetFileName(audioPath)} ---");
-        Output($"Expected text: \"{expectedText}\"");
-
-        var result = await model.AlignAsync(audioPath, expectedText, "en");
-
-        double rtf = result.TotalDurationMs > 0
-            ? (result.InferenceElapsedMs / 1000.0) / (result.TotalDurationMs / 1000.0)
-            : 0;
-
-        Output($"\n--- Results ---");
-        Output($"Words recognized: {result.Words.Count}");
-        Output($"Total duration: {result.TotalDurationMs} ms");
-        Output($"Inference time: {result.InferenceElapsedMs} ms");
-        Output($"RTF: {rtf:F4}x ({(rtf > 0 ? 1.0 / rtf : 0):F1}x faster than realtime)");
-        if (result.Words.Count > 0)
-            Output($"Avg confidence: {result.Words.Average(w => w.Confidence):F2}");
-
-        foreach (var w in result.Words.Take(10))
-        {
-            Output($"  [{w.StartMs,5}-{w.EndMs,5}] ({w.Confidence:F2}) \"{w.Word}\"");
-        }
-        if (result.Words.Count > 10)
-            Output($"  ... and {result.Words.Count - 10} more words");
-
-        Assert.True(result.Words.Count > 0, "Must recognize at least one word");
-        Assert.All(result.Words, w => Assert.False(string.IsNullOrWhiteSpace(w.Word)));
-        Assert.All(result.Words, w => Assert.True(w.StartMs >= 0));
-        Assert.All(result.Words, w => Assert.True(w.EndMs >= w.StartMs));
+        var probeDuration = WavAudioDecoder.ProbeWavDuration(_generatedStereoWav);
+        Assert.InRange(probeDuration, 1.3, 1.7);
     }
 
     [Fact]
     public async Task WhisperAlignmentProvider_ShouldRunFullPipeline()
     {
-        var audioPath = TestAudioFiles.FirstOrDefault(f => File.Exists(f));
-        if (audioPath == null)
-        {
-            Output("SKIP: No WAV files for full pipeline");
-            return;
-        }
-
         var modelDir = FindModelDirectory();
-        var expectedText = TestExpectedTexts[Array.IndexOf(TestAudioFiles, audioPath)];
-
-        Output($"=== Full Pipeline WhisperAlignmentProvider ===");
-        Output($"Audio: {Path.GetFileName(audioPath)}");
-        Output($"Text: \"{expectedText}\"");
-        Output($"Model: {modelDir ?? "NOT FOUND (expecting FallbackProportional)"}");
+        string expectedText = "Тестовая фраза для нативного выравнивания";
 
         var options = new WhisperOptions
         {
@@ -194,10 +68,10 @@ public sealed class WhisperNativeIntegrationTests
             },
             Hardware = new WhisperHardwareOptions
             {
-                Device = "cuda",
-                ComputeType = "float16"
+                Device = "cpu",
+                ComputeType = "int8"
             },
-            Inference = new WhisperInferenceOptions { BeamSize = 1, WordTimestamps = true, DefaultLanguage = "en" },
+            Inference = new WhisperInferenceOptions { BeamSize = 1, WordTimestamps = true, DefaultLanguage = "ru" },
             MemoryManagement = new WhisperMemoryOptions { RetentionPolicy = "UnloadImmediately" }
         };
 
@@ -209,14 +83,11 @@ public sealed class WhisperNativeIntegrationTests
             TempDir = "temp",
             MusicDir = "music",
             ToolsDir = "tools",
-            ScriptsDir = "tools/scripts",
-            RemotionWorkspaceDir = "tools/remotion_workspace",
-            PythonVenvName = ".venv-voice"
+            RemotionWorkspaceDir = "tools/remotion_workspace"
         });
 
         var whisperOptions = Options.Create(options);
         var logger = new TestLogger<WhisperAlignmentProvider>();
-
         var pathResolver = new FakePathResolver();
         var gpuManager = new FakeGpuManager();
         var settingRepo = new FakeSettingRepository();
@@ -225,35 +96,52 @@ public sealed class WhisperNativeIntegrationTests
             pathResolver, gpuManager, settingRepo,
             whisperOptions, storageOptions, logger);
 
-        var sw = Stopwatch.StartNew();
-        AlignmentData result;
-        try
-        {
-            result = await provider.AlignAsync(audioPath, expectedText);
-            sw.Stop();
-        }
-        catch (Exception ex)
-        {
-            Output($"PIPELINE ERROR: {ex.Message}");
-            if (ex.InnerException != null)
-                Output($"  Inner: {ex.InnerException.Message}");
-            throw;
-        }
-
-        Output($"\n--- Pipeline Result ---");
-        Output($"Engine: {result.AlignmentEngine}");
-        Output($"Words: {result.Words.Count}");
-        Output($"Duration: {result.TotalDurationMs} ms");
-        Output($"Time: {sw.ElapsedMilliseconds} ms");
-
-        foreach (var w in result.Words.Take(8))
-        {
-            Output($"  [{w.StartMs,5}-{w.EndMs,5}] ({w.Confidence:F2}) \"{w.Word}\"");
-        }
+        var result = await provider.AlignAsync(_generatedMonoWav, expectedText);
 
         Assert.NotNull(result);
-        Assert.True(result.Words.Count > 0 || result.AlignmentEngine == "FallbackProportional",
-            "Either words exist or Fallback fired");
+        Assert.True(result.Words.Count > 0, "Words must be aligned or generated via proportional fallback");
+        Assert.True(result.TotalDurationMs > 0);
+    }
+
+    private string CreateSyntheticWav(int sampleRate, short channels, double durationSeconds)
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), $"whisper_test_{Guid.NewGuid():N}.wav");
+        _tempFiles.Add(filePath);
+
+        int sampleCount = (int)(sampleRate * durationSeconds);
+        short bitsPerSample = 16;
+        int byteRate = sampleRate * channels * (bitsPerSample / 8);
+        short blockAlign = (short)(channels * (bitsPerSample / 8));
+        int subChunk2Size = sampleCount * channels * (bitsPerSample / 8);
+
+        using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        using var writer = new BinaryWriter(fs);
+
+        writer.Write("RIFF"u8);
+        writer.Write(36 + subChunk2Size);
+        writer.Write("WAVE"u8);
+        writer.Write("fmt "u8);
+        writer.Write(16);
+        writer.Write((short)1); // PCM
+        writer.Write(channels);
+        writer.Write(sampleRate);
+        writer.Write(byteRate);
+        writer.Write(blockAlign);
+        writer.Write(bitsPerSample);
+        writer.Write("data"u8);
+        writer.Write(subChunk2Size);
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            double t = (double)i / sampleRate;
+            short val = (short)(Math.Sin(2 * Math.PI * 440.0 * t) * 16000);
+            for (int ch = 0; ch < channels; ch++)
+            {
+                writer.Write(val);
+            }
+        }
+
+        return filePath;
     }
 
     private static string? FindModelDirectory()
@@ -262,7 +150,7 @@ public sealed class WhisperNativeIntegrationTests
         [
             Path.Combine(DataStorage, "ai-models", "whisper", "faster-whisper-small"),
             Path.Combine(Backend2Root, "data_storage", "ai-models", "whisper", "faster-whisper-small"),
-            Path.Combine(AppContext.BaseDirectory, "data_storage", "ai-models", "whisper", "faster-whisper-small"),
+            Path.Combine(AppContext.BaseDirectory, "data_storage", "ai-models", "whisper", "faster-whisper-small")
         ];
 
         foreach (var dir in candidates)
@@ -276,10 +164,12 @@ public sealed class WhisperNativeIntegrationTests
         return null;
     }
 
-    private static void Output(string message)
+    public void Dispose()
     {
-        Console.WriteLine(message);
-        Debug.WriteLine(message);
+        foreach (var file in _tempFiles)
+        {
+            try { if (File.Exists(file)) File.Delete(file); } catch { }
+        }
     }
 
     private sealed class TestLogger<T> : ILogger<T> where T : class

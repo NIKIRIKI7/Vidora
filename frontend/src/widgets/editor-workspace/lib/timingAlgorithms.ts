@@ -1,4 +1,5 @@
 import type { Scene, SceneFragment } from '@entities/project'
+import { WORDS_PER_SECOND, MIN_FRAGMENT_SECONDS } from '@shared/config'
 
 export const normalizeText = (text: string) => text.toLowerCase().replace(/[^\w\u0400-\u04FF]/g, '').trim()
 
@@ -6,7 +7,7 @@ export const fixOverlappingTimings = (fragments: SceneFragment[], totalDuration?
   let currentStart = 0
   return fragments.map((f, i) => {
     let duration = (f.endTime || 0) - (f.startTime || 0)
-    if (duration <= 0) duration = Math.max(f.text.split(' ').length / 2.5, 1.0)
+    if (duration <= 0) duration = Math.max(f.text.split(' ').length / WORDS_PER_SECOND, MIN_FRAGMENT_SECONDS)
     let end = currentStart + duration
     if (totalDuration && i === fragments.length - 1) end = Math.max(end, totalDuration)
     const newFrag = { ...f, startTime: Number(currentStart.toFixed(3)), endTime: Number(end.toFixed(3)) }
@@ -84,7 +85,7 @@ export const recalculateProjectTimecodes = (scenes: Scene[]): Scene[] => {
 
     const lastFragEnd = Math.max(
       ...scene.fragments.map(f => f.endTime || 0),
-      scene.fragments.reduce((acc, f) => acc + Math.max(f.text.split(' ').length / 2.5, 1.0), 0)
+      scene.fragments.reduce((acc, f) => acc + Math.max(f.text.split(' ').length / WORDS_PER_SECOND, MIN_FRAGMENT_SECONDS), 0)
     )
 
     cumulativeSeconds += lastFragEnd

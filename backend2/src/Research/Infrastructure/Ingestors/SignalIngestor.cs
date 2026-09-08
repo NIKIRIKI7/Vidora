@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Kernel.Ports;
 using Microsoft.Extensions.Logging;
 using Research.Domain.Entities;
 using Research.Domain.ValueObjects;
@@ -21,33 +22,48 @@ public sealed record RawSignal
     public bool Breakout { get; init; }
 }
 
+/// <summary>
+/// Аналитический контекст ниши, разрешённый через LLM для поиска ранних сигналов.
+/// </summary>
+public sealed record NicheContext(
+    string DisplayTopic,
+    string EffectiveQuery,
+    string EnglishQuery,
+    IReadOnlyList<string> Keywords,
+    IReadOnlyList<string> RedditSubreddits);
+
 public interface ISignalIngestor
 {
     Task<IReadOnlyList<EarlySignal>> CollectEarlySignalsAsync(string query, string lang = "ru", CancellationToken ct = default);
     Task<IReadOnlyList<string>> FetchGoogleTrendsKeywordsAsync(string query, string lang = "ru", CancellationToken ct = default);
+    Task<NicheContext> ResolveNicheContextAsync(string query, string lang = "ru", CancellationToken ct = default);
 }
 
 public sealed partial class SignalIngestor : ISignalIngestor
 {
     private readonly HttpClient _http;
     private readonly ILogger<SignalIngestor> _logger;
+    private readonly ILlmClient _llmClient;
 
-    public SignalIngestor(HttpClient http, ILogger<SignalIngestor> logger)
+    public SignalIngestor(HttpClient http, ILogger<SignalIngestor> logger, ILlmClient llmClient)
     {
         _http = http;
         _logger = logger;
+        _llmClient = llmClient;
     }
 
     public async Task<IReadOnlyList<EarlySignal>> CollectEarlySignalsAsync(string query, string lang = "ru", CancellationToken ct = default)
     {
-        var enQuery = ToEnglishTechQuery(query);
+        var ctx = await ResolveNicheContextAsync(query, lang, ct);
+        var enQuery = ctx.EnglishQuery;
+
         var tasks = new List<Task<List<RawSignal>>>
         {
             FetchGoogleTrendsMatrixAsync(query, lang, ct),
             FetchDuckDuckGoSuggestionsAsync(query, ct),
             FetchHackerNewsSignalsAsync(enQuery, ct),
             FetchGitHubTrendingSignalsAsync(enQuery, ct),
-            FetchRedditSignalsAsync(enQuery, ct)
+            FetchRedditSignalsAsync(enQuery, ctx.RedditSubreddits, ct)
         };
 
         if (lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) || Regex.IsMatch(query, @"[\u0400-\u04FF]"))
@@ -105,12 +121,121 @@ public sealed partial class SignalIngestor : ISignalIngestor
         return foundKeywords.ToList();
     }
 
-    private async Task<List<RawSignal>> FetchRedditSignalsAsync(string query, CancellationToken ct)
+    /// <summary>
+    /// Разрешает нишевой контекст через LLM: эффективный запрос, английский эквивалент,
+    /// ключевые слова и релевантные сабреддиты. При сбое LLM — эвристический fallback.
+    /// </summary>
+    public async Task<NicheContext> ResolveNicheContextAsync(string query, string lang = "ru", CancellationToken ct = default)
+    {
+        var displayTopic = CleanQuery(query);
+        var cleanQuery = Regex.Replace(displayTopic, @"\s+", " ").Trim();
+        var fallbackSubreddits = GetFallbackSubreddits(query);
+
+        try
+        {
+            var prompt = $$"""
+            Ты — контент-аналитик для YouTube DeepTrend. Ниша: "{{cleanQuery}}" (язык: {{lang}}).
+            Определи аналитический контекст ниши для поиска ранних трендов на разных платформах.
+
+            КЛЮЧЕВОЙ АЛГОРИТМ:
+            - effective_query: самый релевантный запрос 1-4 слова НА ЯЗЫКЕ "{{lang}}".
+            - english_query: английский перевод effective_query (для поиска по HN/GitHub/Reddit).
+            - keywords: 3-6 коротких ключей ниши.
+            - reddit_subreddits: 2-4 английских сабреддита по теме (только имя, латиницей).
+
+            ВЕРНИ СТРОГО JSON:
+            {"effective_query": "...", "english_query": "...", "keywords": ["...", "..."], "reddit_subreddits": ["...", "..."]}
+            """;
+
+            var res = await _llmClient.GenerateJsonAsync<JsonElement>(
+                new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: 0.3f, JsonMode: true), ct);
+
+            if (res.ValueKind == JsonValueKind.Object)
+            {
+                var effective = ReadString(res, "effective_query");
+                var english = ReadString(res, "english_query");
+                var keywords = ReadStringArray(res, "keywords")
+                    .Where(k => k.Length >= 2)
+                    .Take(6)
+                    .ToList();
+                var subreddits = ReadStringArray(res, "reddit_subreddits")
+                    .Select(s => Regex.Replace(s, "[^\\w]+", ""))
+                    .Where(s => s.Length >= 2)
+                    .Take(6)
+                    .ToList();
+
+                if (!string.IsNullOrWhiteSpace(effective) && !string.IsNullOrWhiteSpace(english))
+                {
+                    return new NicheContext(
+                        DisplayTopic: cleanQuery,
+                        EffectiveQuery: effective,
+                        EnglishQuery: english,
+                        Keywords: keywords.Count > 0 ? keywords : [cleanQuery],
+                        RedditSubreddits: subreddits.Count > 0 ? subreddits : fallbackSubreddits);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[SignalIngestor] LLM resolution failed for {Query}", cleanQuery);
+        }
+
+        return new NicheContext(
+            DisplayTopic: cleanQuery,
+            EffectiveQuery: cleanQuery,
+            EnglishQuery: cleanQuery,
+            Keywords: [cleanQuery],
+            RedditSubreddits: fallbackSubreddits);
+    }
+
+    private static string ReadString(JsonElement element, string prop)
+    {
+        if (element.TryGetProperty(prop, out var el) && el.ValueKind == JsonValueKind.String)
+        {
+            return el.GetString()?.Trim() ?? string.Empty;
+        }
+        return string.Empty;
+    }
+
+    private static IEnumerable<string> ReadStringArray(JsonElement element, string prop)
+    {
+        if (element.TryGetProperty(prop, out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in arr.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    var val = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(val)) yield return val;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Универсальные сабреддиты по умолчанию для любой ниши (не привязаны к IT).
+    /// </summary>
+    private static IReadOnlyList<string> GetFallbackSubreddits(string query)
+    {
+        var q = query.ToLowerInvariant();
+        if (q.Contains("игр") || q.Contains("game") || q.Contains("gaming")) return ["gaming", "IndieGaming", "truegaming"];
+        if (q.Contains("крипт") || q.Contains("финан") || q.Contains("инвест") || q.Contains("crypto") || q.Contains("financ") || q.Contains("invest")) return ["CryptoCurrency", "personalfinance", "investing"];
+        if (q.Contains("здоров") || q.Contains("медицин") || q.Contains("health") || q.Contains("fitness") || q.Contains("medic")) return ["fitness", "nutrition", "medicine"];
+        if (q.Contains("кухн") || q.Contains("рецепт") || q.Contains("food") || q.Contains("cooking") || q.Contains("recipe")) return ["Cooking", "recipes", "MealPrepSunday"];
+        if (q.Contains("бизнес") || q.Contains("маркет") || q.Contains("business") || q.Contains("market") || q.Contains("startup")) return ["Entrepreneur", "smallbusiness", "marketing"];
+        if (q.Contains("образован") || q.Contains("обуч") || q.Contains("education") || q.Contains("learn") || q.Contains("course")) return ["education", "learnprogramming", "GetStudying"];
+        if (q.Contains("психолог") || q.Contains("мотив") || q.Contains("self") || q.Contains("psycholog") || q.Contains("motivation")) return ["selfimprovement", "GetMotivated", "DecidingToBeBetter"];
+        if (q.Contains("путешеств") || q.Contains("travel") || q.Contains("trip")) return ["travel", "solotravel", "DigitalNomad"];
+        return ["technology", "AskProgramming", "InternetIsBeautiful"];
+    }
+
+    private async Task<List<RawSignal>> FetchRedditSignalsAsync(string query, IReadOnlyList<string> subreddits, CancellationToken ct)
     {
         var list = new List<RawSignal>();
         try
         {
-            var url = $"https://www.reddit.com/r/technology+programming+artificial+MachineLearning+webdev/search.json?q={Uri.EscapeDataString(query)}&sort=hot&restrict_sr=1&limit=15";
+            var subs = subreddits.Count > 0 ? string.Join("+", subreddits) : "technology+programming";
+            var url = $"https://www.reddit.com/r/{subs}/search.json?q={Uri.EscapeDataString(query)}&sort=hot&restrict_sr=1&limit=15";
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.UserAgent.ParseAdd("Vidora-DeepTrend/2.0 (by /u/vidora-research)");
             using var res = await _http.SendAsync(req, ct);
@@ -405,32 +530,11 @@ public sealed partial class SignalIngestor : ISignalIngestor
         return ranked.OrderByDescending(s => s.GrowthVelocityPercent).Take(15).ToList();
     }
 
-    public static string ToEnglishTechQuery(string query)
+    private static string CleanQuery(string text)
     {
-        var text = query.ToLowerInvariant();
-        var replacements = new Dictionary<string, string>
-        {
-            ["программирование"] = "programming",
-            ["программист"] = "developer",
-            ["нейросети"] = "AI neural networks",
-            ["нейросетей"] = "AI neural networks",
-            ["нейросеть"] = "AI",
-            ["искусственный интеллект"] = "artificial intelligence",
-            ["разработка"] = "software development",
-            ["кибербезопасность"] = "cybersecurity",
-            ["крипта"] = "crypto",
-            ["криптовалюта"] = "cryptocurrency",
-            ["трейдинг"] = "trading",
-            ["дизайн"] = "UI UX design",
-            ["игры"] = "game development"
-        };
-        foreach (var (k, v) in replacements)
-        {
-            text = text.Replace(k, v);
-        }
-        text = Regex.Replace(text, @"[,;]+", " ");
-        text = Regex.Replace(text, @"\s+", " ").Trim();
-        return text;
+        var clean = Regex.Replace(text, @"[,;]+", " ");
+        clean = Regex.Replace(clean, @"\s+", " ").Trim();
+        return string.IsNullOrWhiteSpace(clean) ? "tech" : clean;
     }
 
     private static string ExtractPrimaryKeyword(string text)

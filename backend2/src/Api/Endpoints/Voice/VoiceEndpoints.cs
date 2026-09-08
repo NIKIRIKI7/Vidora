@@ -20,6 +20,12 @@ public static class VoiceEndpoints
     {
         var group = endpoints.MapGroup("/api/v1/voice").WithTags("Voice");
 
+        group.MapGet("/engines", async (IVoiceModule voice, CancellationToken ct) =>
+        {
+            var engines = await voice.GetAvailableEnginesAsync(ct);
+            return Results.Ok(engines);
+        });
+
         group.MapPost("/synthesize", async (SynthesizeSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var command = new SynthesizeSpeechCommand(
@@ -27,10 +33,12 @@ public static class VoiceEndpoints
                 Engine: request.Engine,
                 SpeakerId: request.SpeakerId,
                 AlignmentEngine: request.AlignmentEngine ?? AlignmentEngineType.Whisper,
-                Speed: request.Speed ?? 1.0,
-                Pitch: request.Pitch ?? 1.0,
+                Speed: request.EffectiveSpeed,
+                Pitch: request.EffectivePitch,
                 ReferenceAudioPath: request.ReferenceAudioPath,
-                Filters: request.Filters);
+                Filters: request.Filters,
+                GuidanceScale: request.EffectiveGuidanceScale,
+                NumSteps: request.EffectiveNumSteps);
 
             var result = await voice.SynthesizeSpeechAsync(command, ct);
             return Results.Ok(result);
@@ -40,10 +48,13 @@ public static class VoiceEndpoints
         {
             var items = request.Items.Select(i => new BatchItemSpec(
                 i.Text,
-                i.Engine,
                 i.SpeakerId,
+                i.Engine,
                 i.AlignmentEngine ?? AlignmentEngineType.Whisper,
-                i.Speed)).ToList();
+                i.Speed,
+                i.Pitch,
+                i.GuidanceScale,
+                i.NumSteps)).ToList();
 
             var command = new BatchSynthesizeVoiceCommand(items, request.Filters);
             var result = await voice.BatchSynthesizeAsync(command, ct);
@@ -179,10 +190,12 @@ public static class VoiceEndpoints
                 Engine: request.Engine,
                 SpeakerId: request.SpeakerId,
                 AlignmentEngine: request.AlignmentEngine ?? AlignmentEngineType.Whisper,
-                Speed: request.Speed ?? 1.0,
-                Pitch: request.Pitch ?? 1.0,
+                Speed: request.EffectiveSpeed,
+                Pitch: request.EffectivePitch,
                 ReferenceAudioPath: request.ReferenceAudioPath,
-                Filters: request.Filters);
+                Filters: request.Filters,
+                GuidanceScale: request.EffectiveGuidanceScale,
+                NumSteps: request.EffectiveNumSteps);
 
             var res = await voice.SynthesizeSpeechAsync(cmd, ct);
             return Results.Ok(new
@@ -220,20 +233,34 @@ public static class VoiceEndpoints
 
 public sealed record SynthesizeSpeechRequest(
     [property: JsonPropertyName("text")] string Text,
-    [property: JsonPropertyName("engine")] VoiceEngineType Engine,
     [property: JsonPropertyName("speaker_id")] string SpeakerId,
-    [property: JsonPropertyName("alignment_engine")] AlignmentEngineType? AlignmentEngine,
-    [property: JsonPropertyName("speed")] double? Speed,
-    [property: JsonPropertyName("pitch")] double? Pitch,
-    [property: JsonPropertyName("reference_audio_path")] string? ReferenceAudioPath,
-    [property: JsonPropertyName("filters")] AudioFilterSpec? Filters);
+    [property: JsonPropertyName("engine")] VoiceEngineType? Engine = null,
+    [property: JsonPropertyName("alignment_engine")] AlignmentEngineType? AlignmentEngine = null,
+    [property: JsonPropertyName("speed")] double? Speed = null,
+    [property: JsonPropertyName("pitch")] double? Pitch = null,
+    [property: JsonPropertyName("reference_audio_path")] string? ReferenceAudioPath = null,
+    [property: JsonPropertyName("filters")] AudioFilterSpec? Filters = null,
+    [property: JsonPropertyName("guidance_scale")] double? GuidanceScale = null,
+    [property: JsonPropertyName("guidanceScale")] double? GuidanceScaleCamel = null,
+    [property: JsonPropertyName("num_steps")] int? NumSteps = null,
+    [property: JsonPropertyName("numSteps")] int? NumStepsCamel = null,
+    [property: JsonPropertyName("steps")] int? Steps = null)
+{
+    public double EffectiveSpeed => Speed ?? 1.0;
+    public double EffectivePitch => Pitch ?? 1.0;
+    public double EffectiveGuidanceScale => GuidanceScale ?? GuidanceScaleCamel ?? 2.0;
+    public int EffectiveNumSteps => NumSteps ?? NumStepsCamel ?? Steps ?? 24;
+}
 
 public sealed record BatchSynthesizeItemRequest(
     [property: JsonPropertyName("text")] string Text,
-    [property: JsonPropertyName("engine")] VoiceEngineType Engine,
     [property: JsonPropertyName("speaker_id")] string SpeakerId,
-    [property: JsonPropertyName("alignment_engine")] AlignmentEngineType? AlignmentEngine,
-    [property: JsonPropertyName("speed")] double Speed = 1.0);
+    [property: JsonPropertyName("engine")] VoiceEngineType? Engine = null,
+    [property: JsonPropertyName("alignment_engine")] AlignmentEngineType? AlignmentEngine = null,
+    [property: JsonPropertyName("speed")] double Speed = 1.0,
+    [property: JsonPropertyName("pitch")] double Pitch = 1.0,
+    [property: JsonPropertyName("guidance_scale")] double GuidanceScale = 2.0,
+    [property: JsonPropertyName("num_steps")] int NumSteps = 24);
 
 public sealed record BatchSynthesizeRequest(
     [property: JsonPropertyName("items")] IReadOnlyList<BatchSynthesizeItemRequest> Items,
