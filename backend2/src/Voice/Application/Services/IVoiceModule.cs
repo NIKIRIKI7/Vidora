@@ -13,7 +13,6 @@ public interface IVoiceModule
 
     Task<IReadOnlyList<SpeakerProfileDto>> GetAllSpeakersAsync(CancellationToken ct = default);
     Task<SpeakerProfileDto?> GetSpeakerByIdAsync(string id, CancellationToken ct = default);
-    Task<SpeakerProfileDto> CreateDesignedSpeakerAsync(DesignSpeakerRequest request, CancellationToken ct = default);
     Task<SpeakerProfileDto> CreateClonedSpeakerAsync(CloneSpeakerRequest request, string referenceAudioPath, CancellationToken ct = default);
     Task<SpeakerProfileDto> UpdateSpeakerAsync(string id, UpdateSpeakerRequest request, CancellationToken ct = default);
     Task DeleteSpeakerAsync(string id, CancellationToken ct = default);

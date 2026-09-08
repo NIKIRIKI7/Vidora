@@ -1,11 +1,8 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Integrations.OmniVoice.Audio;
-using Integrations.OmniVoice.Contracts;
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
-using Kernel.Platform.Gpu;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SystemContext.Domain.Ports;
@@ -14,66 +11,6 @@ using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 
 namespace Voice.Infrastructure.Providers;
-
-public sealed class OmniVoiceCloneProvider : IVoiceCloneProvider
-{
-    public VoiceEngineType EngineType => VoiceEngineType.LocalOmniVoice;
-
-    private readonly IOmniVoiceEngine _engine;
-    private readonly IGpuManager _gpuManager;
-    private readonly IPathResolver _pathResolver;
-    private readonly AppStorageConfig _storageConfig;
-    private readonly ILogger<OmniVoiceCloneProvider> _logger;
-
-    public OmniVoiceCloneProvider(
-        IOmniVoiceEngine engine,
-        IGpuManager gpuManager,
-        IPathResolver pathResolver,
-        IOptions<AppStorageConfig> storageConfig,
-        ILogger<OmniVoiceCloneProvider> logger)
-    {
-        _engine = engine;
-        _gpuManager = gpuManager;
-        _pathResolver = pathResolver;
-        _storageConfig = storageConfig.Value;
-        _logger = logger;
-    }
-
-    public bool SupportsEngine(VoiceEngineType engine) => engine == VoiceEngineType.LocalOmniVoice;
-
-    public async Task<CloneVoiceResult> CloneVoiceAsync(ClonedVoiceSpec spec, CancellationToken ct = default)
-    {
-        _logger.LogInformation(
-            "[Voice:OmniVoice:Clone] Cloning voice '{Name}' from audio: {Audio}",
-            spec.Name, spec.ReferenceAudioPath);
-
-        var safeRefAudio = _pathResolver.ResolveSafePath(spec.ReferenceAudioPath);
-        var speakerId = $"clone_{Guid.NewGuid():N}"[..16];
-
-        await using (await _gpuManager.AcquireGpuLockAsync("OmniVoice_Clone", ct))
-        {
-            await _engine.ExtractAndCacheSpeakerEmbeddingAsync(speakerId, safeRefAudio, spec.ReferenceText, ct);
-
-            var previewText = spec.Language?.StartsWith("ru", StringComparison.OrdinalIgnoreCase) == true
-                ? $"Привет! Это тестовый сэмпл голоса {spec.Name}, созданный в Vidora."
-                : $"Hello! This is a test preview sample of {spec.Name} created in Vidora.";
-
-            var synthesis = await _engine.SynthesizeSpeechAsync(previewText, speakerId, 1.0, 1.0, null, null, ct);
-
-            var previewDir = _pathResolver.ResolveSafePath(Path.Combine(_storageConfig.DataStorageDir, "temp", "voice", "previews"));
-            Directory.CreateDirectory(previewDir);
-            var previewPath = Path.Combine(previewDir, $"{speakerId}_preview.wav");
-
-            await WavAudioEncoder.WriteWavFileAsync(previewPath, synthesis.Samples, synthesis.SampleRate, ct);
-
-            _logger.LogInformation(
-                "[Voice:OmniVoice:Clone] Clone profile ready: SpeakerId={SpeakerId}, Preview={Preview}",
-                speakerId, previewPath);
-
-            return new CloneVoiceResult(speakerId, previewPath);
-        }
-    }
-}
 
 public sealed class MiniMaxCloneProvider : IVoiceCloneProvider
 {

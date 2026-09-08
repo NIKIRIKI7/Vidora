@@ -42,7 +42,6 @@ public class SystemOrmTests
         var models = await modelRepo.GetAllAsync();
         Assert.NotEmpty(models);
         Assert.Contains(models, m => m.Id == "whisper-small-ct2");
-        Assert.Contains(models, m => m.Id == "omnivoice");
         Assert.DoesNotContain(models, m => m.Id == "whisper-base");
     }
 

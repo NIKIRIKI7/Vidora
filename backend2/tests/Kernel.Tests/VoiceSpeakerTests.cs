@@ -67,7 +67,7 @@ public class VoiceSpeakerTests
     {
         var spec = new VoiceDesignSpec("Deep male voice", "ru-RU", gender: "Male");
         var profile = SpeakerProfile.CreateDesigned(
-            new SpeakerId("designed_001"), "Designed Voice", VoiceEngineType.LocalOmniVoice,
+            new SpeakerId("designed_001"), "Designed Voice", VoiceEngineType.CloudOpenAi,
             spec, "Deep male voice for narration");
 
         Assert.Equal(SpeakerSourceType.Designed, profile.SourceType);
@@ -80,11 +80,11 @@ public class VoiceSpeakerTests
     public void SpeakerProfile_CreateCloned_ShouldHaveCloneEvents()
     {
         var spec = new ClonedVoiceSpec(
-            VoiceEngineType.LocalOmniVoice, "/path/to/ref.wav", "My Clone",
+            VoiceEngineType.CloudOpenAi, "/path/to/ref.wav", "My Clone",
             referenceText: "Hello world");
 
         var profile = SpeakerProfile.CreateCloned(
-            new SpeakerId("clone_001"), VoiceEngineType.LocalOmniVoice, spec);
+            new SpeakerId("clone_001"), VoiceEngineType.CloudOpenAi, spec);
 
         Assert.Equal(SpeakerSourceType.Cloned, profile.SourceType);
         Assert.Equal("/path/to/ref.wav", profile.CloneReferenceAudioPath);
@@ -143,8 +143,6 @@ public class VoiceSpeakerTests
 
         var defaults = new[]
         {
-            SpeakerProfile.CreateBuiltIn(new SpeakerId("ru_speaker_sergey"), "Сергей", VoiceEngineType.LocalOmniVoice, "ru-RU", "Male"),
-            SpeakerProfile.CreateBuiltIn(new SpeakerId("ru_speaker_elena"), "Елена", VoiceEngineType.LocalOmniVoice, "ru-RU", "Female"),
             SpeakerProfile.CreateBuiltIn(new SpeakerId("alloy"), "Alloy", VoiceEngineType.CloudOpenAi, "multilingual", "Neutral"),
             SpeakerProfile.CreateBuiltIn(new SpeakerId("echo"), "Echo", VoiceEngineType.CloudOpenAi, "multilingual", "Male"),
             SpeakerProfile.CreateBuiltIn(new SpeakerId("shimmer"), "Shimmer", VoiceEngineType.CloudOpenAi, "multilingual", "Female"),
@@ -155,7 +153,7 @@ public class VoiceSpeakerTests
         await db.SaveChangesAsync();
 
         var all = await db.SpeakerProfiles.ToListAsync();
-        Assert.Equal(6, all.Count);
+        Assert.Equal(4, all.Count);
         Assert.All(all, p => Assert.True(p.IsDefault));
         Assert.All(all, p => Assert.Equal(SpeakerSourceType.BuiltIn, p.SourceType));
     }
@@ -173,7 +171,7 @@ public class VoiceSpeakerTests
 
         var active = SpeakerProfile.CreateBuiltIn(new SpeakerId("active_speaker"), "Active", VoiceEngineType.CloudOpenAi, "en");
         var inactive = SpeakerProfile.CreateDesigned(
-            new SpeakerId("inactive_speaker"), "Inactive", VoiceEngineType.LocalOmniVoice,
+            new SpeakerId("inactive_speaker"), "Inactive", VoiceEngineType.CloudOpenAi,
             new VoiceDesignSpec("test", "en"), "desc");
         inactive.Deactivate();
 
@@ -203,11 +201,11 @@ public class VoiceSpeakerTests
     [Fact]
     public void ClonedVoiceSpec_ShouldValidateRequiredFields()
     {
-        Assert.Throws<ValidationException>(() => new ClonedVoiceSpec(VoiceEngineType.LocalOmniVoice, "", "Name"));
-        Assert.Throws<ValidationException>(() => new ClonedVoiceSpec(VoiceEngineType.LocalOmniVoice, "/path.wav", ""));
+        Assert.Throws<ValidationException>(() => new ClonedVoiceSpec(VoiceEngineType.CloudOpenAi, "", "Name"));
+        Assert.Throws<ValidationException>(() => new ClonedVoiceSpec(VoiceEngineType.CloudOpenAi, "/path.wav", ""));
 
         var spec = new ClonedVoiceSpec(
-            VoiceEngineType.LocalOmniVoice, "/ref.wav", "My Clone",
+            VoiceEngineType.CloudOpenAi, "/ref.wav", "My Clone",
             referenceText: "Hello", language: "en");
 
         Assert.Equal("/ref.wav", spec.ReferenceAudioPath);
@@ -219,7 +217,7 @@ public class VoiceSpeakerTests
     public void VoiceSpec_ValidParameters_ShouldInstantiateSuccessfully()
     {
         var spec = new VoiceSpec(
-            VoiceEngineType.LocalOmniVoice,
+            VoiceEngineType.CloudOpenAi,
             "alloy",
             AlignmentEngineType.Whisper,
             speed: 1.25,
@@ -232,7 +230,7 @@ public class VoiceSpeakerTests
         Assert.Equal(3.5, spec.GuidanceScale);
         Assert.Equal(40, spec.NumSteps);
 
-        var defaults = new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy");
+        var defaults = new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy");
         Assert.Equal(2.0, defaults.GuidanceScale);
         Assert.Equal(24, defaults.NumSteps);
     }
@@ -241,26 +239,26 @@ public class VoiceSpeakerTests
     public void VoiceSpec_InvalidGuidanceScale_ShouldThrowValidationException()
     {
         Assert.Throws<ValidationException>(() =>
-            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", guidanceScale: 0.9));
+            new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy", guidanceScale: 0.9));
         Assert.Throws<ValidationException>(() =>
-            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", guidanceScale: 10.5));
+            new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy", guidanceScale: 10.5));
     }
 
     [Fact]
     public void VoiceSpec_InvalidNumSteps_ShouldThrowValidationException()
     {
         Assert.Throws<ValidationException>(() =>
-            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", numSteps: 7));
+            new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy", numSteps: 7));
         Assert.Throws<ValidationException>(() =>
-            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", numSteps: 129));
+            new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy", numSteps: 129));
     }
 
     [Fact]
     public void VoiceSpec_InvalidPitch_ShouldThrowValidationException()
     {
         Assert.Throws<ValidationException>(() =>
-            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", pitch: 0.4));
+            new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy", pitch: 0.4));
         Assert.Throws<ValidationException>(() =>
-            new VoiceSpec(VoiceEngineType.LocalOmniVoice, "alloy", pitch: 2.5));
+            new VoiceSpec(VoiceEngineType.CloudOpenAi, "alloy", pitch: 2.5));
     }
 }

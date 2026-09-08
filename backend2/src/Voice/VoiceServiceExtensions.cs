@@ -10,7 +10,6 @@ using Voice.Infrastructure.Audio;
 using Voice.Infrastructure.Persistence;
 using Voice.Infrastructure.Providers;
 using Voice.Infrastructure.Providers.Cloud;
-using Voice.Infrastructure.Providers.Local;
 using Voice.Infrastructure.Seeding;
 
 namespace Voice;
@@ -31,7 +30,6 @@ public static class VoiceServiceExtensions
         services.AddScoped<ISpeakerProfileRepository, EfSpeakerProfileRepository>();
 
         // Движки TTS
-        services.AddScoped<ITtsEngineProvider, OmniVoiceTtsProvider>();
         services.AddHttpClient<ITtsEngineProvider, OpenAiSpeechProvider>();
         services.AddHttpClient<ITtsEngineProvider, MiniMaxSpeechProvider>();
         services.AddScoped<TtsProviderRegistry>();
@@ -41,15 +39,11 @@ public static class VoiceServiceExtensions
         services.AddScoped<IForcedAlignmentProvider, NativeFallbackAlignmentProvider>();
         services.AddScoped<AlignmentProviderRegistry>();
 
-        // Voice Design и Cloning (MiniMax через нативный HttpClient)
-        services.AddScoped<IVoiceDesignProvider, OmniVoiceDesignProvider>();
-        services.AddScoped<IVoiceCloneProvider, OmniVoiceCloneProvider>();
+        // Клонирование голоса (облачный MiniMax)
         services.AddHttpClient<IVoiceCloneProvider, MiniMaxCloneProvider>();
-        services.AddScoped<VoiceDesignProviderRegistry>();
         services.AddScoped<VoiceCloneProviderRegistry>();
 
         // Самоописывающиеся дескрипторы движков + каталог
-        services.AddScoped<IVoiceEngineDescriptor, OmniVoiceEngineDescriptor>();
         services.AddScoped<IVoiceEngineDescriptor, MiniMaxEngineDescriptor>();
         services.AddScoped<IVoiceEngineDescriptor, OpenAiEngineDescriptor>();
         services.AddScoped<IVoiceEngineCatalog, VoiceEngineCatalog>();

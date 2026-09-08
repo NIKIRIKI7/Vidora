@@ -131,17 +131,6 @@ public sealed record VoiceEngineInfoDto(
     [property: JsonPropertyName("status_message")] string? StatusMessage,
     [property: JsonPropertyName("description")] string Description);
 
-public sealed record DesignSpeakerRequest(
-    [property: JsonPropertyName("description")] string Description,
-    [property: JsonPropertyName("language")] string Language,
-    [property: JsonPropertyName("gender")] string? Gender,
-    [property: JsonPropertyName("age_range")] string? AgeRange,
-    [property: JsonPropertyName("accent")] string? Accent,
-    [property: JsonPropertyName("emotion")] string? Emotion,
-    [property: JsonPropertyName("style")] string? Style,
-    [property: JsonPropertyName("speed")] double Speed = 1.0,
-    [property: JsonPropertyName("engine")] VoiceEngineType? Engine = null);
-
 public sealed record CloneSpeakerRequest(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("engine")] VoiceEngineType Engine,

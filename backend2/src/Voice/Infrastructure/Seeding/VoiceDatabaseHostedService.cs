@@ -47,16 +47,6 @@ public sealed class VoiceDatabaseHostedService : IHostedService
         var defaults = new[]
         {
             SpeakerProfile.CreateBuiltIn(
-                new SpeakerId("ru_speaker_sergey"),
-                "Сергей (OmniVoice Deep)",
-                VoiceEngineType.LocalOmniVoice,
-                "ru-RU", "Male", "Глубокий мужской голос для русского языка"),
-            SpeakerProfile.CreateBuiltIn(
-                new SpeakerId("ru_speaker_elena"),
-                "Елена (OmniVoice Dynamic)",
-                VoiceEngineType.LocalOmniVoice,
-                "ru-RU", "Female", "Динамичный женский голос для русского языка"),
-            SpeakerProfile.CreateBuiltIn(
                 new SpeakerId("alloy"),
                 "Alloy (OpenAI Speech)",
                 VoiceEngineType.CloudOpenAi,

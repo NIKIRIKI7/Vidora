@@ -118,8 +118,6 @@ public sealed class DatabaseMigrationManager
 
         var defaults = new[]
         {
-            SpeakerProfile.CreateBuiltIn(new SpeakerId("ru_speaker_sergey"), "Сергей", VoiceEngineType.LocalOmniVoice, "ru-RU", "Male"),
-            SpeakerProfile.CreateBuiltIn(new SpeakerId("ru_speaker_elena"), "Елена", VoiceEngineType.LocalOmniVoice, "ru-RU", "Female"),
             SpeakerProfile.CreateBuiltIn(new SpeakerId("alloy"), "Alloy", VoiceEngineType.CloudOpenAi, "multilingual", "Neutral"),
             SpeakerProfile.CreateBuiltIn(new SpeakerId("echo"), "Echo", VoiceEngineType.CloudOpenAi, "multilingual", "Male"),
             SpeakerProfile.CreateBuiltIn(new SpeakerId("shimmer"), "Shimmer", VoiceEngineType.CloudOpenAi, "multilingual", "Female"),

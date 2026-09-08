@@ -103,12 +103,6 @@ public static class VoiceEndpoints
             return profile is null ? Results.NotFound() : Results.Ok(profile);
         });
 
-        speakerGroup.MapPost("/design", async (DesignSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
-        {
-            var profile = await voice.CreateDesignedSpeakerAsync(request, ct);
-            return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
-        });
-
         speakerGroup.MapPost("/clone", async (
             [FromForm] string name,
             [FromForm] VoiceEngineType engine,

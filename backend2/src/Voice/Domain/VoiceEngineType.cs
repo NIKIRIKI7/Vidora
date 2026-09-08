@@ -5,7 +5,6 @@ namespace Voice.Domain;
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum VoiceEngineType
 {
-    LocalOmniVoice,
-    CloudOpenAi,
-    CloudMiniMax
+    CloudOpenAi = 1,
+    CloudMiniMax = 2
 }

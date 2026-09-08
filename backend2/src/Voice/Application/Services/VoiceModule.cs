@@ -23,7 +23,6 @@ public sealed class VoiceModule : IVoiceModule
     private readonly ISpeakerProfileRepository _speakerRepo;
     private readonly TtsProviderRegistry _providerRegistry;
     private readonly AlignmentProviderRegistry _alignmentRegistry;
-    private readonly VoiceDesignProviderRegistry _designRegistry;
     private readonly VoiceCloneProviderRegistry _cloneRegistry;
     private readonly IAudioDuckingService _audioService;
     private readonly IVoiceMediaRegistrar _mediaRegistrar;
@@ -37,7 +36,6 @@ public sealed class VoiceModule : IVoiceModule
         ISpeakerProfileRepository speakerRepo,
         TtsProviderRegistry providerRegistry,
         AlignmentProviderRegistry alignmentRegistry,
-        VoiceDesignProviderRegistry designRegistry,
         VoiceCloneProviderRegistry cloneRegistry,
         IVoiceEngineCatalog engineCatalog,
         IAudioDuckingService audioService,
@@ -50,7 +48,6 @@ public sealed class VoiceModule : IVoiceModule
         _speakerRepo = speakerRepo;
         _providerRegistry = providerRegistry;
         _alignmentRegistry = alignmentRegistry;
-        _designRegistry = designRegistry;
         _cloneRegistry = cloneRegistry;
         _engineCatalog = engineCatalog;
         _audioService = audioService;
@@ -68,7 +65,7 @@ public sealed class VoiceModule : IVoiceModule
         if (string.IsNullOrWhiteSpace(refAudio) && speaker != null && speaker.SourceType == SpeakerSourceType.Cloned && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
             refAudio = speaker.CloneReferenceAudioPath;
 
-        var engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.LocalOmniVoice;
+        var engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.CloudOpenAi;
         var spec = new VoiceSpec(engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio, cmd.GuidanceScale, cmd.NumSteps);
         var job = TtsJob.Create(TtsJobId.New(), cmd.Text, spec);
 
@@ -195,31 +192,6 @@ public sealed class VoiceModule : IVoiceModule
     {
         var profile = await _speakerRepo.GetByIdAsync(id, ct);
         return profile == null ? null : SpeakerProfileDto.FromEntity(profile);
-    }
-
-    public async Task<SpeakerProfileDto> CreateDesignedSpeakerAsync(DesignSpeakerRequest request, CancellationToken ct = default)
-    {
-        _logger.LogInformation("[VoiceModule] Дизайн нового голоса: '{Desc}'", request.Description);
-
-        var spec = new VoiceDesignSpec(
-            request.Description, request.Language, request.Gender,
-            request.AgeRange, request.Accent, request.Emotion, request.Style, request.Speed);
-
-        var provider = _designRegistry.Resolve();
-        var result = await provider.DesignVoiceAsync(spec, ct);
-
-        var speakerId = new SpeakerId(result.SpeakerId);
-        var engineType = request.Engine ?? VoiceEngineType.LocalOmniVoice;
-        var profile = SpeakerProfile.CreateDesigned(speakerId, spec.Description, engineType, spec, result.Description);
-
-        if (!string.IsNullOrWhiteSpace(result.PreviewAudioPath))
-            profile.SetPreviewAudio(result.PreviewAudioPath);
-
-        await _speakerRepo.AddAsync(profile, ct);
-        await _speakerRepo.SaveChangesAsync(ct);
-
-        _logger.LogInformation("[VoiceModule] Голос задизайнен: {Id} ({Name})", profile.Id, profile.Name);
-        return SpeakerProfileDto.FromEntity(profile);
     }
 
     public async Task<SpeakerProfileDto> CreateClonedSpeakerAsync(CloneSpeakerRequest request, string referenceAudioPath, CancellationToken ct = default)
