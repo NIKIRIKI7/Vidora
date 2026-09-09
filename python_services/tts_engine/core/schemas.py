@@ -33,6 +33,10 @@ class SynthesizeRequest(BaseModel):
     output_audio_path: str
     speed: float = 1.0
     pitch: float = 1.0
+    # Эталонный голос (ref-audio + подпись текста) — для движков без .pt-вектора
+    # и для обратной совместимости с профилями диктора, где нет embedding.
+    reference_audio_path: Optional[str] = None
+    reference_text: Optional[str] = None
     generation_config: GenerationConfig = Field(default_factory=GenerationConfig)
 
 

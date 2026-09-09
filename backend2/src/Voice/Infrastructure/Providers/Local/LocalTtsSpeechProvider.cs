@@ -54,6 +54,8 @@ public sealed class LocalTtsSpeechProvider : ITtsEngineProvider
             duration: spec.Duration,
             preprocessPrompt: spec.PreprocessPrompt,
             postprocessOutput: spec.PostprocessOutput,
+            referenceAudioPath: spec.ReferenceAudioPath,
+            referenceText: spec.ReferenceText,
             ct: ct);
 
         var fileInfo = new FileInfo(safeDest);

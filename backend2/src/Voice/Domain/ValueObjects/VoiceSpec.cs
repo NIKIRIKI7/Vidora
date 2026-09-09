@@ -29,6 +29,9 @@ public sealed record VoiceSpec
     [JsonPropertyName("reference_audio_path")]
     public string? ReferenceAudioPath { get; init; }
 
+    [JsonPropertyName("reference_text")]
+    public string? ReferenceText { get; init; }
+
     // Данные локального ML-воркера (заполняются из профиля диктора для LocalTts)
     [JsonPropertyName("local_engine_id")]
     public string? LocalEngineId { get; init; }
@@ -65,7 +68,8 @@ public sealed record VoiceSpec
         bool denoise = true,
         double duration = 0.0,
         bool preprocessPrompt = true,
-        bool postprocessOutput = true)
+        bool postprocessOutput = true,
+        string? referenceText = null)
     {
         if (string.IsNullOrWhiteSpace(speakerId))
         {
@@ -104,5 +108,6 @@ public sealed record VoiceSpec
         PreprocessPrompt = preprocessPrompt;
         PostprocessOutput = postprocessOutput;
         ReferenceAudioPath = referenceAudioPath?.Trim();
+        ReferenceText = referenceText?.Trim();
     }
 }

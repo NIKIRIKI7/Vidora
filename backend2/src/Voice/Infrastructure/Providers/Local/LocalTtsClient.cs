@@ -49,6 +49,8 @@ public sealed class LocalTtsClient : ILocalTtsClient
         double duration,
         bool preprocessPrompt,
         bool postprocessOutput,
+        string? referenceAudioPath = null,
+        string? referenceText = null,
         CancellationToken ct = default)
     {
         var payload = new
@@ -60,6 +62,8 @@ public sealed class LocalTtsClient : ILocalTtsClient
             output_audio_path = outputAudioPath,
             speed = speed,
             pitch = pitch,
+            reference_audio_path = referenceAudioPath,
+            reference_text = referenceText,
             generation_config = new
             {
                 num_steps = numSteps,

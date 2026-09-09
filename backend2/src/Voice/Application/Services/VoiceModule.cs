@@ -66,6 +66,7 @@ public sealed class VoiceModule : IVoiceModule
         var speaker = await _speakerRepo.GetBySpeakerIdAsync(new SpeakerId(cmd.SpeakerId), ct);
 
         var refAudio = cmd.ReferenceAudioPath;
+        string? refText = null;
         string? instruct = null;
 
         if (speaker != null)
@@ -74,6 +75,7 @@ public sealed class VoiceModule : IVoiceModule
             {
                 if (string.IsNullOrWhiteSpace(refAudio) && !string.IsNullOrWhiteSpace(speaker.CloneReferenceAudioPath))
                     refAudio = speaker.CloneReferenceAudioPath;
+                refText = speaker.CloneReferenceText;
             }
             else if (speaker.SourceType == SpeakerSourceType.Designed)
             {
@@ -84,7 +86,7 @@ public sealed class VoiceModule : IVoiceModule
         var engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.CloudOpenAi;
         var spec = new VoiceSpec(
             engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio,
-            cmd.GuidanceScale, cmd.NumSteps, cmd.Denoise, cmd.Duration, cmd.PreprocessPrompt, cmd.PostprocessOutput)
+            cmd.GuidanceScale, cmd.NumSteps, cmd.Denoise, cmd.Duration, cmd.PreprocessPrompt, cmd.PostprocessOutput, refText)
         {
             // Данные локального ML-воркера и Voice Design пробрасываем из профиля диктора
             LocalEngineId = speaker?.LocalEngineId,

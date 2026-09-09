@@ -259,6 +259,8 @@ class OmniVoiceAdapter(BaseVoiceEngine):
         speed: float = 1.0,
         pitch: float = 1.0,
         gen_config: Optional[dict] = None,
+        reference_audio_path: Optional[str] = None,
+        reference_text: Optional[str] = None,
     ):
         text = (text or "").strip()
         if not text:

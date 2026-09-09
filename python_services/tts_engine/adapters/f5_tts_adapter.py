@@ -60,6 +60,8 @@ class F5TTSAdapter(BaseVoiceEngine):
         speed: float = 1.0,
         pitch: float = 1.0,
         gen_config: Optional[dict] = None,
+        reference_audio_path: Optional[str] = None,
+        reference_text: Optional[str] = None,
     ):
         # 1. Читаете вектор диктора: embedding = torch.load(embedding_path)
         #    либо используете instruct (voice design)

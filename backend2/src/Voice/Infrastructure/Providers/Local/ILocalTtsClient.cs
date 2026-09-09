@@ -29,6 +29,8 @@ public interface ILocalTtsClient
         double duration,
         bool preprocessPrompt,
         bool postprocessOutput,
+        string? referenceAudioPath = null,
+        string? referenceText = null,
         CancellationToken ct = default);
 
     Task CloneVoiceAsync(
