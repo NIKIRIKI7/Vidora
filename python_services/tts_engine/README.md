@@ -4,7 +4,42 @@
 
 **Главный принцип — архитектура Stateless.** C# оркестратор передаёт сюда абсолютные пути к файлам. Микросервис читает файлы с диска, генерирует звук/векторы и кладёт их обратно на диск. Микросервис не содержит базы данных и не хранит состояние между запросами (кроме одной загруженной модели в VRAM).
 
-**Первичный движок — OmniVoice (k2-fsa), сжатый/квантованный.** Веса поднимаются в fp16 на CUDA (или int8 при наличии bitsandbytes), чтобы экономить VRAM.
+**Первичный движок — OmniVoice (k2-fsa).** Основной режим — **GGUF** (квантованные веса, ggml/CrispASR, без PyTorch): `cstr/omnivoice-GGUF`. Legacy-режим — официальный PyTorch-чекпоинт `k2-fsa/OmniVoice` (fp16/int8/fp32).
+
+---
+
+## OmniVoice GGUF (основной режим)
+
+Адаптер автоматически выбирает GGUF, если находит файлы:
+
+| Файл | Назначение | Размер |
+|------|-----------|--------|
+| `omnivoice-q8_0.gguf` | Qwen3-0.6B бэкбон + audio embeddings/heads | ~780 MB |
+| `omnivoice-tokenizer-f16.gguf` | HiggsAudioV2 audio-codec (HuBERT + DAC) | ~385 MB |
+
+Скачивание и размещение (ASCII-путь обязателен, см. ниже):
+
+```bash
+python -c "from huggingface_hub import snapshot_download; snapshot_download('cstr/omnivoice-GGUF', local_dir=r'%LOCALAPPDATA%\Vidora\Models\OmniVoice-GGUF', allow_patterns=['omnivoice-q8_0.gguf','omnivoice-tokenizer-f16.gguf'])"
+```
+
+Порядок поиска GGUF в адаптере:
+1. `OMNIVOICE_GGUF_MODEL` (+ `OMNIVOICE_GGUF_CODEC`);
+2. `OMNIVOICE_GGUF_DIR`;
+3. `<TTS_MODELS_DIR>/OmniVoice-GGUF`;
+4. `%LOCALAPPDATA%\Vidora\Models\OmniVoice-GGUF`.
+
+> **Windows + не-ASCII путь.** `libcrispasr` открывает GGUF нативным `fopen` и не
+> понимает кириллицу. Если репозиторий лежит в пути вида `...\Проекты\...`,
+> GGUF нужно держать в ASCII-каталоге (пункт 4 выше) или задать
+> `OMNIVOICE_GGUF_DIR`. Иначе будет `RuntimeError: ... backend not supported`.
+
+Полезные переменные: `OMNIVOICE_STEPS` (шаги диффузии), `OMNIVOICE_LANGUAGE`
+(ISO 639-3, напр. `rus`/`eng`), `OMNIVOICE_THREADS`, `OMNIVOICE_CRISPASR_RAW=1`
+(вывод без встроенного водяного знака CrispASR).
+
+Клонирование в GGUF-режиме строится из reference-WAV (C# передаёт
+`reference_audio_path`), `.pt`-вектор не требуется — на диск пишется сайдкар.
 
 ---
 
@@ -20,7 +55,10 @@
    source venv/bin/activate          # Linux/macOS
    venv\Scripts\activate             # Windows
    pip install -r requirements.txt
-   pip install omnivoice             # пакет модели OmniVoice
+   ```
+   Для CUDA-сборки CrispASR (NVIDIA):
+   ```bash
+   pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/cuda/
    ```
 3. Запуск сервера локально:
    ```bash

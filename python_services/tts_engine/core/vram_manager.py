@@ -3,12 +3,21 @@ import logging
 import threading
 from typing import Optional
 
-import torch
-
 from adapters import REGISTRY
 from adapters.base_engine import BaseVoiceEngine
 
 logger = logging.getLogger("tts_engine.vram")
+
+
+def _empty_torch_cache() -> None:
+    """Опциональная очистка CUDA-кэша. GGUF-режим (CrispASR) не требует PyTorch."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # noqa: BLE001 — torch не установлен/недоступен
+        pass
 
 
 class VramManager:
@@ -31,8 +40,7 @@ class VramManager:
             logger.info("[VramManager] Движок '%s' выгружен из VRAM.", engine_id)
         except Exception:  # noqa: BLE001
             logger.exception("[VramManager] Ошибка при выгрузке движка '%s'.", engine_id)
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_torch_cache()
         gc.collect()
 
     def get_engine(self, engine_id: str) -> BaseVoiceEngine:

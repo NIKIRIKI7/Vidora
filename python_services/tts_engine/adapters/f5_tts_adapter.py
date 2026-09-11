@@ -13,9 +13,14 @@
 import gc
 from typing import Optional
 
-import torch
-
 from .base_engine import BaseVoiceEngine
+
+
+def _torch():
+    """torch импортируется лениво: GGUF-режим (CrispASR) не требует PyTorch."""
+    import torch
+
+    return torch
 
 
 class F5TTSAdapter(BaseVoiceEngine):
@@ -25,7 +30,7 @@ class F5TTSAdapter(BaseVoiceEngine):
 
     def __init__(self):
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if _torch().cuda.is_available() else "cpu"
 
     def load(self):
         # Эта логика выполнится один раз при первом обращении.
@@ -37,6 +42,7 @@ class F5TTSAdapter(BaseVoiceEngine):
     def unload(self):
         self.model = None
         gc.collect()
+        torch = _torch()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
