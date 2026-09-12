@@ -74,6 +74,7 @@ app.MapMediaEndpoints();
 app.MapVoiceEndpoints();
 app.MapMotionEndpoints();
 app.MapProductionEndpoints();
+app.MapScenarioEngineEndpoints();
 app.MapResearchEndpoints();
 app.MapYouTubeAgentEndpoints();
 

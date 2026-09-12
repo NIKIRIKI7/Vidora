@@ -100,6 +100,7 @@ public sealed class DatabaseMigrationManager
         await _productionDb.ResetMigrationLocksAsync(ct);
         await _productionDb.Database.EnsureCreatedAsync(ct);
         await _productionDb.ConfigureSqlitePragmasAsync(ct);
+        await EnsureProductionScenarioEngineColumnsAsync(_productionDb, ct);
 
         // 7. Research DB
         _logger.LogInformation("[7/7] Применение схемы research.db...");
@@ -110,6 +111,49 @@ public sealed class DatabaseMigrationManager
         _logger.LogInformation("==================================================");
         _logger.LogInformation("[CLI Migration] Все базы данных успешно подготовлены!");
         _logger.LogInformation("==================================================");
+    }
+
+    /// <summary>
+    /// Idempotently добавляет колонки Scenario Engine в существующую таблицу фрагментов
+    /// (EnsureCreated не изменяет уже созданные SQLite-таблицы).
+    /// </summary>
+    private static async Task EnsureProductionScenarioEngineColumnsAsync(ProductionDbContext db, CancellationToken ct)
+    {
+        const string table = "production_scene_fragments";
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await db.Database.OpenConnectionAsync(ct);
+        }
+
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var readCmd = connection.CreateCommand())
+        {
+            readCmd.CommandText = $"PRAGMA table_info({table});";
+            using var reader = await readCmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] columns =
+        [
+            ("ContentHash", "TEXT NOT NULL DEFAULT ''"),
+            ("DeclaredStartSeconds", "REAL NOT NULL DEFAULT 0"),
+            ("DeclaredEndSeconds", "REAL NOT NULL DEFAULT 0"),
+            ("IsMediaMissing", "INTEGER NOT NULL DEFAULT 0"),
+            ("IsAnimationMissing", "INTEGER NOT NULL DEFAULT 0")
+        ];
+
+        foreach (var column in columns)
+        {
+            if (existing.Contains(column.Name)) continue;
+
+            await using var alterCmd = connection.CreateCommand();
+            alterCmd.CommandText = $"ALTER TABLE {table} ADD COLUMN \"{column.Name}\" {column.Definition};";
+            await alterCmd.ExecuteNonQueryAsync(ct);
+        }
     }
 
     private static async Task SeedVoiceDefaultsAsync(VoiceDbContext db, CancellationToken ct)

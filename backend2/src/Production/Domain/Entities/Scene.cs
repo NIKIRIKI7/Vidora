@@ -51,7 +51,11 @@ public class Scene : BaseEntity<string>
         };
     }
 
-    public SceneFragment AddFragment(string text, string visualNote, double durationSeconds = 0.0)
+    public SceneFragment AddFragment(
+        string text,
+        string visualNote,
+        double durationSeconds = 0.0,
+        TimecodeSpan? declaredTiming = null)
     {
         int nextIndex = _fragments.Count;
         double nextStart = _fragments.Count > 0 ? _fragments.Max(f => f.EndSeconds) : 0.0;
@@ -63,7 +67,8 @@ public class Scene : BaseEntity<string>
             index: nextIndex,
             text: text,
             visualNote: visualNote,
-            timing: timing);
+            timing: timing,
+            declaredTiming: declaredTiming);
 
         _fragments.Add(fragment);
         RecalculateSceneDurationFromFragments();
@@ -89,8 +94,9 @@ public class Scene : BaseEntity<string>
             double duration = frag.DurationSeconds;
             if (duration <= 0.0)
             {
-                int words = frag.Text.Split([' ', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Length;
-                duration = Math.Max(SpeechPacingDefaults.MinFragmentSeconds, Math.Round(words / SpeechPacingDefaults.WordsPerSecond, 2));
+                // Без реальной озвучки длительность оценивается по тексту:
+                // чистые слова (без тегов диктора) + разрешённые паузы <#X#>.
+                duration = frag.EstimateDuration();
             }
             frag.SetTiming(TimecodeSpan.FromDuration(offset, duration));
             offset += duration;

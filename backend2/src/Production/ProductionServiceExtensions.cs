@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ProductionContext.Application.Services;
 using ProductionContext.Contracts;
 using ProductionContext.Domain.Ports;
+using ProductionContext.Domain.Services;
 using ProductionContext.Infrastructure.Export;
 using ProductionContext.Infrastructure.Gateways;
 using ProductionContext.Infrastructure.Parsing;
@@ -29,8 +30,20 @@ public static class ProductionServiceExtensions
 
         services.AddScoped<IProjectRepository, EfProjectRepository>();
 
-        services.AddSingleton<IScenarioParser, MarkdownScenarioParser>();
+        // Scenario Engine: AST-парсер вместо устаревшего Regex-парсера (Левый блок)
+        services.AddSingleton<ScenarioAstParser>();
+        services.AddSingleton<IScenarioParser>(sp => sp.GetRequiredService<ScenarioAstParser>());
+        services.AddSingleton<IScenarioAstService>(sp => sp.GetRequiredService<ScenarioAstParser>());
         services.AddSingleton<IVideoStitcher, FfmpegVideoStitcher>();
+
+        // Scenario Engine: режиссёрский линтер — stateless, работает мгновенно (Правый блок)
+        services.AddSingleton<ScenarioLinter>();
+
+        // Scenario Engine: ИИ-ассистент (Центральный блок)
+        services.AddScoped<ScenarioCopilotService>();
+
+        // Scenario Engine: Шлюз взаимодействия (Facade/Mediator) — единая точка синхронизации
+        services.AddScoped<ScenarioEngineGateway>();
 
         services.AddScoped<IVoiceGateway, VoiceGateway>();
         services.AddScoped<IMotionGateway, MotionGateway>();

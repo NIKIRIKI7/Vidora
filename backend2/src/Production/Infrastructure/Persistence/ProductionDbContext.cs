@@ -127,6 +127,14 @@ public class ProductionDbContext : SqliteDbContextBase
             b.Property(f => f.VisualNote).HasMaxLength(1024);
             b.Property(f => f.StartSeconds).IsRequired();
             b.Property(f => f.EndSeconds).IsRequired();
+
+            // Scenario Engine: кэш-хэш и разделение declared/computed таймкодов
+            b.Property(f => f.ContentHash).HasMaxLength(64).IsRequired();
+            b.Property(f => f.DeclaredStartSeconds).IsRequired();
+            b.Property(f => f.DeclaredEndSeconds).IsRequired();
+            b.Property(f => f.IsMediaMissing).IsRequired();
+            b.Property(f => f.IsAnimationMissing).IsRequired();
+
             b.Property(f => f.VoiceAssetId).HasMaxLength(64);
             b.Property(f => f.BrollAssetId).HasMaxLength(64);
 

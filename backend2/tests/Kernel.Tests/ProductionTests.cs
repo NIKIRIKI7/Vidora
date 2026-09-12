@@ -13,6 +13,8 @@ using ProductionContext.Contracts;
 using ProductionContext.Domain;
 using ProductionContext.Domain.Entities;
 using ProductionContext.Domain.Ports;
+using ProductionContext.Domain.ScenarioEngine;
+using ProductionContext.Domain.Services;
 using ProductionContext.Domain.ValueObjects;
 using ProductionContext.Infrastructure.Parsing;
 using ProductionContext.Infrastructure.Persistence;
@@ -46,28 +48,111 @@ public class ProductionTests
     }
 
     [Fact]
-    public void MarkdownScenarioParser_ValidMarkdown_ShouldExtractScenesAndFragments()
+    public void ScenarioAstParser_DocumentedFormat_ShouldExtractScenesAndFragments()
     {
-        var parser = new MarkdownScenarioParser();
+        var parser = new ScenarioAstParser();
         var md = """
-        # My Epic Video
+        ---
+        title: "Тест"
+        tags: [тест, видео]
+        ---
 
-        ## Scene 1: The Hook
-        [Visual: Fast neon zoom into neural chip]
-        Narrator: Did you know AI can generate videos in seconds?
+        [Хук] (00:00:00)
+        *(Экран: быстрые кадры игр в 4K)* Первый фрагмент текста хука.
+        *(Крупный план: чип, подсветка)* Второй фрагмент с <#0.5#> паузой.
 
-        ## Scene 2: The Solution
-        [Visual: Code transforms into cinema canvas]
-        Narrator: Welcome to the future of procedural motion design.
+        [Решение] (00:00:05)
+        *(B-roll: assets/b-roll/clip.mp4)* Начинаем разбор.
         """;
 
         var scenes = parser.ParseMarkdown(new ProjectId("proj-123"), md);
 
         Assert.Equal(2, scenes.Count);
-        Assert.Equal("The Hook", scenes[0].Title);
-        Assert.Single(scenes[0].Fragments);
-        Assert.Equal("Did you know AI can generate videos in seconds?", scenes[0].Fragments[0].Text);
-        Assert.Equal("The Solution", scenes[1].Title);
+        Assert.Equal("Хук", scenes[0].Title);
+        Assert.Equal("Решение", scenes[1].Title);
+
+        Assert.Equal(2, scenes[0].Fragments.Count);
+        Assert.Equal("Экран: быстрые кадры игр в 4K", scenes[0].Fragments[0].VisualNote);
+        Assert.Equal("Первый фрагмент текста хука.", scenes[0].Fragments[0].Text);
+
+        Assert.Equal("Второй фрагмент с <#0.5#> паузой.", scenes[0].Fragments[1].Text);
+        Assert.Equal("B-roll: assets/b-roll/clip.mp4", scenes[1].Fragments[0].VisualNote);
+    }
+
+    [Fact]
+    public void ScenarioAstParser_RemarkTimecode_ShouldFillDeclaredTiming()
+    {
+        var parser = new ScenarioAstParser();
+        var md = """
+        [Сцена с таймкодом] (00:00:00)
+        *(00:05 - 00:12: Крупный план рук)* Текст, синхронизированный с этим отрезком.
+        """;
+
+        var scenes = parser.ParseMarkdown(new ProjectId("proj-123"), md);
+
+        var fragment = Assert.Single(scenes).Fragments[0];
+        Assert.Equal("Крупный план рук", fragment.VisualNote);
+        Assert.True(fragment.HasDeclaredTiming);
+        Assert.Equal(5.0, fragment.DeclaredStartSeconds);
+        Assert.Equal(12.0, fragment.DeclaredEndSeconds);
+    }
+
+    [Fact]
+    public void ScenarioAstParser_PureBrollLine_ShouldCreateFragmentWithoutSpeech()
+    {
+        var parser = new ScenarioAstParser();
+        var md = """
+        [Перебивка] (00:00:00)
+        *(10-секундный таймлапс заката)*
+        """;
+
+        var scenes = parser.ParseMarkdown(new ProjectId("proj-123"), md);
+
+        var fragment = Assert.Single(scenes).Fragments[0];
+        Assert.Equal("10-секундный таймлапс заката", fragment.VisualNote);
+        Assert.Equal(string.Empty, fragment.Text);
+    }
+
+    [Fact]
+    public void SceneFragment_ContentHash_ShouldChangeWhenContentUpdates()
+    {
+        var project = Project.Create(ProjectId.New(), "Hash Test");
+        var scene = project.AddScene("s1", "Scene", "");
+        var frag = scene.AddFragment("Original text", "Visual A");
+
+        var firstHash = frag.ContentHash;
+        Assert.False(string.IsNullOrWhiteSpace(firstHash));
+
+        frag.UpdateContent("Rewritten text", "Visual B");
+        Assert.NotEqual(firstHash, frag.ContentHash);
+        Assert.Equal("Rewritten text", frag.Text);
+    }
+
+    [Fact]
+    public void SceneFragment_EstimateDuration_ShouldAccountForWordsAndPauses()
+    {
+        var project = Project.Create(ProjectId.New(), "Timing Test");
+        var scene = project.AddScene("s1", "Scene", "");
+        var frag = scene.AddFragment("Слово раз два три <#0.5#> финал", "Visual");
+
+        var duration = frag.EstimateDuration();
+        Assert.Equal(2.5, duration, precision: 2); // 5 слов / 2.5 = 2.0s + 0.5s паузы
+    }
+
+    [Fact]
+    public void ScenarioLinter_ShouldFlagSlowPacingAndLongPause()
+    {
+        var project = Project.Create(ProjectId.New(), "Lint Me");
+        var scene = project.AddScene("s1", "Хук", "");
+        scene.AddFragment("Держим этот кадр очень долго, потому что текст рассчитан на длинное удержание внимания зрителя", "Статичный план");
+        scene.AddFragment("Короткая реплика", "Другая ремарка");
+
+        project.RecalculateTimeline();
+
+        var linter = new ScenarioLinter();
+        var issues = linter.LintProject(project);
+
+        Assert.Contains(issues, i => i.Code == "PACING_VIOLATION");
     }
 
     [Fact]
@@ -102,6 +187,77 @@ public class ProductionTests
 
         var db = new ProductionDbContext(options);
         return (db, sp);
+    }
+
+    [Fact]
+    public void ScenarioAstParser_ShouldExtractFrontmatterMediaAnimationAndSfx()
+    {
+        var parser = new ScenarioAstParser();
+        var md = """
+        ---
+        title: "Вирусный ролик"
+        fps: 60
+        primary: "#ddb7ff"
+        ---
+
+        [Хук] (00:00:00)
+        *(появляется логотип из лотти, Anim: lottie/like.json)* [SFX: pop.mp3] Подписывайтесь на канал!
+        *(B-roll: assets/b-roll/clip.mp4)* Текст с кадром.
+
+        [Разбор] (00:00:05)
+        [Transition: slide_left]
+        *(Схема: график растёт)* Вот и разбор.
+        """;
+
+        var ast = parser.ParseToAst(md);
+
+        Assert.Equal("Вирусный ролик", ast.Frontmatter.Title);
+        Assert.Equal(60, ast.Frontmatter.Fps);
+        Assert.True(ast.Frontmatter.Colors.ContainsKey("primary"));
+
+        Assert.Equal(2, ast.Scenes.Count);
+
+        var hook = ast.Scenes[0].Nodes.OfType<AstFragment>().ToList();
+        Assert.Equal(2, hook.Count);
+
+        Assert.Equal("lottie/like.json", hook[0].AnimationAssetLink);
+        Assert.Equal("fade", hook[0].AnimationType); // эвристика по «появляется»
+        Assert.Equal("pop.mp3", Assert.Single(hook[0].SfxList));
+        Assert.DoesNotContain("[SFX:", hook[0].SpokenText);
+
+        Assert.Equal("assets/b-roll/clip.mp4", hook[1].MediaLink);
+        Assert.Equal("Текст с кадром.", hook[1].SpokenText);
+
+        var разбор = ast.Scenes[1];
+        Assert.NotNull(Assert.Single(разбор.Nodes.OfType<AstTransition>()));
+    }
+
+    [Fact]
+    public void ScenarioAstParser_SerializeRoundTrip_ShouldKeepScenesAndFragments()
+    {
+        var parser = new ScenarioAstParser();
+        var md = """
+        ---
+        title: "Round Trip"
+        fps: 30
+        ---
+
+        [Интро] (00:00:00)
+        *(Экран: текст выезжает слева)* Привет! Сегодня разберём тему.
+
+        [Вывод] (00:00:12)
+        *(Крупный план: финал)* Ставьте лайк и подписывайтесь.
+        """;
+
+        var ast = parser.ParseToAst(md);
+        var serialized = parser.SerializeAstToMarkdown(ast);
+        var reparsed = parser.ParseToAst(serialized);
+
+        Assert.Equal(ast.Scenes.Count, reparsed.Scenes.Count);
+        Assert.Equal("Интро", reparsed.Scenes[0].Title);
+        Assert.Equal("Привет! Сегодня разберём тему.", reparsed.Scenes[0].Nodes.OfType<AstFragment>().Single().SpokenText);
+        Assert.Equal(2, reparsed.Scenes.Sum(s => s.Nodes.OfType<AstFragment>().Count()));
+        Assert.Equal("Round Trip", reparsed.Frontmatter.Title);
     }
 
     [Fact]
