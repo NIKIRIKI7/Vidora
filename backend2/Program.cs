@@ -41,6 +41,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Vidora API", Version = "v1" });
     c.CustomSchemaIds(type => type.FullName?.Replace("+", "_"));
     c.OperationFilter<ApiDocumentationOperationFilter>();
+    c.SchemaFilter<ApiPropertyDocumentationSchemaFilter>();
 });
 
 // 2. Инфраструктура ядра

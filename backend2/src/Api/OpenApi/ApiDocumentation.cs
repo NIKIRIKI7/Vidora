@@ -48,6 +48,150 @@ public static class ApiDocumentation
             ["only_enabled"] = "true — вернуть только включённые скилы.",
         };
 
+    /// <summary>
+    /// Описания свойств схем (полей request/response body) по JSON-имени поля.
+    /// Применяются <see cref="ApiPropertyDocumentationSchemaFilter"/>.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> PropertyDescriptions =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Идентификация
+            ["id"] = "Уникальный идентификатор.",
+            ["name"] = "Человекочитаемое имя.",
+            ["description"] = "Текстовое описание.",
+            ["title"] = "Заголовок.",
+            ["project_id"] = "Идентификатор проекта.",
+            ["project_path"] = "Путь проекта внутри хранилища (обычно имя проекта).",
+            ["scene_id"] = "Идентификатор сцены.",
+            ["fragment_id"] = "Идентификатор фрагмента.",
+            ["video_id"] = "Идентификатор YouTube-видео.",
+            ["target_id"] = "Идентификатор цели операции (сцена/фрагмент).",
+            ["target"] = "Тип цели операции (например, scene).",
+
+            // Текст и кодинг
+            ["text"] = "Текст для синтеза речи.",
+            ["prompt"] = "Текст промпта для LLM.",
+            ["code"] = "Исходный TSX-код сцены.",
+            ["tsx_code"] = "Исходный TSX-код сцены.",
+            ["markdown"] = "Markdown-сценарий.",
+            ["visual_description"] = "Описание кадра/сцены для генерации кода.",
+            ["visual_note"] = "Визуальная ремарка фрагмента (например, B-roll/архетип).",
+            ["voice_text"] = "Текст озвучки фрагмента.",
+            ["command"] = "Команда для ИИ-копилота (например, «короче», «кликбейтнее»).",
+            ["include_trend_context"] = "Учитывать ли тренд-контекст при рерайте.",
+            ["custom_prompt"] = "Дополнительный пользовательский промпт.",
+
+            // TTS / Voice
+            ["speaker_id"] = "Идентификатор диктора (speaker_id профиля).",
+            ["engine"] = "Движок: LocalTts, CloudOpenAi, CloudMiniMax.",
+            ["speed"] = "Скорость речи (0.2–4.0).",
+            ["pitch"] = "Высота тона (0.5–2.0).",
+            ["guidance_scale"] = "CFG-масштаб диффузии (1.0–10.0).",
+            ["num_steps"] = "Число шагов диффузии (8–128).",
+            ["alignment_engine"] = "Движок выравнивания: Whisper, NativeTts, Passthrough.",
+            ["reference_audio_path"] = "Путь к референсному аудио.",
+            ["reference_text"] = "Текст, звучащий в референсном аудио.",
+            ["local_engine_id"] = "ID локального движка-воркера (например, omni_voice_v1).",
+            ["duration"] = "Длительность, сек.",
+            ["language"] = "Язык (например, ru).",
+
+            // Аудио-обработка
+            ["audio_path"] = "Путь к аудиофайлу.",
+            ["audio_paths"] = "Список путей к аудиофайлам.",
+            ["output_path"] = "Путь к выходному файлу.",
+            ["action"] = "Действие DSP: lavasr, mastering, silence.",
+            ["threshold_db"] = "Порог тишины в дБ.",
+            ["min_silence_ms"] = "Минимальная длительность паузы, мс.",
+            ["max_silence_ms"] = "Максимальная длительность паузы, мс.",
+            ["remove_edges"] = "Удалять тишину по краям.",
+            ["voice_asset_id"] = "ID аудио-ассета голоса.",
+            ["bgm_asset_id"] = "ID аудио-ассета фоновой музыки.",
+            ["music_attenuation_db"] = "Ослабление музыки под голосом, дБ.",
+            ["attack_ms"] = "Время атаки дакинга, мс.",
+            ["release_ms"] = "Время восстановления дакинга, мс.",
+
+            // Видео / композиция
+            ["width"] = "Ширина, пиксели.",
+            ["height"] = "Высота, пиксели.",
+            ["fps"] = "Кадров в секунду.",
+            ["duration_seconds"] = "Длительность, секунды.",
+            ["duration_in_frames"] = "Длительность, кадры.",
+            ["montage_settings"] = "Настройки монтажа (разрешение, FPS, цвета).",
+            ["capabilities"] = "Разрешённые пакеты/возможности сцены.",
+            ["render_quality"] = "Качество рендера: low, medium, high.",
+            ["background_music"] = "Настройки фоновой музыки и дакинга.",
+            ["broll_sources"] = "Список B-Roll-файлов для сцены.",
+            ["video_paths"] = "Список путей к видео сцен.",
+            ["download_url"] = "Прямая ссылка на скачивание.",
+            ["source_path"] = "Путь к исходному файлу.",
+            ["target_format"] = "Целевой формат (16:9 / 9:16).",
+            ["target_resolution"] = "Целевое разрешение.",
+            ["fit_mode"] = "Режим вписывания: cover, contain.",
+            ["loop_if_shorter"] = "Зациклить, если короче целевой длительности.",
+            ["keep_audio"] = "Сохранить исходную аудиодорожку.",
+            ["extract_audio"] = "Извлечь аудио из видео.",
+            ["filename"] = "Имя файла.",
+            ["folder"] = "Целевая папка.",
+            ["url"] = "URL ресурса.",
+            ["project_data"] = "Полный слепок проекта (сквозной payload).",
+
+            // Стоки / медиа
+            ["type"] = "Тип медиа: Video, Audio, Image.",
+            ["query"] = "Поисковый запрос.",
+            ["orientation"] = "Ориентация: landscape или portrait.",
+            ["mood"] = "Настроение трека.",
+            ["page"] = "Номер страницы (с 1).",
+            ["pageSize"] = "Размер страницы.",
+            ["per_page"] = "Элементов на странице.",
+
+            // Research / YouTube
+            ["niche"] = "Ниша/тематика канала.",
+            ["url_or_name"] = "URL или имя канала.",
+            ["youtube_key"] = "API-ключ YouTube Data API.",
+            ["transcript"] = "Транскрипт вступления видео.",
+            ["video_url"] = "URL видео.",
+            ["idea_description"] = "Описание идеи видео.",
+            ["channel_context"] = "Контекст канала.",
+            ["video_type"] = "Тип видео: short / long / all.",
+            ["audio_engine"] = "Движок озвучки для сценария.",
+            ["settings"] = "Настройки поиска/агента.",
+            ["exclude_video_ids"] = "Исключаемые видео.",
+            ["llm_engine"] = "Движок LLM.",
+
+            // Настройки / навыки
+            ["key"] = "Ключ настройки.",
+            ["value"] = "Новое значение настройки.",
+            ["stage"] = "Стадия пайплайна.",
+            ["content"] = "Содержимое скила (промпт).",
+            ["priority"] = "Приоритет применения (чем больше, тем выше).",
+            ["is_enabled"] = "Включён ли скил.",
+            ["tags"] = "Теги.",
+            ["api_keys"] = "Набор API-ключей провайдеров.",
+            ["role"] = "Роль модели в пайплайне.",
+
+            // Прочие частые поля
+            ["status"] = "Статус операции.",
+            ["message"] = "Текстовое сообщение.",
+            ["task_id"] = "Идентификатор фоновой задачи.",
+            ["error_code"] = "Код ошибки.",
+            ["error"] = "Текст ошибки.",
+            ["detail"] = "Детали ошибки.",
+            ["audio_url"] = "Имя сгенерированного аудиофайла.",
+            ["processed_audio_path"] = "Путь к обработанному аудио.",
+            ["new_duration_sec"] = "Новая длительность после обработки, сек.",
+            ["denoise"] = "Применять шумоподавление.",
+            ["preprocess_prompt"] = "Предобрабатывать промпт перед синтезом.",
+            ["postprocess_output"] = "Постобрабатывать результат синтеза.",
+            ["filters"] = "Набор аудио-фильтров (LUFS, тишина).",
+            ["steps"] = "Число шагов диффузии.",
+            ["version"] = "Версия.",
+            ["is_default"] = "Является ли запись системной по умолчанию.",
+            ["estimated_tokens"] = "Оценка числа токенов.",
+            ["updated_at"] = "Дата последнего обновления.",
+            ["created_at"] = "Дата создания.",
+        };
+
+
     public static readonly IReadOnlyDictionary<string, ApiEndpointDoc> Endpoints =
         new Dictionary<string, ApiEndpointDoc>(StringComparer.OrdinalIgnoreCase)
         {
@@ -660,18 +804,24 @@ public sealed class ApiDocumentationOperationFilter : IOperationFilter
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {
         var method = (context.ApiDescription.HttpMethod ?? "GET").ToUpperInvariant();
-        var path = "/" + (context.ApiDescription.RelativePath ?? string.Empty).Trim('/');
-        if (!ApiDocumentation.Endpoints.TryGetValue($"{method} {path}", out var doc))
+        var path = NormalizePath(context.ApiDescription.RelativePath);
+
+        if (ApiDocumentation.Endpoints.TryGetValue($"{method} {path}", out var doc))
         {
-            return;
+            operation.Summary = doc.Summary;
+            operation.Description =
+                $"**Что делает:** {doc.Description}\n\n" +
+                $"**Вход:** {doc.Input}\n\n" +
+                $"**Выход:** {doc.Output}";
+
+            if (operation.RequestBody is not null)
+            {
+                operation.RequestBody.Description = doc.Input;
+            }
         }
 
-        operation.Summary = doc.Summary;
-        operation.Description =
-            $"**Что делает:** {doc.Description}\n\n" +
-            $"**Вход:** {doc.Input}\n\n" +
-            $"**Выход:** {doc.Output}";
-
+        // Описания параметров проставляем всегда, независимо от того,
+        // есть ли операция в словаре (path/query параметры).
         if (operation.Parameters is not null)
         {
             foreach (var parameter in operation.Parameters)
@@ -684,10 +834,41 @@ public sealed class ApiDocumentationOperationFilter : IOperationFilter
                 }
             }
         }
+    }
 
-        if (operation.RequestBody is not null)
+    /// <summary>Убирает inline-ограничения маршрута: {revision:int} → {revision}.</summary>
+    private static string NormalizePath(string? relativePath)
+    {
+        var path = "/" + (relativePath ?? string.Empty).Trim('/');
+        return System.Text.RegularExpressions.Regex.Replace(path, @"\{([^}:]+):[^}]+\}", "{$1}");
+    }
+}
+
+/// <summary>
+/// Проставляет описания полей схем (request/response body) из
+/// <see cref="ApiDocumentation.PropertyDescriptions"/>.
+/// </summary>
+public sealed class ApiPropertyDocumentationSchemaFilter : ISchemaFilter
+{
+    public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+    {
+        if (schema.Properties is null || schema.Properties.Count == 0)
         {
-            operation.RequestBody.Description = doc.Input;
+            return;
+        }
+
+        foreach (var (propertyName, propertySchema) in schema.Properties)
+        {
+            if (propertySchema is null || !string.IsNullOrWhiteSpace(propertySchema.Description))
+            {
+                continue;
+            }
+
+            if (ApiDocumentation.PropertyDescriptions.TryGetValue(propertyName, out var description))
+            {
+                propertySchema.Description = description;
+            }
         }
     }
 }
+
