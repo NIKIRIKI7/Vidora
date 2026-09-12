@@ -4,6 +4,7 @@ using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
+using Kernel.Platform.Process;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ using Voice.Application.Commands;
 using Voice.Application.Contracts;
 using Voice.Application.Services;
 using Voice.Domain;
+using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 
 namespace Api.Endpoints.Voice;
@@ -249,6 +251,55 @@ public static class VoiceEndpoints
             return Results.Ok(new { status = "ok" });
         });
 
+        // Тест-драйв ducking: собирает короткий предпросмотр микса голос+музыка.
+        endpoints.MapPost("/api/v1/audio/preview-ducking", async (
+            PreviewDuckingRequest request,
+            IAudioDuckingService ducking,
+            IProcessSupervisor processSupervisor,
+            IPathResolver pathResolver,
+            IOptions<AppStorageConfig> storageConfig,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.VoicePath) || string.IsNullOrWhiteSpace(request.MusicPath))
+            {
+                return Results.BadRequest(new { status = "error", detail = "voicePath и musicPath обязательны." });
+            }
+
+            var tempDir = pathResolver.ResolveSafePath(Path.Combine(storageConfig.Value.DataStorageDir, "temp"));
+            Directory.CreateDirectory(tempDir);
+            var outPath = pathResolver.ResolveSafePath(Path.Combine(tempDir, $"ducking_preview_{Guid.NewGuid():N}.m4a"));
+
+            var attenuationDb = request.BaseVolume > 0 && request.DuckedVolume > 0
+                ? 20.0 * Math.Log10(request.DuckedVolume / request.BaseVolume)
+                : -18.0;
+
+            var spec = new DuckingSpec
+            {
+                MusicAttenuationDb = Math.Clamp(attenuationDb, -60.0, 0.0),
+                AttackMs = request.AttackMs,
+                ReleaseMs = request.ReleaseMs,
+                Threshold = request.Threshold,
+            };
+
+            var result = await ducking.ApplySidechainDuckingAsync(
+                request.VoicePath!, request.MusicPath!, outPath, spec, ct);
+
+            // Обрезаем микс до запрошенной длительности предпросмотра (по умолчанию 10 c).
+            if (request.PreviewDuration > 0 && File.Exists(result))
+            {
+                var trimmed = pathResolver.ResolveSafePath(Path.Combine(tempDir, $"ducking_preview_trim_{Guid.NewGuid():N}.m4a"));
+                var seconds = request.PreviewDuration.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+                var trimResult = await processSupervisor.RunAsync(
+                    "ffmpeg", $"-y -t {seconds} -i \"{result}\" -c copy \"{trimmed}\"", cancellationToken: ct);
+                if (trimResult.ExitCode == 0 && File.Exists(trimmed))
+                {
+                    result = trimmed;
+                }
+            }
+
+            return Results.Ok(new { status = "ok", preview_url = result });
+        });
+
         return endpoints;
     }
 }
@@ -302,3 +353,17 @@ public sealed record DuckingRequest(
     [property: JsonPropertyName("music_attenuation_db")] double? MusicAttenuationDb,
     [property: JsonPropertyName("attack_ms")] int? AttackMs,
     [property: JsonPropertyName("release_ms")] int? ReleaseMs);
+
+/// <summary>
+/// Тест-драйв ducking из UI. Пути — из настроек музыки проекта; eq игнорируется на предпросмотре.
+/// </summary>
+public sealed record PreviewDuckingRequest(
+    [property: JsonPropertyName("voicePath")] string? VoicePath,
+    [property: JsonPropertyName("musicPath")] string? MusicPath,
+    [property: JsonPropertyName("projectPath")] string? ProjectPath,
+    [property: JsonPropertyName("previewDuration")] double PreviewDuration = 10,
+    [property: JsonPropertyName("baseVolume")] double BaseVolume = 1.0,
+    [property: JsonPropertyName("duckedVolume")] double DuckedVolume = 0.3,
+    [property: JsonPropertyName("threshold")] double Threshold = 0.08,
+    [property: JsonPropertyName("attackMs")] int AttackMs = 40,
+    [property: JsonPropertyName("releaseMs")] int ReleaseMs = 350);
