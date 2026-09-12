@@ -9,7 +9,7 @@ using MotionContext.Domain.ValueObjects;
 
 namespace MotionContext.Infrastructure.Remotion;
 
-public sealed class RemotionWorkspaceManager : IRemotionWorkspaceManager
+internal sealed class RemotionWorkspaceManager : IRemotionWorkspaceManager
 {
     private readonly IPathResolver _pathResolver;
     private readonly INodeEnvironmentResolver _nodeResolver;

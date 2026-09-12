@@ -2,6 +2,7 @@ using System.Globalization;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Process;
 using MediaContext.Domain.Exceptions;
+using MediaContext.Domain.Ports;
 using MediaContext.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

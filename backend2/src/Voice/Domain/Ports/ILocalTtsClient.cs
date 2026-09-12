@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Voice.Infrastructure.Providers.Local;
+namespace Voice.Domain.Ports;
 
 public sealed record LocalTtsEngineDto(
     [property: JsonPropertyName("id")] string Id,
@@ -8,8 +8,8 @@ public sealed record LocalTtsEngineDto(
     [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities);
 
 /// <summary>
-/// HTTP-контракт к локальному ML-воркеру (python_services/tts_engine).
-/// Работает через абсолютные пути к файлам на общем диске (stateless-принцип).
+/// HTTP-клиент к локальному ML-воркеру (python_services/tts_engine).
+/// Выполняется через общий GPU-лок и не хранит состояние между запросами (stateless-сервис).
 /// </summary>
 public interface ILocalTtsClient
 {

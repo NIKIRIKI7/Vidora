@@ -1,7 +1,5 @@
 using ProductionContext.Domain.Ports;
-using Voice.Application.Commands;
-using Voice.Application.Services;
-using Voice.Domain;
+using Voice.Contracts;
 
 namespace ProductionContext.Infrastructure.Gateways;
 
@@ -20,11 +18,7 @@ public sealed class VoiceGateway : IVoiceGateway
         double speed = 1.0,
         CancellationToken ct = default)
     {
-        var cmd = new SynthesizeSpeechCommand(
-            Text: text,
-            SpeakerId: speakerId,
-            AlignmentEngine: AlignmentEngineType.Whisper,
-            Speed: speed);
+        var cmd = SynthesizeSpeechCommand.ForSpeaker(text, speakerId, speed);
 
         var result = await _voiceModule.SynthesizeSpeechAsync(cmd, ct);
         return new VoiceSynthesisResult(
@@ -38,7 +32,7 @@ public sealed class VoiceGateway : IVoiceGateway
         string bgmAssetId,
         CancellationToken ct = default)
     {
-        var cmd = new ApplyAudioDuckingCommand(voiceAssetId, bgmAssetId);
+        var cmd = ApplyAudioDuckingCommand.ForAssets(voiceAssetId, bgmAssetId);
         var result = await _voiceModule.ApplyDuckingAsync(cmd, ct);
         return result.MasterAudioPath;
     }

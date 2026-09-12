@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Integrations.YouTube.Contracts;
 
 public sealed record YouTubeHeatmapPoint(
@@ -47,3 +49,7 @@ public sealed class YouTubeSearchFilter
     public string? SortBy { get; set; }
     public string? Features { get; set; }
 }
+
+// --- Deep-Dive Inspector DTOs (camelCase, совместимы с frontend shared/api/youtube) ---
+
+

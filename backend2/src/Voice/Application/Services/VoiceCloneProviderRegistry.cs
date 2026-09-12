@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Voice.Domain;
 using Voice.Domain.Ports;
 
-namespace Voice.Infrastructure.Providers;
+namespace Voice.Application.Services;
 
 public sealed class VoiceCloneProviderRegistry
 {
@@ -14,7 +14,7 @@ public sealed class VoiceCloneProviderRegistry
     {
         _providers = providers;
         _logger = logger;
-        _logger.LogInformation("[VoiceCloneRegistry] Зарегистрировано клон-провайдеров: {Count}", _providers.Count());
+        _logger.LogInformation("[VoiceCloneRegistry] Зарегистрированы клон-провайдеры: {Count}", _providers.Count());
     }
 
     public IVoiceCloneProvider Resolve(VoiceEngineType engine)
@@ -26,7 +26,7 @@ public sealed class VoiceCloneProviderRegistry
             return provider;
         }
 
-        _logger.LogError("[VoiceCloneRegistry] Клонирование для движка {Engine} не поддерживается.", engine);
+        _logger.LogError("[VoiceCloneRegistry] Провайдер для движка {Engine} не поддерживается.", engine);
         throw new ResourceNotFoundException("VoiceCloneProvider", engine);
     }
 }

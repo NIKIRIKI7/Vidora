@@ -1,4 +1,5 @@
 using Kernel.Platform.Config;
+using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +45,7 @@ public static class SkillsServiceExtensions
 
         // 5. Сидинг при старте
         services.AddScoped<SkillsSeeder>();
+        services.AddScoped<IDatabaseMigrationParticipant, SkillsMigrationParticipant>();
         // services.AddHostedService<SkillsSeederHostedService>(); // migrated to CLI: dotnet run -- --migrate
 
         return services;

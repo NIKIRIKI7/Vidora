@@ -1,3 +1,5 @@
+using Research.Domain.Ports;
+
 namespace Research.Domain.Services;
 
 public sealed record ArbitrageItem(
@@ -9,9 +11,9 @@ public sealed record ArbitrageItem(
 
 public sealed class TrendArbitrageEngine
 {
-    private readonly Research.Infrastructure.Ingestors.ISignalIngestor _signalIngestor;
+    private readonly ISignalIngestor _signalIngestor;
 
-    public TrendArbitrageEngine(Research.Infrastructure.Ingestors.ISignalIngestor signalIngestor)
+    public TrendArbitrageEngine(ISignalIngestor signalIngestor)
     {
         _signalIngestor = signalIngestor;
     }

@@ -25,7 +25,7 @@ public sealed class ResearchDatabaseHostedService : IHostedService
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ResearchDbContext>();
         await db.ResetMigrationLocksAsync(cancellationToken);
-        await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
         await db.ConfigureSqlitePragmasAsync(cancellationToken);
         _logger.LogInformation("[Research] База данных research.db готова к работе.");
     }

@@ -1,4 +1,5 @@
 using Kernel.Platform.Config;
+using Kernel.Platform.Persistence;
 using Kernel.Ports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -54,6 +55,7 @@ public static class MotionServiceExtensions
 
         // Entry point facade
         services.AddScoped<IMotionModule, MotionModule>();
+        services.AddScoped<IDatabaseMigrationParticipant, MotionMigrationParticipant>();
 
         // Background Hosted Services
         // services.AddHostedService<MotionDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate

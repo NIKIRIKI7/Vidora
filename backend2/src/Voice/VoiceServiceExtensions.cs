@@ -1,8 +1,10 @@
 using Kernel.Platform.Config;
+using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Voice.Application.Services;
+using Voice.Contracts;
 using Voice.Domain.Ports;
 using Voice.Infrastructure.Adapters;
 using Voice.Infrastructure.Alignment;
@@ -66,6 +68,7 @@ public static class VoiceServiceExtensions
 
         // Главный фасад
         services.AddScoped<IVoiceModule, VoiceModule>();
+        services.AddScoped<IDatabaseMigrationParticipant, VoiceMigrationParticipant>();
         // services.AddHostedService<VoiceDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 
         return services;

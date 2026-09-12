@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Voice.Application.Contracts;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
-using Voice.Infrastructure.Providers.Local;
 
 namespace Voice.Infrastructure.Providers;
 
@@ -22,9 +20,9 @@ public sealed class VoiceEngineCatalog : IVoiceEngineCatalog
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<VoiceEngineInfoDto>> DiscoverEnginesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<VoiceEngineInfo>> DiscoverEnginesAsync(CancellationToken ct = default)
     {
-        var results = new List<VoiceEngineInfoDto>();
+        var results = new List<VoiceEngineInfo>();
 
         // 1. Статические движки (облачные дескрипторы)
         var tasks = _descriptors.Select(async desc =>
@@ -45,7 +43,7 @@ public sealed class VoiceEngineCatalog : IVoiceEngineCatalog
             if (desc.Capabilities.HasFlag(VoiceCapabilities.Design)) caps.Add("design");
             if (desc.Capabilities.HasFlag(VoiceCapabilities.Streaming)) caps.Add("streaming");
 
-            return new VoiceEngineInfoDto(
+            return new VoiceEngineInfo(
                 Id: desc.EngineId,
                 Name: desc.DisplayName,
                 Mode: desc.Mode,
@@ -71,7 +69,7 @@ public sealed class VoiceEngineCatalog : IVoiceEngineCatalog
                 bool hasClone = localModel.Capabilities.Contains("clone", StringComparer.OrdinalIgnoreCase);
                 bool hasDesign = localModel.Capabilities.Contains("design", StringComparer.OrdinalIgnoreCase);
 
-                results.Add(new VoiceEngineInfoDto(
+                results.Add(new VoiceEngineInfo(
                     Id: localModel.Id,
                     Name: localModel.Name,
                     Mode: "local",

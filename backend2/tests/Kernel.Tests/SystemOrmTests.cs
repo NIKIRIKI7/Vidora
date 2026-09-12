@@ -1,10 +1,13 @@
 using Kernel.Events;
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
+using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
+using Kernel.Platform.Process;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Moq;
 using SystemContext.Application.Services;
 using SystemContext.Domain;
 using SystemContext.Domain.Entities;
@@ -73,9 +76,11 @@ public class SystemOrmTests
 
         var storageOptions = Options.Create(new AppStorageConfig());
         var gpuManager = new GpuManager(NullLogger<GpuManager>.Instance);
-        var hardware = new HardwareMonitorService(gpuManager, storageOptions);
+        var supervisor = new Mock<IProcessSupervisor>().Object;
+        var pathResolver = new Mock<IPathResolver>().Object;
+        var hardware = new HardwareMonitorService(gpuManager, supervisor, storageOptions, NullLogger<HardwareMonitorService>.Instance);
 
-        var module = new SystemModule(settingRepo, modelRepo, maintRepo, hardware, storageOptions, NullLogger<SystemModule>.Instance);
+        var module = new SystemModule(settingRepo, modelRepo, maintRepo, hardware, supervisor, pathResolver, storageOptions, NullLogger<SystemModule>.Instance);
 
         var updated = await module.SetSettingAsync("motion.fps", "60");
 

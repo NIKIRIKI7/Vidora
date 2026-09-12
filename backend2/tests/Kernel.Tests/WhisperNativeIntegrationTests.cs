@@ -1,10 +1,12 @@
 using System.Diagnostics;
-using Integrations.Whisper.Audio;
+using Kernel.Platform.Audio;
 using Integrations.Whisper.Config;
 using Integrations.Whisper.Native;
 using Kernel.Platform.Config;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moq;
+using SystemContext.Contracts;
 using Voice.Domain.ValueObjects;
 using Voice.Infrastructure.Alignment;
 using Xunit;
@@ -90,10 +92,13 @@ public sealed class WhisperNativeIntegrationTests : IDisposable
         var logger = new TestLogger<WhisperAlignmentProvider>();
         var pathResolver = new FakePathResolver();
         var gpuManager = new FakeGpuManager();
-        var settingRepo = new FakeSettingRepository();
+        var settingRepo = new Mock<ISystemModule>();
+        settingRepo
+            .Setup(s => s.GetSettingValueAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
 
         var provider = new WhisperAlignmentProvider(
-            pathResolver, gpuManager, settingRepo,
+            pathResolver, gpuManager, settingRepo.Object,
             whisperOptions, storageOptions, logger);
 
         var result = await provider.AlignAsync(_generatedMonoWav, expectedText);
@@ -206,15 +211,4 @@ public sealed class WhisperNativeIntegrationTests : IDisposable
         }
     }
 
-    private sealed class FakeSettingRepository : SystemContext.Domain.Ports.ISystemSettingRepository
-    {
-        public Task<SystemContext.Domain.Entities.SystemSetting?> GetByKeyAsync(string key, CancellationToken ct = default)
-            => Task.FromResult<SystemContext.Domain.Entities.SystemSetting?>(null);
-        public Task<IReadOnlyList<SystemContext.Domain.Entities.SystemSetting>> GetAllAsync(CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<SystemContext.Domain.Entities.SystemSetting>>([]);
-        public Task AddAsync(SystemContext.Domain.Entities.SystemSetting setting, CancellationToken ct = default) => Task.CompletedTask;
-        public Task UpdateAsync(SystemContext.Domain.Entities.SystemSetting setting, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<bool> ExistsAsync(string key, CancellationToken ct = default) => Task.FromResult(false);
-        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
-    }
 }

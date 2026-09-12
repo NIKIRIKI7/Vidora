@@ -26,7 +26,7 @@ public sealed class ProductionDatabaseHostedService : IHostedService
         var db = scope.ServiceProvider.GetRequiredService<ProductionDbContext>();
 
         await db.ResetMigrationLocksAsync(cancellationToken);
-        await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
         await db.ConfigureSqlitePragmasAsync(cancellationToken);
 
         _logger.LogInformation("[Production] База данных production.db готова к работе.");

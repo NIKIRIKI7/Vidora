@@ -2,9 +2,12 @@ using System.Diagnostics;
 using System.Text.Json;
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
+using Kernel.Platform.FileSystem;
+using Kernel.Platform.Process;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SystemContext.Contracts;
+using SystemContext.Domain;
 using SystemContext.Domain.Entities;
 using SystemContext.Domain.Ports;
 
@@ -16,6 +19,8 @@ public sealed class SystemModule : ISystemModule
     private readonly IAiModelRepository _modelRepo;
     private readonly ISystemMaintenanceRepository _maintenanceRepo;
     private readonly HardwareMonitorService _hardwareMonitor;
+    private readonly IProcessSupervisor _processSupervisor;
+    private readonly IPathResolver _pathResolver;
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<SystemModule> _logger;
 
@@ -24,6 +29,8 @@ public sealed class SystemModule : ISystemModule
         IAiModelRepository modelRepo,
         ISystemMaintenanceRepository maintenanceRepo,
         HardwareMonitorService hardwareMonitor,
+        IProcessSupervisor processSupervisor,
+        IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
         ILogger<SystemModule> logger)
     {
@@ -31,12 +38,86 @@ public sealed class SystemModule : ISystemModule
         _modelRepo = modelRepo;
         _maintenanceRepo = maintenanceRepo;
         _hardwareMonitor = hardwareMonitor;
+        _processSupervisor = processSupervisor;
+        _pathResolver = pathResolver;
         _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
     public Task<SystemHardwareStatusDto> GetHardwareStatusAsync(CancellationToken ct = default) =>
         Task.FromResult(_hardwareMonitor.GetMetrics());
+
+    public Task<SystemHardwareInfoDto> GetHardwareInfoAsync(CancellationToken ct = default) =>
+        _hardwareMonitor.GetHardwareInfoAsync(ct);
+
+    public async Task<AiModelDto> PullModelAsync(string engine, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(engine);
+        var cleanEngine = engine.Trim();
+        _logger.LogInformation("[System] Запуск загрузки модели: {Engine}", cleanEngine);
+
+        var existing = await _modelRepo.GetByIdAsync(cleanEngine.ToLowerInvariant(), ct);
+        if (existing == null)
+        {
+            var all = await _modelRepo.GetAllAsync(ct);
+            existing = all.FirstOrDefault(m => m.Name.Contains(cleanEngine, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (existing != null)
+        {
+            existing.MarkDownloading();
+            await _modelRepo.UpdateAsync(existing, ct);
+            await _modelRepo.SaveChangesAsync(ct);
+            return MapModel(existing);
+        }
+
+        var safeId = _pathResolver.SanitizeFileName(cleanEngine.Replace('/', '_').ToLowerInvariant());
+        var targetSubDir = _storageConfig.GetModelPath($"llm/{safeId}");
+
+        var artifact = AiModelArtifact.Create(
+            id: safeId,
+            name: cleanEngine,
+            category: ModelCategory.Llm,
+            targetDirectory: targetSubDir,
+            downloadUrl: cleanEngine.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                ? cleanEngine
+                : $"https://huggingface.co/{cleanEngine}",
+            expectedSizeBytes: 4_000_000_000,
+            version: "latest",
+            isRequired: false);
+
+        artifact.MarkDownloading();
+        await _modelRepo.AddAsync(artifact, ct);
+        await _modelRepo.SaveChangesAsync(ct);
+
+        // Фоновая попытка загрузки через Ollama CLI (если установлена).
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await _processSupervisor.RunAsync(
+                    "ollama", $"pull {cleanEngine}", cancellationToken: CancellationToken.None);
+
+                if (result.ExitCode == 0)
+                {
+                    artifact.MarkReady(4_000_000_000);
+                }
+                else
+                {
+                    artifact.MarkFailed(result.StandardError);
+                }
+
+                await _modelRepo.UpdateAsync(artifact, CancellationToken.None);
+                await _modelRepo.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[System] Фоновый pull через ollama не выполнен: {Engine}", cleanEngine);
+            }
+        }, CancellationToken.None);
+
+        return MapModel(artifact);
+    }
 
     public async Task<IReadOnlyList<SystemSettingDto>> GetAllSettingsAsync(CancellationToken ct = default)
     {
@@ -50,6 +131,12 @@ public sealed class SystemModule : ISystemModule
             ?? throw new ResourceNotFoundException("SystemSetting", key);
 
         return MapSetting(setting);
+    }
+
+    public async Task<string?> GetSettingValueAsync(string key, CancellationToken ct = default)
+    {
+        var setting = await _settingRepo.GetByKeyAsync(key, ct);
+        return setting?.Value;
     }
 
     public async Task<SystemSettingDto> SetSettingAsync(string key, string value, CancellationToken ct = default)

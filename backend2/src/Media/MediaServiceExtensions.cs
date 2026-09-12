@@ -7,6 +7,7 @@ using MediaContext.Infrastructure.Normalization;
 using MediaContext.Infrastructure.Persistence;
 using MediaContext.Infrastructure.Seeding;
 using MediaContext.Infrastructure.Storage;
+using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +31,7 @@ public static class MediaServiceExtensions
         services.AddSingleton<IMusicCatalogProvider, LocalMusicCatalogProvider>();
         services.AddScoped<IYouTubeBrollCatalog, YouTubeBrollCatalog>();
         services.AddScoped<IMediaModule, MediaModule>();
+        services.AddScoped<IDatabaseMigrationParticipant, MediaMigrationParticipant>();
         services.AddOptions<BrollNormalizationOptions>()
             .Bind(configuration.GetSection(BrollNormalizationOptions.SectionName));
         // services.AddHostedService<MediaDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate

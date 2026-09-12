@@ -4,6 +4,7 @@ using System.Xml.Linq;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
 using Research.Domain.Entities;
+using Research.Domain.Ports;
 using Research.Domain.ValueObjects;
 
 namespace Research.Infrastructure.Ingestors;
@@ -20,23 +21,6 @@ public sealed record RawSignal
     public double AgeHours { get; init; }
     public double DemandScore { get; init; }
     public bool Breakout { get; init; }
-}
-
-/// <summary>
-/// Аналитический контекст ниши, разрешённый через LLM для поиска ранних сигналов.
-/// </summary>
-public sealed record NicheContext(
-    string DisplayTopic,
-    string EffectiveQuery,
-    string EnglishQuery,
-    IReadOnlyList<string> Keywords,
-    IReadOnlyList<string> RedditSubreddits);
-
-public interface ISignalIngestor
-{
-    Task<IReadOnlyList<EarlySignal>> CollectEarlySignalsAsync(string query, string lang = "ru", CancellationToken ct = default);
-    Task<IReadOnlyList<string>> FetchGoogleTrendsKeywordsAsync(string query, string lang = "ru", CancellationToken ct = default);
-    Task<NicheContext> ResolveNicheContextAsync(string query, string lang = "ru", CancellationToken ct = default);
 }
 
 public sealed partial class SignalIngestor : ISignalIngestor

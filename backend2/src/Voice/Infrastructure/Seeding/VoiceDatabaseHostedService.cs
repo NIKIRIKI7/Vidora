@@ -27,7 +27,7 @@ public sealed class VoiceDatabaseHostedService : IHostedService
         _logger.LogInformation("[VoiceDbHosted] Применение миграций voice.db и настройка WAL...");
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<VoiceDbContext>();
-        await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
         await db.ConfigureSqlitePragmasAsync(cancellationToken);
 
         await SeedDefaultSpeakersAsync(db, cancellationToken);

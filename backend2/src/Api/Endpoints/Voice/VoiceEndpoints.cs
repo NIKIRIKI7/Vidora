@@ -10,9 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
-using Voice.Application.Commands;
-using Voice.Application.Contracts;
-using Voice.Application.Services;
+using Voice.Contracts;
 using Voice.Domain;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
@@ -299,6 +297,62 @@ public static class VoiceEndpoints
 
             return Results.Ok(new { status = "ok", preview_url = result });
         });
+
+        // Пакетная загрузка аудио для нескольких сцен (multipart/form-data).
+        endpoints.MapPost("/api/v1/audio/batch-upload-scenes", async (
+            HttpRequest request,
+            IVoiceModule voice,
+            CancellationToken ct) =>
+        {
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest(new { error = "Ожидался multipart/form-data запрос." });
+            }
+
+            var form = await request.ReadFormAsync(ct);
+            var projectPath = form["project_path"].ToString();
+            var sceneIdsJson = form["scene_ids"].ToString();
+
+            if (string.IsNullOrWhiteSpace(projectPath))
+            {
+                return Results.BadRequest(new { error = "Поле 'project_path' обязательно." });
+            }
+
+            List<string> sceneIds;
+            if (!string.IsNullOrWhiteSpace(sceneIdsJson))
+            {
+                try
+                {
+                    sceneIds = JsonSerializer.Deserialize<List<string>>(sceneIdsJson) ?? [];
+                }
+                catch
+                {
+                    sceneIds = sceneIdsJson
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToList();
+                }
+            }
+            else
+            {
+                sceneIds = [];
+            }
+
+            var formFiles = form.Files.GetFiles("files");
+            if (formFiles.Count == 0)
+            {
+                formFiles = form.Files;
+            }
+
+            var uploadFiles = new List<UploadedAudioFile>();
+            foreach (var file in formFiles)
+            {
+                uploadFiles.Add(new UploadedAudioFile(file.FileName, file.OpenReadStream()));
+            }
+
+            var cmd = new BatchUploadScenesCommand(projectPath, sceneIds, uploadFiles);
+            var response = await voice.BatchUploadScenesAsync(cmd, ct);
+            return Results.Ok(response);
+        }).DisableAntiforgery();
 
         return endpoints;
     }

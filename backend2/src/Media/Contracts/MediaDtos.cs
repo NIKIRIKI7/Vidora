@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaContext.Domain;
 
@@ -98,3 +99,29 @@ public sealed record ProcessBrollResponse(
     [property: JsonPropertyName("path")] string Path,
     [property: JsonPropertyName("duration")] double Duration,
     [property: JsonPropertyName("extracted_audio_path")] string? ExtractedAudioPath);
+
+// --- AI Auto-B-Roll matching ---
+
+public sealed record AutoBrollFragmentItem(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("visual_note")] string VisualNote,
+    [property: JsonPropertyName("text")] string Text,
+    [property: JsonPropertyName("start_time")] double? StartTime = null,
+    [property: JsonPropertyName("end_time")] double? EndTime = null,
+    [property: JsonPropertyName("duration")] double? Duration = null);
+
+public sealed record AutoBrollCommand(
+    [property: JsonPropertyName("project_path")] string ProjectPath,
+    [property: JsonPropertyName("format")] string Format,
+    [property: JsonPropertyName("engine")] string? Engine,
+    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys,
+    [property: JsonPropertyName("fragments")] IReadOnlyList<AutoBrollFragmentItem> Fragments);
+
+public sealed record AutoBrollMatchResult(
+    [property: JsonPropertyName("fragment_id")] string FragmentId,
+    [property: JsonPropertyName("matched")] bool Matched,
+    [property: JsonPropertyName("filename")] string? Filename);
+
+public sealed record AutoBrollResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("results")] IReadOnlyList<AutoBrollMatchResult> Results);

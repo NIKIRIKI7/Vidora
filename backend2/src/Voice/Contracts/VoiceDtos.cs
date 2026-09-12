@@ -3,7 +3,7 @@ using Voice.Domain;
 using Voice.Domain.Entities;
 using Voice.Domain.ValueObjects;
 
-namespace Voice.Application.Contracts;
+namespace Voice.Contracts;
 
 public sealed record VoiceJobDto
 {
@@ -195,3 +195,13 @@ public sealed record ProcessAudioDspResponse(
 public sealed record ConcatAudioRequest(
     [property: JsonPropertyName("audio_paths")] IReadOnlyList<string> AudioPaths,
     [property: JsonPropertyName("output_path")] string OutputPath);
+
+public sealed record SceneAudioMatchDto(
+    [property: JsonPropertyName("scene_id")] string SceneId,
+    [property: JsonPropertyName("absolute_path")] string AbsolutePath,
+    [property: JsonPropertyName("duration")] double Duration);
+
+public sealed record BatchUploadScenesResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("matches")] IReadOnlyList<SceneAudioMatchDto> Matches,
+    [property: JsonPropertyName("unmatched_files")] IReadOnlyList<string> UnmatchedFiles);

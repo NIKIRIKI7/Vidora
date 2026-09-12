@@ -1,4 +1,4 @@
-namespace Integrations.Whisper.Audio;
+namespace Kernel.Platform.Audio;
 
 public sealed record DecodedAudio(float[] Samples, int SampleRate, TimeSpan Duration);
 

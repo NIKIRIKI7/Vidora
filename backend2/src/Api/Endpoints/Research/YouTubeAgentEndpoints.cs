@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Integrations.YouTube.Contracts;
 using Kernel.Ports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -97,7 +96,7 @@ public static class YouTubeAgentEndpoints
             AnalyzeHookRequest request,
             ISkillsCatalog skillsCatalog,
             ILlmClient llm,
-            IYouTubeClient ytClient,
+            IYouTubeVideoInspector inspector,
             CancellationToken ct) =>
         {
             var targetVideoId = !string.IsNullOrWhiteSpace(request.VideoId)
@@ -105,13 +104,13 @@ public static class YouTubeAgentEndpoints
                 : (!string.IsNullOrWhiteSpace(request.VideoUrl) ? request.VideoUrl : null);
 
             string effectiveTranscript = request.Transcript ?? string.Empty;
-            IReadOnlyList<YouTubeHeatmapPoint> rawHeatmap = [];
+            IReadOnlyList<HeatmapPointDto> rawHeatmap = [];
 
             if (!string.IsNullOrWhiteSpace(targetVideoId))
             {
                 try
                 {
-                    var scrapedSubtitles = await ytClient.GetTranscriptAsync(targetVideoId, ["en", "ru"], ct);
+                    var scrapedSubtitles = await inspector.GetTranscriptAsync(targetVideoId, ["en", "ru"], ct);
                     if (!string.IsNullOrWhiteSpace(scrapedSubtitles))
                     {
                         effectiveTranscript = scrapedSubtitles;
@@ -121,7 +120,7 @@ public static class YouTubeAgentEndpoints
 
                 try
                 {
-                    rawHeatmap = await ytClient.GetHeatmapAsync(targetVideoId, ct);
+                    rawHeatmap = await inspector.GetHeatmapAsync(targetVideoId, ct);
                 }
                 catch { }
             }
@@ -284,10 +283,10 @@ public static class YouTubeAgentEndpoints
         // 7. Download metadata
         group.MapPost("/download-meta", async (
             DownloadMetaRequest request,
-            IYouTubeClient ytClient,
+            IYouTubeVideoInspector inspector,
             CancellationToken ct) =>
         {
-            var meta = await ytClient.GetMetadataAsync(request.Url, ct);
+            var meta = await inspector.GetMetadataSummaryAsync(request.Url, ct);
             return Results.Ok(new
             {
                 status = "ok",
@@ -299,6 +298,97 @@ public static class YouTubeAgentEndpoints
                 }
             });
         });
+
+        // -------------------------------------------------------------
+        // YouTube Video Deep-Dive & Retention Inspector
+        // -------------------------------------------------------------
+        var videoGroup = group.MapGroup("/video/{videoId}");
+
+        videoGroup.MapGet("/heatmap", async (
+            string videoId,
+            IYouTubeVideoInspector inspector,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return Results.BadRequest(new { error = "Параметр videoId обязателен." });
+            }
+
+            var heatmap = await inspector.GetHeatmapAsync(videoId, ct);
+            return Results.Ok(new { heatmap });
+        });
+
+        videoGroup.MapGet("/chapters", async (
+            string videoId,
+            IYouTubeVideoInspector inspector,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return Results.BadRequest(new { error = "Параметр videoId обязателен." });
+            }
+
+            var chapters = await inspector.GetChaptersAsync(videoId, ct);
+            return Results.Ok(new { chapters });
+        });
+
+        videoGroup.MapGet("/comments-detailed", async (
+            string videoId,
+            IYouTubeVideoInspector inspector,
+            int maxComments = 50,
+            CancellationToken ct = default) =>
+        {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return Results.BadRequest(new { error = "Параметр videoId обязателен." });
+            }
+
+            maxComments = Math.Clamp(maxComments, 1, 100);
+            var comments = await inspector.GetCommentsDetailedAsync(videoId, maxComments, ct);
+            return Results.Ok(new { comments });
+        });
+
+        videoGroup.MapGet("/deep-dive", async (
+            string videoId,
+            IYouTubeVideoInspector inspector,
+            int maxComments = 50,
+            CancellationToken ct = default) =>
+        {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return Results.BadRequest(new { error = "Параметр videoId обязателен." });
+            }
+
+            maxComments = Math.Clamp(maxComments, 1, 100);
+
+            // Параллельный сбор данных для минимизации задержки.
+            var metaTask = TryFetchAsync(() => inspector.GetMetadataAsync(videoId, ct));
+            var heatmapTask = TryFetchAsync(() => inspector.GetHeatmapAsync(videoId, ct));
+            var chaptersTask = TryFetchAsync(() => inspector.GetChaptersAsync(videoId, ct));
+            var commentsTask = TryFetchAsync(() => inspector.GetCommentsDetailedAsync(videoId, maxComments, ct));
+
+            await Task.WhenAll(metaTask, heatmapTask, chaptersTask, commentsTask);
+
+            var metadata = await metaTask;
+            var heatmap = await heatmapTask ?? [];
+            var chapters = await chaptersTask ?? [];
+            var comments = await commentsTask ?? [];
+
+            var result = new VideoDeepDiveDto(videoId, metadata, heatmap, chapters, comments);
+            return Results.Ok(result);
+        });
+
+        static async Task<T?> TryFetchAsync<T>(Func<Task<T>> fetch)
+        {
+            try
+            {
+                return await fetch();
+            }
+            catch
+            {
+                return default;
+            }
+        }
 
         return endpoints;
     }

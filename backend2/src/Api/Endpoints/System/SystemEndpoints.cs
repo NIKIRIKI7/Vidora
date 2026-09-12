@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using MotionContext.Contracts;
+using Skills.Application.Commands;
+using Skills.Application.Services;
 using SystemContext.Application.Services;
 using SystemContext.Contracts;
 using SystemContext.Domain;
@@ -160,6 +162,28 @@ public static class SystemEndpoints
 
             var revision = await motion.GetRevisionAsync(sceneCode.Id, revisionNumber, ct);
             return Results.Ok(new { tsx_code = revision.SourceCode });
+        });
+
+        // --- Compatibility: hardware info, model pull, skills reset alias ---
+        group.MapGet("/hardware", async (ISystemModule system, CancellationToken ct) =>
+        {
+            var hw = await system.GetHardwareInfoAsync(ct);
+            return Results.Ok(hw);
+        });
+
+        group.MapPost("/pull", async (PullModelRequest request, ISystemModule system, CancellationToken ct) =>
+        {
+            var result = await system.PullModelAsync(request.Engine, ct);
+            return Results.Accepted($"/api/v1/system/models/{result.Id}", result);
+        });
+
+        group.MapPost("/skills/{id}/reset", async (
+            string id,
+            ISkillManagementService skillService,
+            CancellationToken ct) =>
+        {
+            var updated = await skillService.ResetSkillToDefaultAsync(new ResetSkillToDefaultCommand(id), ct);
+            return Results.Ok(updated);
         });
 
         return endpoints;

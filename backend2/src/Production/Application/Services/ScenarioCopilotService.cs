@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
-using Research.Domain.Ports; // RAG-контекст (тренды/залетевшие видео)
+using ProductionContext.Domain.Ports;
 using Skills.Contracts;
 using Skills.Domain;
 
@@ -21,18 +21,18 @@ public sealed class ScenarioCopilotService
 {
     private readonly ILlmClient _llmClient;
     private readonly ISkillsCatalog _skillsCatalog;
-    private readonly IYouTubeSearchIngestor _youtube;
+    private readonly ITrendingTopicProvider _trendingTopics;
     private readonly ILogger<ScenarioCopilotService> _logger;
 
     public ScenarioCopilotService(
         ILlmClient llmClient,
         ISkillsCatalog skillsCatalog,
-        IYouTubeSearchIngestor youtube,
+        ITrendingTopicProvider trendingTopics,
         ILogger<ScenarioCopilotService> logger)
     {
         _llmClient = llmClient;
         _skillsCatalog = skillsCatalog;
-        _youtube = youtube;
+        _trendingTopics = trendingTopics;
         _logger = logger;
     }
 
@@ -105,23 +105,9 @@ public sealed class ScenarioCopilotService
     {
         try
         {
-            var results = await _youtube.SearchTopicCandidatesAsync(
-                query: projectTitle,
-                maxResults: 3,
-                daysBack: 14,
-                lang: "ru",
-                ct: ct);
+            var lines = await _trendingTopics.GetTrendingHooksAsync(projectTitle, max: 3, ct);
+            if (lines.Count == 0) return string.Empty;
 
-            var viral = results
-                .Where(r => r.ViewCount > 0)
-                .OrderByDescending(r => r.ViewCount)
-                .Take(3)
-                .ToList();
-
-            if (viral.Count == 0) return string.Empty;
-
-            var lines = viral.Select(r =>
-                $"- \"{r.Title}\" — {r.ViewCount:N0} просмотров (канал: {r.ChannelTitle})");
             return $"\n\nВирусные темы в этой нише (используй их структуру хуков как референс, НЕ копируй текст):\n{string.Join("\n", lines)}";
         }
         catch (Exception ex)

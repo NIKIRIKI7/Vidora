@@ -35,4 +35,6 @@ public interface IYouTubeSearchIngestor
     Task<IReadOnlyList<RawVideoSearchResult>> GetHomeFeedCandidatesAsync(
         string lang = "ru",
         CancellationToken ct = default);
+
+    Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default);
 }

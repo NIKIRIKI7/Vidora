@@ -3,7 +3,7 @@ using System.Text;
 using Kernel.Exceptions;
 using Kernel.Platform.Persistence;
 using ProductionContext.Domain.ValueObjects;
-using Voice.Domain.ValueObjects; // Для VoiceTagSanitizer (SSOT по тегам диктора)
+using Kernel.Contracts; // Для VoiceTagSanitizer (SSOT по тегам диктора)
 
 namespace ProductionContext.Domain.Entities;
 

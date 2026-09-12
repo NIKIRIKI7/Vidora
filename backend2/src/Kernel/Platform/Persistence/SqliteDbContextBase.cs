@@ -116,4 +116,76 @@ public abstract class SqliteDbContextBase : DbContext
 
         return events;
     }
+
+    /// <summary>
+    /// Применяет EF-миграции. Перед этим безопасно переводит легаси-БД (созданные ранее
+    /// через EnsureCreated, без __EFMigrationsHistory) на версионирование: базовая миграция
+    /// помечается как применённая, существующие данные и схема не затрагиваются.
+    /// </summary>
+    public async Task MigrateWithShimAsync(string primaryProbeTable, string efProductVersion = "9.0.2", CancellationToken ct = default)
+    {
+        await ResetMigrationLocksAsync(ct);
+
+        var connection = Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await Database.OpenConnectionAsync(ct);
+        }
+
+        bool hasPrimaryTable = false;
+        bool hasMigrationHistory = false;
+
+        using (var checkCmd = connection.CreateCommand())
+        {
+            checkCmd.CommandText = $"SELECT name FROM sqlite_master WHERE type='table' AND name IN ('{primaryProbeTable}', '__EFMigrationsHistory');";
+            using var reader = await checkCmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                var name = reader.GetString(0);
+                if (string.Equals(name, primaryProbeTable, StringComparison.OrdinalIgnoreCase)) hasPrimaryTable = true;
+                if (string.Equals(name, "__EFMigrationsHistory", StringComparison.OrdinalIgnoreCase)) hasMigrationHistory = true;
+            }
+        }
+
+        if (hasPrimaryTable && !hasMigrationHistory)
+        {
+            var initialMigrationId = Database.GetMigrations()
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException($"Для контекста '{GetType().Name}' не найдено ни одной EF-миграции.");
+
+            using (var createHistoryCmd = connection.CreateCommand())
+            {
+                createHistoryCmd.CommandText = """
+                    CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                        "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                        "ProductVersion" TEXT NOT NULL
+                    );
+                    """;
+                await createHistoryCmd.ExecuteNonQueryAsync(ct);
+            }
+
+            using (var insertHistoryCmd = connection.CreateCommand())
+            {
+                insertHistoryCmd.CommandText = """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ($id, $version);
+                    """;
+                var idParam = insertHistoryCmd.CreateParameter();
+                idParam.ParameterName = "$id";
+                idParam.Value = initialMigrationId;
+                insertHistoryCmd.Parameters.Add(idParam);
+
+                var versionParam = insertHistoryCmd.CreateParameter();
+                versionParam.ParameterName = "$version";
+                versionParam.Value = efProductVersion;
+                insertHistoryCmd.Parameters.Add(versionParam);
+
+                await insertHistoryCmd.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        await Database.MigrateAsync(ct);
+        await ConfigureSqlitePragmasAsync(ct);
+    }
 }

@@ -66,3 +66,14 @@ public sealed record ModelCatalogEntryDto(
     [property: JsonPropertyName("roles")] IReadOnlyList<ModelTaskRole> Roles,
     [property: JsonPropertyName("is_available")] bool IsAvailable,
     [property: JsonPropertyName("status_details")] string? StatusDetails = null);
+
+/// <summary>Плоский хардвар-статус для UI настроек.</summary>
+public sealed record SystemHardwareInfoDto(
+    [property: JsonPropertyName("device")] string Device,
+    [property: JsonPropertyName("gpu_type")] string GpuType,
+    [property: JsonPropertyName("vram_gb")] double VramGb,
+    [property: JsonPropertyName("ram_gb")] double RamGb);
+
+/// <summary>Запрос на загрузку/пулл модели по имени (HF id или ollama tag).</summary>
+public sealed record PullModelRequest(
+    [property: JsonPropertyName("engine")] string Engine);

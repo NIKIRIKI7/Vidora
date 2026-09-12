@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MotionContext.Domain.Ports;
-using SystemContext.Domain.Ports;
+using SystemContext.Contracts;
 
 namespace MotionContext.Infrastructure.Remotion;
 
@@ -113,16 +113,16 @@ public sealed partial class RemotionRunner : IRemotionRunner
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var settings = scope.ServiceProvider.GetService<ISystemSettingRepository>();
+            var settings = scope.ServiceProvider.GetService<ISystemModule>();
             if (settings is null) return (glBackend, concurrency);
 
-            var backendSetting = await settings.GetByKeyAsync("motion.gl_backend", ct);
-            if (!string.IsNullOrWhiteSpace(backendSetting?.Value))
-                glBackend = backendSetting.Value;
+            var backendSetting = await settings.GetSettingValueAsync("motion.gl_backend", ct);
+            if (!string.IsNullOrWhiteSpace(backendSetting))
+                glBackend = backendSetting;
 
-            var concurrencySetting = await settings.GetByKeyAsync("motion.concurrency", ct);
-            if (concurrencySetting is not null &&
-                int.TryParse(concurrencySetting.Value, out var settingConcurrency) &&
+            var concurrencySetting = await settings.GetSettingValueAsync("motion.concurrency", ct);
+            if (!string.IsNullOrWhiteSpace(concurrencySetting) &&
+                int.TryParse(concurrencySetting, out var settingConcurrency) &&
                 settingConcurrency > 0)
                 concurrency = settingConcurrency;
         }

@@ -1,10 +1,12 @@
 using Kernel.Platform.Config;
+using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SystemContext.Application.Services;
 using SystemContext.Contracts;
 using SystemContext.Domain.Ports;
+using SystemContext.Infrastructure.Adapters;
 using SystemContext.Infrastructure.Persistence;
 using SystemContext.Infrastructure.Seeding;
 
@@ -39,11 +41,13 @@ public static class SystemServiceExtensions
 
         // Сидинг и миграции
         services.AddScoped<SystemDatabaseSeeder>();
+        services.AddScoped<IDatabaseMigrationParticipant, SystemMigrationParticipant>();
         // services.AddHostedService<SystemDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
         services.AddHostedService<ModelDiscoveryService>();
 
         // Модуль и сервисы мониторинга
         services.AddSingleton<HardwareMonitorService>();
+        services.AddSingleton<ILocalModelScanner, LocalModelScanner>();
         services.AddScoped<ISystemModule, SystemModule>();
         services.AddScoped<IModelCatalogService, ModelCatalogService>();
 

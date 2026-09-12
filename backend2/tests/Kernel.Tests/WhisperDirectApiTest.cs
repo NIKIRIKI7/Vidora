@@ -1,4 +1,4 @@
-using Integrations.Whisper.Audio;
+using Kernel.Platform.Audio;
 using Qourex.FasterWhisper.NET;
 using Xunit;
 

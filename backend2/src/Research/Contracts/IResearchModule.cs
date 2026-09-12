@@ -12,4 +12,5 @@ public interface IResearchModule
     Task<byte[]> ExportExcelReportAsync(string runId, CancellationToken ct = default);
     Task CancelSessionAsync(string runId, CancellationToken ct = default);
     IAsyncEnumerable<ResearchDagProgressDto> ExecuteDagStreamingAsync(string runId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetTrendingHooksAsync(string topic, int max = 5, CancellationToken ct = default);
 }

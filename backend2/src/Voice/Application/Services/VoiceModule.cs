@@ -1,20 +1,18 @@
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
-using Integrations.Whisper.Audio;
+using Kernel.Platform.Process;
+using Kernel.Contracts;
+using Kernel.Platform.Audio;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ProductionContext.Domain.ValueObjects;
-using Voice.Application.Commands;
-using Voice.Application.Contracts;
-using Voice.Application.Services;
+using System.Text.RegularExpressions;
+using Voice.Contracts;
 using Voice.Domain;
 using Voice.Domain.Entities;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
-using Voice.Infrastructure.Alignment;
-using Voice.Infrastructure.Providers;
-using Voice.Infrastructure.Providers.Local;
 
 namespace Voice.Application.Services;
 
@@ -32,6 +30,7 @@ public sealed class VoiceModule : IVoiceModule
     private readonly ILogger<VoiceModule> _logger;
     private readonly IVoiceEngineCatalog _engineCatalog;
     private readonly ILocalTtsClient _localTtsClient;
+    private readonly IProcessSupervisor _processSupervisor;
 
     public VoiceModule(
         ITtsJobRepository repository,
@@ -45,6 +44,7 @@ public sealed class VoiceModule : IVoiceModule
         IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
         ILocalTtsClient localTtsClient,
+        IProcessSupervisor processSupervisor,
         ILogger<VoiceModule> logger)
     {
         _repository = repository;
@@ -58,7 +58,158 @@ public sealed class VoiceModule : IVoiceModule
         _pathResolver = pathResolver;
         _storageConfig = storageConfig.Value;
         _localTtsClient = localTtsClient;
+        _processSupervisor = processSupervisor;
         _logger = logger;
+    }
+
+    public async Task<BatchUploadScenesResponse> BatchUploadScenesAsync(BatchUploadScenesCommand cmd, CancellationToken ct = default)
+    {
+        if (cmd.Files.Count == 0)
+        {
+            return new BatchUploadScenesResponse("ok", [], []);
+        }
+
+        // 1. Целевая директория проекта внутри песочницы.
+        string targetProjectDir;
+        if (Path.IsPathRooted(cmd.ProjectPath) && _pathResolver.IsSafePath(cmd.ProjectPath))
+        {
+            targetProjectDir = _pathResolver.ResolveSafePath(cmd.ProjectPath);
+        }
+        else
+        {
+            var candidate = Path.Combine(_storageConfig.DataStorageDir, cmd.ProjectPath);
+            targetProjectDir = _pathResolver.IsSafePath(candidate)
+                ? _pathResolver.ResolveSafePath(candidate)
+                : _pathResolver.ResolveSafePath(Path.Combine(_storageConfig.GetProjectsDirectory(), cmd.ProjectPath));
+        }
+
+        var voiceDir = Path.Combine(targetProjectDir, "assets", "voice");
+        Directory.CreateDirectory(voiceDir);
+
+        // 2. Сохранение файлов и замер длительности.
+        var savedFiles = new List<(string OriginalName, string CleanName, string AbsolutePath, double Duration)>();
+
+        foreach (var file in cmd.Files)
+        {
+            ct.ThrowIfCancellationRequested();
+            var cleanName = _pathResolver.SanitizeFileName(file.FileName);
+            var targetFilePath = Path.Combine(voiceDir, cleanName);
+
+            await using (var fileStream = new FileStream(targetFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            {
+                await file.ContentStream.CopyToAsync(fileStream, ct);
+            }
+
+            var duration = await ProbeAudioDurationAsync(targetFilePath, ct);
+            savedFiles.Add((file.FileName, cleanName, targetFilePath.Replace('\\', '/'), duration));
+        }
+
+        // 3. Трёхуровневый matching engine.
+        var matches = new Dictionary<string, (string AbsolutePath, double Duration)>(StringComparer.OrdinalIgnoreCase);
+        var usedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var remainingScenes = new List<string>(cmd.SceneIds);
+
+        // Уровень 1: прямое вхождение scene_id в имя файла.
+        foreach (var sceneId in remainingScenes.ToList())
+        {
+            var found = savedFiles.FirstOrDefault(f =>
+                !usedFiles.Contains(f.CleanName) &&
+                Path.GetFileNameWithoutExtension(f.CleanName).Contains(sceneId, StringComparison.OrdinalIgnoreCase));
+
+            if (found.CleanName != null)
+            {
+                matches[sceneId] = (found.AbsolutePath, found.Duration);
+                usedFiles.Add(found.CleanName);
+                remainingScenes.Remove(sceneId);
+            }
+        }
+
+        // Уровень 2: числовой индекс в имени (voice_01, scene-2, track03...).
+        var numberRegex = new Regex(@"(?:voice|scene|track|part)?[-_#\s]*0*(\d+)", RegexOptions.IgnoreCase);
+        foreach (var file in savedFiles.Where(f => !usedFiles.Contains(f.CleanName)))
+        {
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(file.CleanName);
+            var match = numberRegex.Match(nameWithoutExt);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var number))
+            {
+                var index = number - 1;
+                if (index >= 0 && index < cmd.SceneIds.Count)
+                {
+                    var candidateSceneId = cmd.SceneIds[index];
+                    if (remainingScenes.Contains(candidateSceneId))
+                    {
+                        matches[candidateSceneId] = (file.AbsolutePath, file.Duration);
+                        usedFiles.Add(file.CleanName);
+                        remainingScenes.Remove(candidateSceneId);
+                    }
+                }
+            }
+        }
+
+        // Уровень 3: позиционный алфавитный фолбэк.
+        var remainingFiles = savedFiles
+            .Where(f => !usedFiles.Contains(f.CleanName))
+            .OrderBy(f => f.CleanName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var pairCount = Math.Min(remainingFiles.Count, remainingScenes.Count);
+        for (var i = 0; i < pairCount; i++)
+        {
+            var sceneId = remainingScenes[i];
+            var file = remainingFiles[i];
+            matches[sceneId] = (file.AbsolutePath, file.Duration);
+            usedFiles.Add(file.CleanName);
+        }
+
+        // 4. Формирование ответа.
+        var resultMatches = cmd.SceneIds
+            .Where(id => matches.ContainsKey(id))
+            .Select(id => new SceneAudioMatchDto(id, matches[id].AbsolutePath, matches[id].Duration))
+            .ToList();
+
+        var unmatchedFiles = savedFiles
+            .Where(f => !usedFiles.Contains(f.CleanName))
+            .Select(f => f.OriginalName)
+            .ToList();
+
+        _logger.LogInformation(
+            "[VoiceModule:BatchUpload] Файлов: {Total}, сматчено: {Matched}, без соответствия: {Unmatched}",
+            savedFiles.Count, resultMatches.Count, unmatchedFiles.Count);
+
+        return new BatchUploadScenesResponse("ok", resultMatches, unmatchedFiles);
+    }
+
+    private async Task<double> ProbeAudioDurationAsync(string filePath, CancellationToken ct)
+    {
+        if (filePath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var wavDur = WavAudioDecoder.ProbeWavDuration(filePath);
+                if (wavDur > 0) return Math.Round(wavDur, 2);
+            }
+            catch { /* не-WAV / битый заголовок — падаем на ffprobe */ }
+        }
+
+        try
+        {
+            var args = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+            var result = await _processSupervisor.RunAsync("ffprobe", args, cancellationToken: ct);
+            if (result.ExitCode == 0 && double.TryParse(
+                    result.StandardOutput.Trim(),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var sec))
+            {
+                return Math.Round(sec, 2);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[VoiceModule] Ошибка ffprobe при измерении длительности: {Path}", filePath);
+        }
+
+        return 0;
     }
 
     public async Task<VoiceJobDto> SynthesizeSpeechAsync(SynthesizeSpeechCommand cmd, CancellationToken ct = default)
@@ -474,9 +625,23 @@ public sealed class VoiceModule : IVoiceModule
         await _localTtsClient.UnloadVramAsync(ct);
     }
 
-    public Task<IReadOnlyList<VoiceEngineInfoDto>> GetAvailableEnginesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<VoiceEngineInfoDto>> GetAvailableEnginesAsync(CancellationToken ct = default)
     {
-        return _engineCatalog.DiscoverEnginesAsync(ct);
+        var engines = await _engineCatalog.DiscoverEnginesAsync(ct);
+
+        return engines
+            .Select(e => new VoiceEngineInfoDto(
+                e.Id,
+                e.Name,
+                e.Mode,
+                e.Capabilities,
+                e.SupportsClone,
+                e.SupportsDesign,
+                e.SupportsSynthesis,
+                e.IsAvailable,
+                e.StatusMessage,
+                e.Description))
+            .ToList();
     }
 
     private async Task<AlignmentData> DetermineAlignmentAsync(

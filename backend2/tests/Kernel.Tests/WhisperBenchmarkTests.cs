@@ -7,7 +7,7 @@ using Kernel.Platform.Gpu;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using SystemContext.Domain.Ports;
+using SystemContext.Contracts;
 using Voice.Domain.ValueObjects;
 using Voice.Infrastructure.Alignment;
 using Xunit;
@@ -83,7 +83,7 @@ public class WhisperBenchmarkTests : IDisposable
 
         var pathResolver = new BenchmarkPathResolver();
         var gpuManager = new BenchmarkGpuManager();
-        var settingRepoMock = new Mock<ISystemSettingRepository>();
+        var settingRepoMock = new Mock<ISystemModule>();
 
         var provider = new WhisperAlignmentProvider(
             pathResolver,

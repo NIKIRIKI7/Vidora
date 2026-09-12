@@ -1,7 +1,7 @@
 using Voice.Domain;
 using Voice.Domain.ValueObjects;
 
-namespace Voice.Application.Commands;
+namespace Voice.Contracts;
 
 public sealed record SynthesizeSpeechCommand(
     string Text,
@@ -17,7 +17,11 @@ public sealed record SynthesizeSpeechCommand(
     bool Denoise = true,
     double Duration = 0.0,
     bool PreprocessPrompt = true,
-    bool PostprocessOutput = true);
+    bool PostprocessOutput = true)
+{
+    public static SynthesizeSpeechCommand ForSpeaker(string text, string speakerId, double speed = 1.0) =>
+        new(Text: text, SpeakerId: speakerId, Speed: speed);
+}
 
 public sealed record BatchItemSpec(
     string Text,
@@ -36,4 +40,17 @@ public sealed record BatchSynthesizeVoiceCommand(
 public sealed record ApplyAudioDuckingCommand(
     string VoiceAssetId,
     string BgmAssetId,
-    DuckingSpec? Ducking = null);
+    DuckingSpec? Ducking = null)
+{
+    public static ApplyAudioDuckingCommand ForAssets(string voiceAssetId, string bgmAssetId) =>
+        new(voiceAssetId, bgmAssetId);
+}
+
+public sealed record UploadedAudioFile(
+    string FileName,
+    Stream ContentStream);
+
+public sealed record BatchUploadScenesCommand(
+    string ProjectPath,
+    IReadOnlyList<string> SceneIds,
+    IReadOnlyList<UploadedAudioFile> Files);

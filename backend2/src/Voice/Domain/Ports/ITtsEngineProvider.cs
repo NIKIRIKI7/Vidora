@@ -1,7 +1,7 @@
 using Voice.Domain;
 using Voice.Domain.ValueObjects;
 
-namespace Voice.Infrastructure.Providers;
+namespace Voice.Domain.Ports;
 
 public sealed record RawSynthesisResult(
     string AudioFilePath,

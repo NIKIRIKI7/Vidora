@@ -3,8 +3,9 @@ using System.Text.Json;
 using Kernel.Exceptions;
 using Kernel.Platform.FileSystem;
 using Microsoft.Extensions.Logging;
-using SystemContext.Domain.Ports;
+using SystemContext.Contracts;
 using Voice.Domain;
+using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 
 namespace Voice.Infrastructure.Providers.Cloud;
@@ -14,13 +15,13 @@ public sealed class MiniMaxSpeechProvider : ITtsEngineProvider
     public VoiceEngineType EngineType => VoiceEngineType.CloudMiniMax;
 
     private readonly HttpClient _httpClient;
-    private readonly ISystemSettingRepository _settingRepo;
+    private readonly ISystemModule _settingRepo;
     private readonly IPathResolver _pathResolver;
     private readonly ILogger<MiniMaxSpeechProvider> _logger;
 
     public MiniMaxSpeechProvider(
         HttpClient httpClient,
-        ISystemSettingRepository settingRepo,
+        ISystemModule settingRepo,
         IPathResolver pathResolver,
         ILogger<MiniMaxSpeechProvider> logger)
     {
@@ -32,11 +33,8 @@ public sealed class MiniMaxSpeechProvider : ITtsEngineProvider
 
     public async Task<RawSynthesisResult> SynthesizeAsync(string text, VoiceSpec spec, string destinationPath, CancellationToken ct)
     {
-        var apiKeySetting = await _settingRepo.GetByKeyAsync("integrations.minimax.api_key", ct);
-        var groupIdSetting = await _settingRepo.GetByKeyAsync("integrations.minimax.group_id", ct);
-
-        var apiKey = apiKeySetting?.Value;
-        var groupId = groupIdSetting?.Value;
+        var apiKey = await _settingRepo.GetSettingValueAsync("integrations.minimax.api_key", ct);
+        var groupId = await _settingRepo.GetSettingValueAsync("integrations.minimax.group_id", ct);
 
         if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(groupId))
         {

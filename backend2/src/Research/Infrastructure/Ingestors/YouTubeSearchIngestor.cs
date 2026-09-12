@@ -118,6 +118,12 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
         return results;
     }
 
+    public async Task<long> GetChannelSubscribersAsync(string channelId, CancellationToken ct = default)
+    {
+        var stats = await _youTubeClient.Metadata.GetChannelStatsAsync(channelId, ct);
+        return stats.SubscriberCount;
+    }
+
     private static List<RawVideoSearchResult> MapToResults(IReadOnlyList<YouTubeVideoMetadata> videos, int daysBack)
     {
         var results = new List<RawVideoSearchResult>();

@@ -8,10 +8,9 @@ using MediaContext.Domain;
 using MediaContext.Domain.Entities;
 using MediaContext.Domain.Ports;
 using MediaContext.Domain.ValueObjects;
-using MediaContext.Infrastructure.Catalog;
-using MediaContext.Infrastructure.Normalization;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Skills.Contracts;
 using Xunit;
 
 namespace Kernel.Tests;
@@ -23,6 +22,8 @@ public class MediaTests
     private readonly Mock<IBrollNormalizer> _normalizer = new();
     private readonly Mock<IMusicCatalogProvider> _musicCatalog = new();
     private readonly Mock<IPexelsClient> _pexels = new();
+    private readonly Mock<ILlmClient> _llm = new();
+    private readonly Mock<ISkillsCatalog> _skillsCatalog = new();
     private readonly Mock<IPathResolver> _pathResolver = new();
     private readonly Mock<ILogger<MediaModule>> _logger = new();
 
@@ -38,6 +39,8 @@ public class MediaTests
             _musicCatalog.Object,
             _pexels.Object,
             _pathResolver.Object,
+            _llm.Object,
+            _skillsCatalog.Object,
             _logger.Object);
     }
 
@@ -80,7 +83,7 @@ public class MediaTests
     [Fact]
     public async Task GetMusicCatalogAsync_ShouldDelegateToProvider()
     {
-        var expected = new List<MusicTrackDto>
+        var expected = new List<MusicTrackInfo>
         {
             new("t1", "Track 1", "Lo-Fi", "peaceful", 120.0, "music/t1.mp3", 85)
         };

@@ -1,4 +1,5 @@
 using Kernel.Platform.Config;
+using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,7 @@ public static class ResearchServiceExtensions
         services.AddScoped<IResearchRunRepository, EfResearchRunRepository>();
         services.AddSingleton<IResearchCacheService, InMemoryResearchCacheService>();
         services.AddScoped<IYouTubeSearchIngestor, YouTubeSearchIngestor>();
+        services.AddScoped<IYouTubeVideoInspector, YouTubeVideoInspector>();
         services.AddSingleton<IResearchReportExporter, OpenXmlResearchReportExporter>();
 
         services.AddSingleton<MomentumEngine>();
@@ -48,6 +50,7 @@ public static class ResearchServiceExtensions
 
         services.AddScoped<IDeepTrendDagPipeline, DeepTrendDagPipeline>();
         services.AddScoped<IResearchModule, ResearchModule>();
+        services.AddScoped<IDatabaseMigrationParticipant, ResearchMigrationParticipant>();
 
         // services.AddHostedService<ResearchDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Process;
-using MediaContext.Contracts;
+using MediaContext.Domain.Ports;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -36,12 +36,12 @@ public sealed partial class LocalMusicCatalogProvider : IMusicCatalogProvider
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<MusicTrackDto>> GetTracksAsync(string? mood = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<MusicTrackInfo>> GetTracksAsync(string? mood = null, CancellationToken ct = default)
     {
         var musicDir = _pathResolver.ResolveSafePath(_storageConfig.GetMusicDirectory());
         _logger.LogDebug("[MusicCatalog] Сканирование каталога музыки: {Dir}, mood={Mood}", musicDir, mood);
 
-        var list = new List<MusicTrackDto>();
+        var list = new List<MusicTrackInfo>();
 
         if (!Directory.Exists(musicDir))
         {
@@ -81,7 +81,7 @@ public sealed partial class LocalMusicCatalogProvider : IMusicCatalogProvider
         return list;
     }
 
-    private async Task<MusicTrackDto?> InspectTrackAsync(string file, string category, CancellationToken ct)
+    private async Task<MusicTrackInfo?> InspectTrackAsync(string file, string category, CancellationToken ct)
     {
         try
         {
@@ -91,7 +91,7 @@ public sealed partial class LocalMusicCatalogProvider : IMusicCatalogProvider
             var bpm = ParseBpmFromFileName(safeName);
             var duration = await ProbeDurationAsync(file, ct);
 
-            return new MusicTrackDto(
+            return new MusicTrackInfo(
                 Id: id,
                 Name: safeName,
                 Genre: category,

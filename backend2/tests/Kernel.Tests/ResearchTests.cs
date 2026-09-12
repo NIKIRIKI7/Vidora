@@ -13,7 +13,6 @@ using Research.Domain.Entities;
 using Research.Domain.Ports;
 using Research.Domain.Services;
 using Research.Domain.ValueObjects;
-using Research.Infrastructure.Ingestors;
 using Research.Infrastructure.Export;
 using Research.Infrastructure.Persistence;
 using Skills.Contracts;

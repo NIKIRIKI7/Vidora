@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 using ProductionContext.Domain.Entities;
-using Voice.Domain.ValueObjects; // Для суммы пауз из тегов диктора (SSOT)
+using Kernel.Contracts; // Для суммы пауз из тегов диктора (SSOT)
 
 namespace ProductionContext.Domain.Services;
 

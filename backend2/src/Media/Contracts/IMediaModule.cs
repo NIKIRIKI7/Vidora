@@ -18,4 +18,5 @@ public interface IMediaModule
     Task<IReadOnlyList<MusicTrackDto>> GetMusicCatalogAsync(string? moodFilter = null, CancellationToken ct = default);
     Task DeleteAssetAsync(string assetId, CancellationToken ct = default);
     Task<ProcessBrollResponse> ProcessBrollAsync(ProcessBrollCommand command, CancellationToken ct = default);
+    Task<AutoBrollResponse> AutoMatchBrollAsync(AutoBrollCommand command, CancellationToken ct = default);
 }

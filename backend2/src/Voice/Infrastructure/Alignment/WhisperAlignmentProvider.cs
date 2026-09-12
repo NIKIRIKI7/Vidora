@@ -1,13 +1,13 @@
 using System.Diagnostics;
-using Integrations.Whisper.Audio;
 using Integrations.Whisper.Config;
 using Integrations.Whisper.Native;
+using Kernel.Platform.Audio;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SystemContext.Domain.Ports;
+using SystemContext.Contracts;
 using Voice.Domain;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
@@ -20,7 +20,7 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
 
     private readonly IPathResolver _pathResolver;
     private readonly IGpuManager _gpuManager;
-    private readonly ISystemSettingRepository _settingRepo;
+    private readonly ISystemModule _settingRepo;
     private readonly WhisperOptions _whisperOptions;
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<WhisperAlignmentProvider> _logger;
@@ -28,7 +28,7 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
     public WhisperAlignmentProvider(
         IPathResolver pathResolver,
         IGpuManager gpuManager,
-        ISystemSettingRepository settingRepo,
+        ISystemModule settingRepo,
         IOptions<WhisperOptions> whisperOptions,
         IOptions<AppStorageConfig> storageConfig,
         ILogger<WhisperAlignmentProvider> logger)
@@ -89,7 +89,11 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
                 "Words: {WordsCount}, Avg confidence: {Conf:F2}",
                 result.InferenceElapsedMs, rtf, rtf > 0 ? 1.0 / rtf : 0, result.Words.Count, avgConfidence);
 
-            return new AlignmentData(result.Words, result.TotalDurationMs, "FasterWhisper_NET");
+            var words = result.Words
+                .Select(w => new TimedWord(w.Word, w.StartMs, w.EndMs, w.Confidence))
+                .ToList();
+
+            return new AlignmentData(words, result.TotalDurationMs, "FasterWhisper_NET");
         }
         catch (Exception ex)
         {
@@ -114,10 +118,10 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
     private async Task<string?> ResolveModelDirectoryAsync(CancellationToken ct)
     {
         // Пользовательская настройка из БД имеет приоритет, но только если путь реально резолвится.
-        var customSetting = await _settingRepo.GetByKeyAsync("voice.whisper_model_path", ct);
-        if (!string.IsNullOrWhiteSpace(customSetting?.Value))
+        var customPath = await _settingRepo.GetSettingValueAsync("voice.whisper_model_path", ct);
+        if (!string.IsNullOrWhiteSpace(customPath))
         {
-            var customDir = TryResolveDirectory(customSetting.Value);
+            var customDir = TryResolveDirectory(customPath);
             if (customDir != null)
             {
                 return customDir;
@@ -125,7 +129,7 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
 
             _logger.LogWarning(
                 "[FasterWhisper] Настроенный путь модели '{Path}' не найден. Использую путь по умолчанию '{Default}'.",
-                customSetting.Value, _whisperOptions.Model.DirectoryPath);
+                customPath, _whisperOptions.Model.DirectoryPath);
         }
 
         var defaultDir = TryResolveDirectory(_whisperOptions.Model.DirectoryPath);

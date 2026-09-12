@@ -1,6 +1,6 @@
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
-using Integrations.Whisper.Audio;
+using Kernel.Platform.Audio;
 using Microsoft.Extensions.Logging;
 using Voice.Domain;
 using Voice.Domain.Ports;

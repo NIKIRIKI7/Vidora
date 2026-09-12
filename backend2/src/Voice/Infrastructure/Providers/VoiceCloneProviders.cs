@@ -5,7 +5,7 @@ using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SystemContext.Domain.Ports;
+using SystemContext.Contracts;
 using Voice.Domain;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
@@ -17,14 +17,14 @@ public sealed class MiniMaxCloneProvider : IVoiceCloneProvider
     public VoiceEngineType EngineType => VoiceEngineType.CloudMiniMax;
 
     private readonly HttpClient _httpClient;
-    private readonly ISystemSettingRepository _settingRepo;
+    private readonly ISystemModule _settingRepo;
     private readonly IPathResolver _pathResolver;
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<MiniMaxCloneProvider> _logger;
 
     public MiniMaxCloneProvider(
         HttpClient httpClient,
-        ISystemSettingRepository settingRepo,
+        ISystemModule settingRepo,
         IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
         ILogger<MiniMaxCloneProvider> logger)
@@ -42,11 +42,8 @@ public sealed class MiniMaxCloneProvider : IVoiceCloneProvider
     {
         _logger.LogInformation("[MiniMaxClone] Нативное клонирование голоса через MiniMax HTTP REST API: '{Name}'", spec.Name);
 
-        var apiKeySetting = await _settingRepo.GetByKeyAsync("integrations.minimax.api_key", ct);
-        var groupIdSetting = await _settingRepo.GetByKeyAsync("integrations.minimax.group_id", ct);
-
-        var apiKey = apiKeySetting?.Value;
-        var groupId = groupIdSetting?.Value;
+        var apiKey = await _settingRepo.GetSettingValueAsync("integrations.minimax.api_key", ct);
+        var groupId = await _settingRepo.GetSettingValueAsync("integrations.minimax.group_id", ct);
 
         if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(groupId))
         {

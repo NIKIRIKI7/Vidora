@@ -1,8 +1,9 @@
 using Kernel.Exceptions;
 using Microsoft.Extensions.Logging;
 using Voice.Domain;
+using Voice.Domain.Ports;
 
-namespace Voice.Infrastructure.Providers;
+namespace Voice.Application.Services;
 
 public sealed class TtsProviderRegistry
 {
@@ -13,7 +14,7 @@ public sealed class TtsProviderRegistry
     {
         _providers = providers.ToDictionary(p => p.EngineType);
         _logger = logger;
-        _logger.LogInformation("[TtsProviderRegistry] Зарегистрировано движков синтеза: {Count} ({Types})",
+        _logger.LogInformation("[TtsProviderRegistry] Зарегистрированы TTS-движки: {Count} ({Types})",
             _providers.Count, string.Join(", ", _providers.Keys));
     }
 
@@ -24,6 +25,7 @@ public sealed class TtsProviderRegistry
             _logger.LogDebug("[TtsProviderRegistry] Выбран провайдер: {EngineType}", type);
             return provider;
         }
+
         _logger.LogError("[TtsProviderRegistry] Провайдер для движка {EngineType} не найден.", type);
         throw new ResourceNotFoundException("TtsEngineProvider", type);
     }

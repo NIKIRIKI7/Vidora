@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Integrations.Whisper.Audio;
+using Kernel.Platform.Audio;
 using Kernel.Contracts;
 using Kernel.Exceptions;
 using Kernel.Platform.FileSystem;
@@ -188,6 +188,16 @@ public static class MediaEndpoints
 
         group.MapPost("/process-broll", async ([FromBody] ProcessBrollCommand cmd, IMediaModule media, CancellationToken ct) =>
             Results.Ok(await media.ProcessBrollAsync(cmd, ct)));
+
+        // AI-автоподбор B-Roll по визуальным ремаркам фрагментов.
+        group.MapPost("/auto-broll", async (
+            [FromBody] AutoBrollCommand cmd,
+            IMediaModule media,
+            CancellationToken ct) =>
+        {
+            var response = await media.AutoMatchBrollAsync(cmd, ct);
+            return Results.Ok(response);
+        });
 
         // --- Media streaming endpoint (Range/206 for video scrubbing) ---
         group.MapGet("/stream", (

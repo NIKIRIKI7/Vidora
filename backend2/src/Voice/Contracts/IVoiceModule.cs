@@ -1,7 +1,4 @@
-using Voice.Application.Commands;
-using Voice.Application.Contracts;
-
-namespace Voice.Application.Services;
+namespace Voice.Contracts;
 
 public interface IVoiceModule
 {
@@ -25,4 +22,5 @@ public interface IVoiceModule
     Task<string> ConcatenateAudioAsync(IReadOnlyList<string> audioPaths, string outputPath, CancellationToken ct = default);
     Task<IReadOnlyList<VoiceEngineInfoDto>> GetAvailableEnginesAsync(CancellationToken ct = default);
     Task UnloadVramAsync(CancellationToken ct = default);
+    Task<BatchUploadScenesResponse> BatchUploadScenesAsync(BatchUploadScenesCommand cmd, CancellationToken ct = default);
 }

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Voice.Domain.ValueObjects;
+namespace Kernel.Contracts;
 
 /// <summary>
 /// Единый источник правды по голосовым тегам диктора (SSOT), описанным в docs/SKILL_TECH_SCENARIST.md:

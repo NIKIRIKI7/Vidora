@@ -1,16 +1,15 @@
 using System.Diagnostics;
-using Integrations.Whisper.Audio;
 using Integrations.Whisper.Config;
+using Kernel.Platform.Audio;
 using Microsoft.Extensions.Logging;
 using Qourex.FasterWhisper.NET;
-using Voice.Domain.ValueObjects;
 using FWOptions = Qourex.FasterWhisper.NET.WhisperOptions;
 using VidoraWhisperOptions = Integrations.Whisper.Config.WhisperOptions;
 
 namespace Integrations.Whisper.Native;
 
 public sealed record NativeAlignmentResult(
-    List<TimedWord> Words,
+    List<WhisperWord> Words,
     long TotalDurationMs,
     long InferenceElapsedMs);
 
@@ -145,7 +144,7 @@ public sealed class NativeWhisperModel : IDisposable
             return await AlignAsync(audioFilePath, expectedText, language, ct);
         }
 
-        var resultWords = new List<TimedWord>();
+        var resultWords = new List<WhisperWord>();
         float maxEndSeconds = 0f;
 
         foreach (var segment in segments)
@@ -165,7 +164,7 @@ public sealed class NativeWhisperModel : IDisposable
                     long endMs = Math.Max(startMs, (long)Math.Round(w.End * 1000f));
                     double conf = Math.Clamp((double)w.Probability, 0.0, 1.0);
 
-                    resultWords.Add(new TimedWord(w.Word.Trim(), startMs, endMs, conf));
+                    resultWords.Add(new WhisperWord(w.Word.Trim(), startMs, endMs, conf));
                 }
             }
             else if (!string.IsNullOrWhiteSpace(segment.Text))
@@ -181,7 +180,7 @@ public sealed class NativeWhisperModel : IDisposable
                     {
                         long s = segStartMs + (i * step);
                         long e = (i == tokens.Length - 1) ? segEndMs : (s + step);
-                        resultWords.Add(new TimedWord(tokens[i], s, e, 0.85));
+                        resultWords.Add(new WhisperWord(tokens[i], s, e, 0.85));
                     }
                 }
             }

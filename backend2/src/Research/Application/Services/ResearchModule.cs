@@ -16,6 +16,7 @@ public sealed class ResearchModule : IResearchModule
     private readonly IDeepTrendDagPipeline _pipeline;
     private readonly IResearchReportExporter _exporter;
     private readonly IWebSocketGateway _webSocketGateway;
+    private readonly IYouTubeSearchIngestor _youtubeSearch;
     private readonly ILogger<ResearchModule> _logger;
 
     public ResearchModule(
@@ -23,12 +24,14 @@ public sealed class ResearchModule : IResearchModule
         IDeepTrendDagPipeline pipeline,
         IResearchReportExporter exporter,
         IWebSocketGateway webSocketGateway,
+        IYouTubeSearchIngestor youtubeSearch,
         ILogger<ResearchModule> logger)
     {
         _repository = repository;
         _pipeline = pipeline;
         _exporter = exporter;
         _webSocketGateway = webSocketGateway;
+        _youtubeSearch = youtubeSearch;
         _logger = logger;
     }
 
@@ -202,4 +205,31 @@ public sealed class ResearchModule : IResearchModule
         o.FrictionPoint,
         o.WhyItWorks,
         System.Text.Json.JsonSerializer.Deserialize<List<string>>(o.ReferenceVideoIdsJson) ?? []);
+
+    public async Task<IReadOnlyList<string>> GetTrendingHooksAsync(string topic, int max = 5, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topic)) return [];
+
+        try
+        {
+            var results = await _youtubeSearch.SearchTopicCandidatesAsync(
+                query: topic,
+                maxResults: max,
+                daysBack: 14,
+                lang: "ru",
+                ct: ct);
+
+            return results
+                .Where(r => r.ViewCount > 0)
+                .OrderByDescending(r => r.ViewCount)
+                .Take(max)
+                .Select(r => $"- \"{r.Title}\" — {r.ViewCount:N0} просмотров (канал: {r.ChannelTitle})")
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[ResearchModule] Не удалось получить трендовые хуки для '{Topic}'", topic);
+            return [];
+        }
+    }
 }

@@ -8,7 +8,6 @@ using Research.Domain.Entities;
 using Research.Domain.Ports;
 using Research.Domain.Services;
 using Research.Domain.ValueObjects;
-using Research.Infrastructure.Ingestors;
 using Skills.Contracts;
 using Skills.Domain;
 

@@ -26,7 +26,7 @@ public sealed class MotionDatabaseHostedService : IHostedService
         var db = scope.ServiceProvider.GetRequiredService<MotionDbContext>();
 
         await db.ResetMigrationLocksAsync(cancellationToken);
-        await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
         await db.ConfigureSqlitePragmasAsync(cancellationToken);
 
         _logger.LogInformation("[Motion] База данных motion.db готова.");

@@ -4,8 +4,9 @@ using System.Text.Json;
 using Kernel.Exceptions;
 using Kernel.Platform.FileSystem;
 using Microsoft.Extensions.Logging;
-using SystemContext.Domain.Ports;
+using SystemContext.Contracts;
 using Voice.Domain;
+using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 
 namespace Voice.Infrastructure.Providers.Cloud;
@@ -15,13 +16,13 @@ public sealed class OpenAiSpeechProvider : ITtsEngineProvider
     public VoiceEngineType EngineType => VoiceEngineType.CloudOpenAi;
 
     private readonly HttpClient _httpClient;
-    private readonly ISystemSettingRepository _settingRepo;
+    private readonly ISystemModule _settingRepo;
     private readonly IPathResolver _pathResolver;
     private readonly ILogger<OpenAiSpeechProvider> _logger;
 
     public OpenAiSpeechProvider(
         HttpClient httpClient,
-        ISystemSettingRepository settingRepo,
+        ISystemModule settingRepo,
         IPathResolver pathResolver,
         ILogger<OpenAiSpeechProvider> logger)
     {
@@ -33,8 +34,7 @@ public sealed class OpenAiSpeechProvider : ITtsEngineProvider
 
     public async Task<RawSynthesisResult> SynthesizeAsync(string text, VoiceSpec spec, string destinationPath, CancellationToken ct)
     {
-        var apiKeySetting = await _settingRepo.GetByKeyAsync("integrations.openai.api_key", ct);
-        var apiKey = apiKeySetting?.Value;
+        var apiKey = await _settingRepo.GetSettingValueAsync("integrations.openai.api_key", ct);
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {

@@ -3,14 +3,12 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using Integrations.YouTube.Contracts;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
 using Research.Domain.Entities;
 using Research.Domain.Ports;
 using Research.Domain.Services;
 using Research.Domain.ValueObjects;
-using Research.Infrastructure.Ingestors;
 using Skills.Contracts;
 using Skills.Domain;
 
@@ -20,7 +18,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
 {
     private readonly ISignalIngestor _signalIngestor;
     private readonly IYouTubeSearchIngestor _ytIngestor;
-    private readonly IYouTubeClient _ytClient;
     private readonly MomentumEngine _momentumEngine;
     private readonly BlueOceanDetector _blueOceanDetector;
     private readonly ConfusionDetector _confusionDetector;
@@ -33,7 +30,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
     public YouTubeDeepTrendStreamingPipeline(
         ISignalIngestor signalIngestor,
         IYouTubeSearchIngestor ytIngestor,
-        IYouTubeClient ytClient,
         MomentumEngine momentumEngine,
         BlueOceanDetector blueOceanDetector,
         ConfusionDetector confusionDetector,
@@ -45,7 +41,6 @@ public sealed class YouTubeDeepTrendStreamingPipeline
     {
         _signalIngestor = signalIngestor;
         _ytIngestor = ytIngestor;
-        _ytClient = ytClient;
         _momentumEngine = momentumEngine;
         _blueOceanDetector = blueOceanDetector;
         _confusionDetector = confusionDetector;
@@ -502,11 +497,11 @@ public sealed class YouTubeDeepTrendStreamingPipeline
             {
                 try
                 {
-                    var channelStats = await _ytClient.Metadata.GetChannelStatsAsync(c.ChannelId, ct);
-                    if (channelStats.SubscriberCount > 0)
+                    var subscriberCount = await _ytIngestor.GetChannelSubscribersAsync(c.ChannelId, ct);
+                    if (subscriberCount > 0)
                     {
-                        realSubs = channelStats.SubscriberCount;
-                        channelSubsCache[c.ChannelId] = realSubs;
+                        realSubs = subscriberCount;
+                        channelSubsCache[c.ChannelId] = subscriberCount;
                     }
                 }
                 catch

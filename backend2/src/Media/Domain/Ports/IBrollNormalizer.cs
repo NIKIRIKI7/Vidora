@@ -1,6 +1,6 @@
 using MediaContext.Domain.ValueObjects;
 
-namespace MediaContext.Infrastructure.Normalization;
+namespace MediaContext.Domain.Ports;
 
 public interface IBrollNormalizer
 {

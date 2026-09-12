@@ -1,4 +1,5 @@
 using Kernel.Platform.Config;
+using Kernel.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,12 +46,14 @@ public static class ProductionServiceExtensions
         // Scenario Engine: Шлюз взаимодействия (Facade/Mediator) — единая точка синхронизации
         services.AddScoped<ScenarioEngineGateway>();
 
+        services.AddScoped<ITrendingTopicProvider, ResearchGateway>();
         services.AddScoped<IVoiceGateway, VoiceGateway>();
         services.AddScoped<IMotionGateway, MotionGateway>();
         services.AddScoped<IMediaGateway, MediaGateway>();
 
         services.AddScoped<IProductionPipelineOrchestrator, ProductionPipelineProcessManager>();
         services.AddScoped<IProductionModule, ProductionModule>();
+        services.AddScoped<IDatabaseMigrationParticipant, ProductionMigrationParticipant>();
 
         // services.AddHostedService<ProductionDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
 

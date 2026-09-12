@@ -1,5 +1,4 @@
 using System.IO;
-using Integrations.LLM.Local;
 using Kernel.Platform.Config;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,14 +15,14 @@ public interface IModelCatalogService
 
 public sealed class ModelCatalogService : IModelCatalogService
 {
-    private readonly IGgufModelResolver _ggufResolver;
+    private readonly ILocalModelScanner _ggufResolver;
     private readonly IAiModelRepository _aiModelRepo;
     private readonly ISystemSettingRepository _settingRepo;
     private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<ModelCatalogService> _logger;
 
     public ModelCatalogService(
-        IGgufModelResolver ggufResolver,
+        ILocalModelScanner ggufResolver,
         IAiModelRepository aiModelRepo,
         ISystemSettingRepository settingRepo,
         IOptions<AppStorageConfig> storageConfig,

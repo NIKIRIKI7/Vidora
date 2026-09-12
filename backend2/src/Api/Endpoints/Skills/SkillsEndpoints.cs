@@ -86,7 +86,7 @@ public static class SkillsEndpoints
         });
 
         // Обновление скила (поддержка is_enabled и isEnabled)
-        group.MapPut("/{id}", async (string id, UpdateSkillRequest request, ISkillManagementService service, CancellationToken ct) =>
+        async Task<IResult> UpdateSkillHandler(string id, UpdateSkillRequest request, ISkillManagementService service, CancellationToken ct)
         {
             var command = new UpdateSkillCommand(
                 Id: id,
@@ -99,7 +99,10 @@ public static class SkillsEndpoints
 
             var updated = await service.UpdateSkillAsync(command, ct);
             return Results.Ok(updated);
-        });
+        }
+
+        group.MapPut("/{id}", UpdateSkillHandler);
+        group.MapPatch("/{id}", UpdateSkillHandler);
 
         // Сброс базового скила до системного шаблона
         group.MapPost("/{id}/reset", async (string id, ISkillManagementService service, CancellationToken ct) =>
