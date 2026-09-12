@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { useProjectStore } from '@entities/project'
 import type { FPS, ProjectSettings } from '@entities/project'
 import { dashboardApi } from '../api/dashboardApi'
-import type { GlobalSettings, HardwareInfo, ProjectCreatePayload, ProjectItem } from './types'
+import type { HardwareInfo, ProjectCreatePayload, ProjectItem } from './types'
 
 const calculateProjectDuration = (p: ProjectSettings): number => {
   let totalSec = 0
@@ -62,7 +62,7 @@ const buildRealProject = (payload: ProjectCreatePayload): ProjectSettings => ({
   audioProcessing: { silenceThresholdDb: -45.0, minSilenceMs: 200, maxSilenceMs: 100, removeEdges: false },
 })
 
-type DashboardModal = 'new_project' | 'settings' | 'trend_agent' | 'voice_lab' | 'script_lab'
+type DashboardModal = 'new_project' | 'trend_agent' | 'voice_lab' | 'script_lab'
 
 interface DashboardState {
   hardware: HardwareInfo | null
@@ -73,7 +73,6 @@ interface DashboardState {
   selectedFormatForNew: '16:9' | '9:16'
   currentView: 'dashboard' | 'project_editor'
   activeProjectId: string | null
-  settings: GlobalSettings
   isLoading: boolean
 
   fetchDashboardData: () => Promise<void>
@@ -86,7 +85,6 @@ interface DashboardState {
   createProject: (payload: ProjectCreatePayload) => ProjectItem
   deleteProject: (projectId: string) => void
   duplicateProject: (projectId: string) => void
-  saveSettings: (settings: GlobalSettings) => void
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
@@ -98,7 +96,6 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   selectedFormatForNew: '16:9',
   currentView: 'dashboard',
   activeProjectId: null,
-  settings: dashboardApi.getSettings(),
   isLoading: false,
 
   fetchDashboardData: async () => {
@@ -108,9 +105,8 @@ export const useDashboardStore = create<DashboardState>((set) => ({
     const hardware = await dashboardApi.getHardwareInfo()
     const realProjects = useProjectStore.getState().projects
     const projects = realProjects.map(toProjectItem)
-    const settings = dashboardApi.getSettings()
 
-    set({ hardware, projects, settings, isLoading: false })
+    set({ hardware, projects, isLoading: false })
   },
 
   setSearchQuery: (query: string) => set({ searchQuery: query }),
@@ -163,10 +159,5 @@ export const useDashboardStore = create<DashboardState>((set) => ({
       const updatedProjects = useProjectStore.getState().projects.map(toProjectItem)
       set({ projects: updatedProjects })
     }
-  },
-
-  saveSettings: (settings: GlobalSettings) => {
-    dashboardApi.saveSettings(settings)
-    set({ settings, activeModal: null })
   },
 }))

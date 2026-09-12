@@ -49,7 +49,6 @@ interface Props {
   onUnlinkFragmentBRoll: (fragId: string) => void
   onNudgeTiming: (fragId: string, type: 'start' | 'end', delta: number) => void
   onReplaceFragmentAudio: (fragId: string, path: string) => void
-  onUpdateActiveGlobalVoice: (voiceId?: string) => void
   onUpdateProjectSettings: (project: ProjectSettings) => void
   onOpenMusicSettings?: () => void
   onOpenMusicLibrary?: () => void
@@ -73,7 +72,7 @@ export const PipelineInspector = React.memo((props: Props) => {
     onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx,
     onRunCodeGen, onRunProjectRender, onRunRender, onExportProject, onShowNotification,
     onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio,
-    onUpdateActiveGlobalVoice, onUpdateProjectSettings, onOpenMusicSettings, onOpenMusicLibrary,
+    onUpdateProjectSettings, onOpenMusicSettings, onOpenMusicLibrary,
   } = props
 
   const [activeTab, setActiveTab] = useState<InspectorTab>(() => {
@@ -151,7 +150,6 @@ export const PipelineInspector = React.memo((props: Props) => {
             onProcessAdvancedSilence={onProcessAdvancedSilence}
             onUnloadVram={onUnloadVram}
             onRunSync={onRunSync}
-            onUpdateActiveGlobalVoice={onUpdateActiveGlobalVoice}
             onUpdateProjectSettings={onUpdateProjectSettings}
             onOpenMusicSettings={onOpenMusicSettings}
             onOpenMusicLibrary={onOpenMusicLibrary}

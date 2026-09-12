@@ -4,13 +4,14 @@ import {
   FileText,
   Mic,
   Monitor,
+  Settings,
   Smartphone,
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useDashboardStore } from '../model/useDashboardStore'
 
-export type StudioModuleId = 'trend_agent' | 'script_lab' | 'voice_lab'
+export type StudioModuleId = 'trend_agent' | 'script_lab' | 'voice_lab' | 'settings'
 
 interface Props {
   onNavigate?: (module: StudioModuleId) => void
@@ -39,7 +40,7 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
       iconColor: 'text-emerald-400',
       bgGlow: 'hover:border-emerald-500/40 hover:shadow-emerald-500/10',
       tagColor: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
-      onClick: () => (onNavigate ? onNavigate('trend_agent') : openModal('trend_agent')),
+      onClick: () => onNavigate?.('trend_agent'),
     },
     {
       id: 'script_lab',
@@ -50,7 +51,7 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
       iconColor: 'text-indigo-400',
       bgGlow: 'hover:border-indigo-500/40 hover:shadow-indigo-500/10',
       tagColor: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
-      onClick: () => (onNavigate ? onNavigate('script_lab') : openModal('script_lab')),
+      onClick: () => onNavigate?.('script_lab'),
     },
     {
       id: 'voice_lab',
@@ -61,7 +62,18 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
       iconColor: 'text-amber-400',
       bgGlow: 'hover:border-amber-500/40 hover:shadow-amber-500/10',
       tagColor: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
-      onClick: () => (onNavigate ? onNavigate('voice_lab') : openModal('voice_lab')),
+      onClick: () => onNavigate?.('voice_lab'),
+    },
+    {
+      id: 'settings',
+      name: 'Глобальные настройки',
+      badge: 'AI & Система',
+      description: 'API-ключи, выбор моделей LLM/TTS (облако/локально), промпты и каталог скиллов.',
+      icon: Settings,
+      iconColor: 'text-sky-400',
+      bgGlow: 'hover:border-sky-500/40 hover:shadow-sky-500/10',
+      tagColor: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
+      onClick: () => onNavigate?.('settings'),
     },
   ]
 
@@ -100,7 +112,7 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {MODULES.map((mod) => {
           const Icon = mod.icon
           return (

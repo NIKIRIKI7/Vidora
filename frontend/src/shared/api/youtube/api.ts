@@ -1,55 +1,60 @@
-import { API } from '@shared/lib'
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import type {
   HeatmapPoint,
   VideoChapter,
   DetailedComment,
   HookAnalysisData,
+  VideoCandidateMeta,
   VideoDeepDiveData,
 } from './types'
 
-const API_BASE = `${API}/api/v1/youtube`
-
 export const fetchVideoHeatmap = async (videoId: string): Promise<HeatmapPoint[]> => {
-  const res = await fetch(`${API_BASE}/video/${encodeURIComponent(videoId)}/heatmap`)
-  if (!res.ok) throw new Error(`Failed to fetch heatmap: ${res.statusText}`)
-  const json = await res.json()
-  return json.heatmap ?? []
+  const { data, error } = await fetchClient.GET('/api/v1/youtube/video/{videoId}/heatmap', {
+    params: { path: { videoId } },
+  })
+  if (error || data === undefined) throw new Error(apiErrorMessage(error))
+  const json = data
+  return (json.heatmap ?? []) as HeatmapPoint[]
 }
 
 export const fetchVideoChapters = async (videoId: string): Promise<VideoChapter[]> => {
-  const res = await fetch(`${API_BASE}/video/${encodeURIComponent(videoId)}/chapters`)
-  if (!res.ok) throw new Error(`Failed to fetch chapters: ${res.statusText}`)
-  const json = await res.json()
-  return json.chapters ?? []
+  const { data, error } = await fetchClient.GET('/api/v1/youtube/video/{videoId}/chapters', {
+    params: { path: { videoId } },
+  })
+  if (error || data === undefined) throw new Error(apiErrorMessage(error))
+  const json = data
+  return (json.chapters ?? []) as VideoChapter[]
 }
 
 export const fetchDetailedComments = async (videoId: string, maxComments = 50): Promise<DetailedComment[]> => {
-  const res = await fetch(`${API_BASE}/video/${encodeURIComponent(videoId)}/comments-detailed?maxComments=${maxComments}`)
-  if (!res.ok) throw new Error(`Failed to fetch comments: ${res.statusText}`)
-  const json = await res.json()
-  return json.comments ?? []
+  const { data, error } = await fetchClient.GET('/api/v1/youtube/video/{videoId}/comments-detailed', {
+    params: { path: { videoId }, query: { maxComments } },
+  })
+  if (error || data === undefined) throw new Error(apiErrorMessage(error))
+  const json = data
+  return (json.comments ?? []) as DetailedComment[]
 }
 
 export const fetchVideoDeepDive = async (videoId: string): Promise<VideoDeepDiveData> => {
-  const res = await fetch(`${API_BASE}/video/${encodeURIComponent(videoId)}/deep-dive`)
-  if (!res.ok) throw new Error(`Failed to load deep-dive data: ${res.statusText}`)
-  const json = await res.json()
+  const { data, error } = await fetchClient.GET('/api/v1/youtube/video/{videoId}/deep-dive', {
+    params: { path: { videoId } },
+  })
+  if (error || data === undefined) throw new Error(apiErrorMessage(error))
+  const json = data
   return {
-    videoId: json.video_id,
-    metadata: json.metadata,
-    heatmap: json.heatmap ?? [],
-    chapters: json.chapters ?? [],
-    comments: json.comments ?? [],
+    videoId: json.video_id as string,
+    metadata: json.metadata as VideoCandidateMeta | undefined,
+    heatmap: (json.heatmap ?? []) as HeatmapPoint[],
+    chapters: (json.chapters ?? []) as VideoChapter[],
+    comments: (json.comments ?? []) as DetailedComment[],
   }
 }
 
 export const analyzeHook = async (transcript: string, language = 'ru'): Promise<HookAnalysisData> => {
-  const res = await fetch(`${API_BASE}/agent/analyze-hook`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transcript, language, engine: 'auto' }),
+  const { data, error } = await fetchClient.POST('/api/v1/youtube/agent/analyze-hook', {
+    body: { transcript, language, engine: 'auto' },
   })
-  if (!res.ok) throw new Error(`Hook analysis failed: ${res.statusText}`)
-  const json = await res.json()
-  return json.data
+  if (error || data === undefined) throw new Error(apiErrorMessage(error))
+  const json = data
+  return json.data as unknown as HookAnalysisData
 }

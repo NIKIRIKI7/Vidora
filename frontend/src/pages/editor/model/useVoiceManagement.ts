@@ -1,6 +1,7 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef, type ChangeEvent } from 'react'
 import type { ProjectSettings, CustomVoice } from '@entities/project'
-import { API, getProjectPath } from '@entities/project'
+import { getProjectPath } from '@entities/project'
 
 interface UseVoiceManagementProps {
   project: ProjectSettings
@@ -42,10 +43,10 @@ export const useVoiceManagement = ({
     formData.append('project_path', getProjectPath(project))
     formData.append('folder', 'refs')
     try {
-      const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: formData })
-      const data = await res.json()
+      const { data, error } = await fetchClient.POST('/api/v1/media/upload', { body: formData as never })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok') {
-        setNewVoiceAudioPath(data.path)
+        setNewVoiceAudioPath(data.path ?? null)
         showNotification('Референсный файл загружен', 'success')
       }
     } catch {

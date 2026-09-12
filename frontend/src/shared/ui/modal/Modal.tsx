@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
@@ -11,13 +11,6 @@ interface ModalProps {
 }
 
 export const Modal = ({ isOpen, onClose, title, children, className = '' }: ModalProps) => {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-    return () => setMounted(false)
-  }, [])
-
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -32,7 +25,7 @@ export const Modal = ({ isOpen, onClose, title, children, className = '' }: Moda
     }
   }, [isOpen, onClose])
 
-  if (!isOpen || !mounted) return null
+  if (!isOpen) return null
 
   const isCustomWidth = className.includes('max-w-')
   const widthClass = isCustomWidth ? '' : 'max-w-[480px]'

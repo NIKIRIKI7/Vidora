@@ -10,6 +10,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "lint:fsd": "steiger ./src",
+    "api:generate": "openapi-typescript http://localhost:5116/swagger/v1/swagger.json -o ./src/shared/api/schema.d.ts",
     "preview": "vite preview",
     "electron:dev": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:build": "pnpm build && node electron/build.cjs",
@@ -20,7 +21,10 @@
     "dev:all": "concurrently -n backend,frontend -c green,cyan \"pnpm backend:dev\" \"pnpm dev\""
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.102.8",
     "lucide-react": "^1.31.0",
+    "openapi-fetch": "^0.17.0",
+    "openapi-react-query": "^0.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zustand": "^5.0.14"
@@ -43,6 +47,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
+    "openapi-typescript": "^7.13.0",
     "steiger": "^0.6.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",

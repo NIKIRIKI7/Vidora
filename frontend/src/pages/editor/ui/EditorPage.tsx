@@ -123,7 +123,7 @@ export const EditorPage = ({
     showNotification(`Выбран трек: ${track.name}`, 'success')
   }, [project, onUpdateProject, showNotification])
 
-  const { uiPreferences, setUiPreferences, setGlobalVoices } = useSettingsStore()
+  const { uiPreferences, setUiPreferences } = useSettingsStore()
 
   const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem('vidora:left-panel-width')) || 320)
   const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem('vidora:right-panel-width')) || 380)
@@ -301,7 +301,6 @@ export const EditorPage = ({
                 onUnlinkFragmentBRoll={model.handleUnlinkFragmentBRoll}
                 onNudgeTiming={model.handleNudgeTiming}
                 onReplaceFragmentAudio={model.handleReplaceFragmentAudio}
-                onUpdateActiveGlobalVoice={(id) => onUpdateProject({ ...project, activeGlobalVoiceId: id })}
                 onUpdateProjectSettings={onUpdateProject}
                 onOpenMusicSettings={() => setIsMusicSettingsOpen(true)}
                 onOpenMusicLibrary={() => setIsMusicLibraryOpen(true)}
@@ -503,39 +502,21 @@ export const EditorPage = ({
 
       <Modal isOpen={model.isAiSettingsOpen} onClose={() => model.setIsAiSettingsOpen(false)} title="⚙️ Настройки OmniVoice / MiniMax">
         <div className="flex flex-col gap-5 pb-2">
-          {project.activeGlobalVoiceId && (
-            <div className="p-2 -mb-2 bg-primary/10 border border-primary/30 text-primary text-xs rounded-lg text-center">
-              Вы редактируете параметры активного глобального голоса
-            </div>
-          )}
-
           <FieldGroup label={`Шаги инференса (num_steps): ${model.numSteps}`}>
             <Slider min={8} max={64} step={1} value={model.numSteps} onChange={e => {
-              const val = Number(e.target.value)
-              model.setNumSteps(val)
-              if (project.activeGlobalVoiceId) {
-                setGlobalVoices(useSettingsStore.getState().globalVoices.map(v => v.id === project.activeGlobalVoiceId ? { ...v, settings: { ...v.settings, numSteps: val } } : v))
-              }
+              model.setNumSteps(Number(e.target.value))
             }} />
           </FieldGroup>
 
           <FieldGroup label={`Guidance Scale: ${model.guidanceScale.toFixed(1)}`}>
             <Slider min={0} max={10} step={0.1} value={model.guidanceScale} onChange={e => {
-              const val = Number(e.target.value)
-              model.setGuidanceScale(val)
-              if (project.activeGlobalVoiceId) {
-                setGlobalVoices(useSettingsStore.getState().globalVoices.map(v => v.id === project.activeGlobalVoiceId ? { ...v, settings: { ...v.settings, guidanceScale: val } } : v))
-              }
+              model.setGuidanceScale(Number(e.target.value))
             }} />
           </FieldGroup>
 
           <FieldGroup label={`Скорость (speed): ${model.speed.toFixed(2)}x`}>
             <Slider min={0.5} max={2.0} step={0.05} value={model.speed} onChange={e => {
-              const val = Number(e.target.value)
-              model.setSpeed(val)
-              if (project.activeGlobalVoiceId) {
-                setGlobalVoices(useSettingsStore.getState().globalVoices.map(v => v.id === project.activeGlobalVoiceId ? { ...v, settings: { ...v.settings, speed: val } } : v))
-              }
+              model.setSpeed(Number(e.target.value))
             }} />
           </FieldGroup>
 

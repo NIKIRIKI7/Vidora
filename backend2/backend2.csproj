@@ -17,6 +17,7 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
     <PackageReference Include="LLamaSharp" Version="0.24.0" />
     <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.24.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
   <ItemGroup>

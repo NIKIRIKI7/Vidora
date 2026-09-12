@@ -7,15 +7,20 @@ import {
   useDashboardStore,
 } from '@features/dashboard'
 import type { StudioModuleId } from '@features/dashboard'
-import { GlobalSettingsModal } from './GlobalSettingsModal'
 
 interface Props {
   onOpenTrends: () => void
   onOpenScript: () => void
   onOpenAudio: () => void
+  onOpenSettings: () => void
 }
 
-export const DashboardView: React.FC<Props> = ({ onOpenTrends, onOpenScript, onOpenAudio }) => {
+export const DashboardView: React.FC<Props> = ({
+  onOpenTrends,
+  onOpenScript,
+  onOpenAudio,
+  onOpenSettings,
+}) => {
   const { fetchDashboardData } = useDashboardStore()
 
   useEffect(() => {
@@ -26,25 +31,19 @@ export const DashboardView: React.FC<Props> = ({ onOpenTrends, onOpenScript, onO
     if (module === 'trend_agent') onOpenTrends()
     else if (module === 'script_lab') onOpenScript()
     else if (module === 'voice_lab') onOpenAudio()
+    else if (module === 'settings') onOpenSettings()
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col select-none">
-      {/* 1. Умный Header с мониторингом GPU/VRAM */}
-      <DashboardHeader />
+      <DashboardHeader onOpenSettings={onOpenSettings} />
 
-      {/* Основной контент студии */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-10">
-        {/* 2. Студийный Launchpad: Создание проекта + 3 модуля */}
         <StudioLaunchpad onNavigate={handleModuleNavigate} />
-
-        {/* 3. Центр проектов: фильтры, поиск, карточки */}
         <ProjectsMatrix />
       </main>
 
-      {/* Модальные окна */}
       <NewProjectModal />
-      <GlobalSettingsModal />
     </div>
   )
 }

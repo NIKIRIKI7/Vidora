@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect, useRef } from 'react'
 import { Modal, Button, Spinner } from '@shared/ui'
 import { Play, Square, Upload, Sparkles, Check } from 'lucide-react'
@@ -30,14 +31,16 @@ export const MusicLibraryModal = ({ isOpen, onClose, project, activeTrackId, onS
     const loadLibrary = async () => {
       setIsLoading(true)
       try {
-        const res = await fetch(`${API}/api/v1/media/music-library?project_path=${encodeURIComponent(getProjectPath(project))}`)
-        const data = await res.json()
+        const { data, error } = await fetchClient.GET('/api/v1/media/music-library', {
+          params: { query: { project_path: getProjectPath(project) } as never }
+        })
+        if (error || data === undefined) throw new Error(apiErrorMessage(error))
         if (data.status === 'ok') {
-          setCategories(data.categories || [])
-          setCustomTracks(data.custom_tracks || [])
+          setCategories((data.categories || []) as MusicCategory[])
+          setCustomTracks((data.custom_tracks || []) as MusicTrackItem[])
         }
-      } catch {
-        // молча
+      } catch (err) {
+        console.error('MusicLibraryModal.loadLibrary:', err)
       } finally {
         setIsLoading(false)
       }
@@ -65,21 +68,21 @@ export const MusicLibraryModal = ({ isOpen, onClose, project, activeTrackId, onS
     fd.append('file', file)
     fd.append('project_path', getProjectPath(project))
     try {
-      const res = await fetch(`${API}/api/v1/media/upload-music`, { method: 'POST', body: fd })
-      const data = await res.json()
+      const { data, error } = await fetchClient.POST('/api/v1/media/upload-music', { body: fd as never })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok') {
         const newTrack: MusicTrackItem = {
-          id: `custom_${data.filename}`,
-          name: data.filename,
+          id: `custom_${data.filename ?? ''}`,
+          name: data.filename ?? '',
           duration: 0,
-          path: data.path,
+          path: data.path ?? '',
           is_custom: true,
         }
         setCustomTracks((prev) => [newTrack, ...prev])
         onSelectTrack(newTrack)
       }
-    } catch {
-      // молча
+    } catch (err) {
+      console.error('MusicLibraryModal.handleUploadCustom:', err)
     }
     e.target.value = ''
   }

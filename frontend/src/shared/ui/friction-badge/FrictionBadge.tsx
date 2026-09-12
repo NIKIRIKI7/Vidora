@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { HelpCircle, AlertCircle, MessageSquare, Lightbulb } from 'lucide-react'
-
-export type FrictionCategory = 'question' | 'problem' | 'debate' | 'mechanism' | 'general'
+import type { FrictionCategory } from './detectFrictionCategory'
 
 interface FrictionBadgeProps {
   category: FrictionCategory
@@ -47,13 +46,4 @@ export const FrictionBadge = ({ category, text, className = '' }: FrictionBadgeP
       {text ?? config.label}
     </span>
   )
-}
-
-export const detectFrictionCategory = (commentText: string): FrictionCategory => {
-  const lower = commentText.toLowerCase()
-  if (/как (правильно|сделать|настроить)|how to|how do i|\?/i.test(lower)) return 'question'
-  if (/не работает|ошибка|баг|сломалось|doesn't work|bug|failed|error/i.test(lower)) return 'problem'
-  if (/на самом деле|не согласен|вранье|лучше бы|instead of|disagree|wrong/i.test(lower)) return 'debate'
-  if (/почему|в чем причина|зачем|why does|nobody explains/i.test(lower)) return 'mechanism'
-  return 'general'
 }

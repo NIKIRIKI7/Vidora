@@ -1,4 +1,4 @@
-import { API } from '@shared/lib'
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import type {
   AiModelDto,
   SpeakerProfileDto,
@@ -9,9 +9,6 @@ import type {
   SpeakerSourceType,
   VoiceEngineInfoDto,
 } from './types'
-
-const VOICE_BASE = `${API}/api/v1/voice`
-const SYSTEM_BASE = `${API}/api/v1/system`
 
 interface RawSpeakerDto {
   id: string
@@ -30,18 +27,18 @@ interface RawSpeakerDto {
 export const voiceApi = {
   // Получение доступности локальных моделей
   async getAiModels(): Promise<AiModelDto[]> {
-    const res = await fetch(`${SYSTEM_BASE}/models`)
-    if (!res.ok) throw new Error(`Ошибка загрузки моделей: ${res.statusText}`)
-    return res.json()
+    const { data, error } = await fetchClient.GET('/api/v1/system/models')
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    return data as AiModelDto[]
   },
 
   // Получение дикторов и маппинг в 'local' | 'cloud'
   async getSpeakerProfiles(): Promise<SpeakerProfileDto[]> {
-    const res = await fetch(`${VOICE_BASE}/speakers/profiles`)
-    if (!res.ok) throw new Error(`Ошибка загрузки дикторов: ${res.statusText}`)
-    const data = await res.json()
+    const { data, error } = await fetchClient.GET('/api/v1/voice/speakers/profiles')
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    const raw = data as unknown as RawSpeakerDto[]
 
-    return data.map((d: RawSpeakerDto): SpeakerProfileDto => {
+    return raw.map((d: RawSpeakerDto): SpeakerProfileDto => {
       const isLocal = String(d.engine || '').toLowerCase().startsWith('local')
       return {
         id: d.id,
@@ -62,35 +59,29 @@ export const voiceApi = {
 
   // Получение списка доступных движков с бэкенда
   async getEngines(): Promise<VoiceEngineInfoDto[]> {
-    const res = await fetch(`${VOICE_BASE}/engines`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.json()
+    const { data, error } = await fetchClient.GET('/api/v1/voice/engines')
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    return data as VoiceEngineInfoDto[]
   },
 
   // Синтез речи (engine=null → бэкенд резолвит движок из профиля диктора)
   async synthesize(payload: SynthesizePayload): Promise<VoiceJobDto> {
-    const res = await fetch(`${VOICE_BASE}/synthesize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const { data, error } = await fetchClient.POST('/api/v1/voice/synthesize', {
+      body: {
         text: payload.text,
         speaker_id: payload.speaker_id,
-        engine: payload.backend_engine || null,
+        engine: (payload.backend_engine || null) as never,
         speed: payload.speed ?? 1.0,
         pitch: payload.pitch ?? 1.0,
         guidance_scale: payload.guidance_scale ?? 2.0,
         num_steps: payload.num_steps ?? 24,
         alignment_engine: payload.alignment_engine ?? 'Whisper',
         reference_audio_path: payload.reference_audio_path ?? null,
-      }),
+      },
     })
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.detail || `Сбой синтеза речи (${res.status})`)
-    }
-
-    const result = await res.json()
+    const result = data as unknown as VoiceJobDto & { engine?: string | null }
     const isLocal = String(result.engine || '').toLowerCase().startsWith('local')
     return {
       ...result,
@@ -100,21 +91,16 @@ export const voiceApi = {
 
   // Voice Design (всегда локально: engine=LocalTts + local_engine_id=omni_voice_v1)
   async designSpeaker(payload: DesignSpeakerPayload): Promise<SpeakerProfileDto> {
-    const res = await fetch(`${VOICE_BASE}/speakers/profiles/design`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    const { data, error } = await fetchClient.POST('/api/v1/voice/speakers/profiles/design', {
+      body: payload as never,
     })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.detail || 'Сбой генерации дизайна голоса')
-    }
-    const d = await res.json()
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    const d = data as unknown as RawSpeakerDto
     return {
       ...d,
       mode: 'local',
       backend_engine: d.engine,
-    }
+    } as SpeakerProfileDto
   },
 
   // Voice Clone (Локально OmniVoice или Облако MiniMax)
@@ -139,31 +125,29 @@ export const voiceApi = {
     if (referenceText) formData.append('referenceText', referenceText)
     if (language) formData.append('language', language)
 
-    const res = await fetch(`${VOICE_BASE}/speakers/profiles/clone`, {
-      method: 'POST',
-      body: formData,
+    const { data, error } = await fetchClient.POST('/api/v1/voice/speakers/profiles/clone', {
+      body: formData as never,
     })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.detail || 'Сбой клонирования голоса')
-    }
-    const d = await res.json()
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    const d = data as unknown as RawSpeakerDto
     return {
       ...d,
       mode,
       backend_engine: d.engine,
-    }
+    } as SpeakerProfileDto
   },
 
   // Очистка VRAM памяти GPU
   async unloadVram(): Promise<void> {
-    const res = await fetch(`${VOICE_BASE}/vram/unload`, { method: 'POST' })
-    if (!res.ok) throw new Error('Сбой очистки памяти VRAM')
+    const { error } = await fetchClient.POST('/api/v1/voice/vram/unload')
+    if (error) throw new Error(apiErrorMessage(error))
   },
 
   // Удаление диктора
   async deleteSpeaker(id: string): Promise<void> {
-    const res = await fetch(`${VOICE_BASE}/speakers/profiles/${id}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error('Не удалось удалить профиль диктора')
+    const { error } = await fetchClient.DELETE('/api/v1/voice/speakers/profiles/{id}', {
+      params: { path: { id } },
+    })
+    if (error) throw new Error(apiErrorMessage(error))
   },
 }

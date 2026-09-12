@@ -1,6 +1,7 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, type RefObject } from 'react'
 import type { ProjectSettings, Scene, SceneFragment, ApiKeys } from '@entities/project'
-import { API, getProjectPath, sanitizeFilename } from '@entities/project'
+import { getProjectPath, sanitizeFilename } from '@entities/project'
 import { serializeSceneToMarkdown, getActivePrompt, useSettingsStore } from '@entities/project'
 
 interface UseAutoPipelineProps {
@@ -85,20 +86,17 @@ export const useAutoPipeline = ({
         }),
       }
 
-      const res = await fetch(`${API}/api/v1/media/auto-broll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok || data.status !== 'ok') {
-        showNotification(data.detail || 'Ошибка подбора B-Roll', 'error')
+      const { data, error } = await fetchClient.POST('/api/v1/media/auto-broll', { body: payload })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status !== 'ok') {
+        showNotification((data as typeof data & { detail?: string | null }).detail || 'Ошибка подбора B-Roll', 'error')
         return
       }
 
       const matchedMap = new Map<string, string>()
       let matchCount = 0
-      data.results.forEach((r: { fragment_id: string; matched: boolean; filename: string }) => {
+      const results = (data.results ?? []) as { fragment_id: string; matched: boolean; filename: string }[]
+      results.forEach(r => {
         if (r.matched && r.filename) {
           matchedMap.set(r.fragment_id, r.filename)
           matchCount++
@@ -160,9 +158,10 @@ export const useAutoPipeline = ({
     setPipelineStep('')
     if (currentTaskIdRef.current) {
       try {
-        await fetch(`${API}/api/v1/render/cancel/${currentTaskIdRef.current}`, { method: 'POST' })
-      } catch {
-        console.error('Ошибка отмены рендера')
+        const { error } = await fetchClient.POST('/api/v1/render/cancel/{jobId}', { params: { path: { jobId: currentTaskIdRef.current } } })
+        if (error) throw new Error(apiErrorMessage(error))
+      } catch (err) {
+        console.error('Ошибка отмены рендера:', err)
       }
     }
     showNotification('Все процессы отменены', 'info')
@@ -213,13 +212,13 @@ export const useAutoPipeline = ({
         fd.append('project_path', getProjectPath(project))
         fd.append('folder', 'packaging')
         try {
-          const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
-          const data = await res.json()
-          if (res.ok && data.status === 'ok') {
-            onUpdateProjectSync({ ...project, metadata: { ...project.metadata, thumbnail: data.path } })
+          const { data, error } = await fetchClient.POST('/api/v1/media/upload', { body: fd as never })
+          if (error || data === undefined) throw new Error(apiErrorMessage(error))
+          if (data.status === 'ok') {
+            onUpdateProjectSync({ ...project, metadata: { ...project.metadata, thumbnail: data.path ?? undefined } })
           }
-        } catch {
-          console.error('Ошибка сохранения превью на бэкенд')
+        } catch (err) {
+          console.error('Ошибка сохранения превью на бэкенд:', err)
         }
       }, 'image/jpeg', 0.9)
     } catch {

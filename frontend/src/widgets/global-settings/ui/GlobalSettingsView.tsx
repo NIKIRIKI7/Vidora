@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { fetchClient, apiErrorMessage, $api } from '@shared/api'
+import { useState, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
-import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, Plus, Trash2, Video } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, Plus, Trash2, Video, MicVocal } from 'lucide-react'
+import { API } from '@shared/lib'
 import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory } from '@entities/project'
 import { useModelCatalog } from '@entities/project'
 import { SkillsSettingsView } from '@features/settings'
-import { API } from '@shared/lib'
 
 const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, categoryKey: keyof GlobalPromptSettings, rows: number }) => {
   const { globalPrompts, setGlobalPrompts } = useSettingsStore()
@@ -50,12 +51,11 @@ const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, cate
   )
 }
 
-export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
+export const GlobalSettingsView = ({ onBack, onGoToAudio }: { onBack: () => void; onGoToAudio?: () => void }) => {
   const {
     taskModes, setTaskMode, cloudProvider, setCloudProvider, apiKeys, setApiKey,
     cloudEngines, setCloudEngine, localEngines, setLocalEngine,
     resetGlobalPrompts,
-    globalVoices, setGlobalVoices,
     visualPacingThreshold, setVisualPacingThreshold,
     audioSilenceThreshold, setAudioSilenceThreshold,
     audioWpmMin, setAudioWpmMin,
@@ -72,18 +72,34 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
   const [activeTab, setActiveTab] = useState<'ai' | 'prompts' | 'skills' | 'audio' | 'voices'>('ai')
   const [showKey, setShowKey] = useState(false)
 
-  const [hardware, setHardware] = useState<{ vram_gb: number; ram_gb: number; device: string } | null>(null)
   const [pulling, setPulling] = useState<string | null>(null)
   const [hfPullUrl, setHfPullUrl] = useState('')
 
-  useEffect(() => {
-    fetch(`${API}/api/v1/system/hardware`).then(r => r.ok && r.json()).then(setHardware).catch(() => {})
-  }, [])
+  // Статус железа и профили дикторов берём из бэкенда (единый источник правды).
+  const { data: hardware } = $api.useQuery('get', '/api/v1/system/hardware', {})
+  const { data: speakers, refetch: refetchSpeakers } = $api.useQuery('get', '/api/v1/voice/speakers/profiles', {})
+
+  const customVoices = (speakers ?? []).filter(s => s.source_type === 'Cloned' || s.source_type === 'Designed')
+
+  const handleDeleteVoice = async (id: string, name: string) => {
+    if (!window.confirm(`Безвозвратно удалить голос "${name}"?`)) return
+    try {
+      const { error } = await fetchClient.DELETE('/api/v1/voice/speakers/profiles/{id}', {
+        params: { path: { id } },
+      })
+      if (error) throw new Error(apiErrorMessage(error))
+      showNotification('Голос удален', 'success')
+      void refetchSpeakers()
+    } catch (err: unknown) {
+      showNotification(err instanceof Error ? err.message : String(err), 'error')
+    }
+  }
 
   const handlePull = useCallback(async (engine: string) => {
     setPulling(engine)
     try {
-      await fetch(`${API}/api/v1/system/pull`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine }) })
+      const { error } = await fetchClient.POST('/api/v1/system/pull', { body: { engine } })
+      if (error) throw new Error(apiErrorMessage(error))
       showNotification(`Команда загрузки ${engine} отправлена`, 'info')
     } catch { showNotification('Ошибка скачивания модели', 'error') }
     setTimeout(() => setPulling(null), 2000)
@@ -113,7 +129,7 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
                 <div className="flex items-center gap-3 bg-surface-container-lowest/50 rounded-xl p-4 border border-white/5">
                   <div className={`w-3 h-3 rounded-full shadow-lg ${hardware?.vram_gb && hardware.vram_gb >= 8 ? 'bg-success shadow-success/50' : 'bg-warning shadow-warning/50'}`} />
                   <div className="text-sm text-on-surface-variant font-mono">
-                    {hardware ? `${hardware.device} · VRAM: ${hardware.vram_gb.toFixed(1)}GB · RAM: ${hardware.ram_gb.toFixed(1)}GB` : 'Проверка оборудования...'}
+                    {hardware ? `${hardware.device ?? 'CPU'} · VRAM: ${(hardware.vram_gb ?? 0).toFixed(1)}GB · RAM: ${(hardware.ram_gb ?? 0).toFixed(1)}GB` : 'Проверка оборудования...'}
                   </div>
                 </div>
 
@@ -403,25 +419,62 @@ export const GlobalSettingsView = ({ onBack }: { onBack: () => void }) => {
 
             {activeTab === 'voices' && (
               <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <h3 className="text-lg font-bold text-white">Сохраненные Глобальные Голоса</h3>
-                <p className="text-sm text-on-surface-variant">
-                  Глобальные голоса создаются в редакторе (в модалке настроек голоса). Здесь вы можете просмотреть и удалить их.
-                </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Глобальные Голоса (Speaker Profiles)</h3>
+                    <p className="text-sm text-on-surface-variant mt-1 max-w-xl">
+                      Здесь отображаются все созданные вами ИИ-клоны и сгенерированные голоса.
+                      Они доступны во всех проектах автоматически.
+                    </p>
+                  </div>
+                  <Button onClick={() => { onBack(); onGoToAudio?.() }} className="shrink-0">
+                    <MicVocal size={16} className="mr-2" /> Создать голос в Audio Studio
+                  </Button>
+                </div>
+
                 <div className="flex flex-col gap-3">
-                  {globalVoices.map(gv => (
-                    <div key={gv.id} className="p-4 rounded-xl border border-white/10 bg-surface-container-lowest flex justify-between items-center shadow-md">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-base font-bold text-white">{gv.name}</span>
-                        <span className="text-xs text-on-surface-variant font-mono">{gv.ttsEngine} • Модель: {gv.voiceModel === 'clone' ? 'Клон (по аудио)' : gv.voiceModel}</span>
+                  {customVoices.map(gv => (
+                    <div key={gv.id} className="p-4 rounded-xl border border-white/10 bg-surface-container-lowest flex justify-between items-center shadow-md hover:border-primary/30 transition-colors">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary border border-primary/30 shrink-0">
+                          {(gv.name ?? '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-base font-bold text-white flex items-center gap-2">
+                            {gv.name}
+                            <span className="px-1.5 py-0.5 text-[9px] uppercase font-mono rounded bg-white/10 text-on-surface-variant">
+                              {gv.source_type}
+                            </span>
+                          </span>
+                          <span className="text-xs text-on-surface-variant font-mono truncate">
+                            Движок: {gv.engine ?? '—'} • ID: {gv.speaker_id ?? '—'}
+                          </span>
+                        </div>
                       </div>
-                      <Button variant="ghost" className="text-error hover:bg-error/10 p-2" onClick={() => setGlobalVoices(globalVoices.filter(v => v.id !== gv.id))}>
-                        <Trash2 size={20} />
-                      </Button>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {gv.preview_audio_path && (
+                          <audio
+                            src={`${API}/api/v1/render/media?path=${encodeURIComponent(gv.preview_audio_path)}`}
+                            controls
+                            className="h-8 w-48 opacity-70 hover:opacity-100 transition-opacity"
+                          />
+                        )}
+                        <Button
+                          variant="ghost"
+                          className="text-error hover:bg-error/10 p-2 ml-2"
+                          onClick={() => gv.id && handleDeleteVoice(gv.id, gv.name ?? '')}
+                        >
+                          <Trash2 size={18} />
+                        </Button>
+                      </div>
                     </div>
                   ))}
-                  {globalVoices.length === 0 && (
-                    <div className="text-center text-on-surface-variant py-12 border-2 border-dashed border-white/10 rounded-2xl">
-                      Нет сохраненных глобальных голосов.
+
+                  {customVoices.length === 0 && (
+                    <div className="text-center text-on-surface-variant py-12 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center gap-3">
+                      <MicVocal size={32} className="opacity-50" />
+                      <span>У вас пока нет кастомных голосов. Перейдите в Audio Studio, чтобы клонировать голос или создать новый тембр через ИИ.</span>
                     </div>
                   )}
                 </div>

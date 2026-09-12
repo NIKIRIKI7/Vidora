@@ -1,10 +1,11 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef, useMemo } from 'react'
 import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
 import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2, ShieldAlert, AlertTriangle, Info, Check } from 'lucide-react'
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution, type IdeaFormat, type VideoResult } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
-import { API, formatTimecode } from '@shared/lib'
-import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt } from '@entities/project'
+import { formatTimecode } from '@shared/lib'
+import { useSettingsStore, useNotificationStore, getActivePrompt } from '@entities/project'
 import { useModelCatalog } from '@entities/project'
 import { useSkillsStore } from '@features/settings'
 import { scenarioEngineApi, type IssueSeverity, type ScenarioIssue } from '@shared/api'
@@ -131,23 +132,19 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
     setIsGenerating(true)
     try {
       const customPrompt = getScenarioPrompt();
-      const st = useSettingsStore.getState();
-      const activeProj = useProjectStore.getState().projects.find(p => p.name === useProjectStore.getState().activeProjectId);
-      const activeVoice = st.globalVoices.find(v => v.id === activeProj?.activeGlobalVoiceId) || st.globalVoices[0];
-      const audioEngine = activeVoice?.ttsEngine || (st.taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio) || '';
+      const audioEngine = (taskModes.audio === 'cloud' ? cloudEngines.audio : localEngines.audio) || '';
 
-      const res = await fetch(`${API}/api/v1/youtube/agent/draft-script`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { data, error } = await fetchClient.POST('/api/v1/youtube/agent/draft-script', {
+        body: {
           title: name, idea_description: desc,
           channel_context: '', engine: agentEngine, api_keys: activeApiKeys,
           video_type: format === '9:16' ? 'short' : 'long',
           target_duration: genDuration, custom_prompt: customPrompt,
           audio_engine: audioEngine
-        })
+        } as never
       })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok' && data.markdown) {
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok' && data.markdown) {
         setMarkdown(data.markdown)
         showNotification('Сценарий сгенерирован!', 'success')
       } else throw new Error()
@@ -161,14 +158,14 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   const handleCopyOriginal = async (video: VideoResult) => {
     setIsGenerating(true)
     try {
-      const res = await fetch(`${API}/api/v1/youtube/download-meta`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: video.url, project_path: 'vidora_projects/Drafts' })
+      const { data, error } = await fetchClient.POST('/api/v1/youtube/download-meta', {
+        body: { url: video.url, project_path: 'vidora_projects/Drafts' }
       })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok' && data.data.transcript_full) {
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      const transcript = data.data?.transcript_full
+      if (data.status === 'ok' && transcript) {
         setName(`Оригинал: ${video.title.substring(0, 30)}...`)
-        setMarkdown(`---\ntitle: "${video.title.replace(/"/g, "'")}"\nfps: 30\n---\n\n[Сцена 1] (00:00:00)\n*(B-roll: ${video.title})*\n${data.data.transcript_full}`)
+        setMarkdown(`---\ntitle: "${video.title.replace(/"/g, "'")}"\nfps: 30\n---\n\n[Сцена 1] (00:00:00)\n*(B-roll: ${video.title})*\n${transcript}`)
         showNotification('Транскрипт скопирован!', 'success')
       } else {
         showNotification('У видео нет субтитров', 'info')

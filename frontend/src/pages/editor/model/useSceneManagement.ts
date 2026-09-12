@@ -1,7 +1,8 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
 import { parseSceneMarkdown, serializeSceneToMarkdown } from '@entities/project'
-import { API, getProjectPath, hashCode } from '@entities/project'
+import { getProjectPath, hashCode } from '@entities/project'
 import { normalizeText, recalculateTimingsProportionally } from '@entities/project'
 
 interface UseSceneManagementProps {
@@ -115,12 +116,12 @@ export const useSceneManagement = ({
     fd.append('project_path', getProjectPath(project))
     fd.append('target_id', sceneId)
     try {
-      const res = await fetch(`${API}/api/v1/media/upload-audio`, { method: 'POST', body: fd })
-      const data = await res.json()
+      const { data, error } = await fetchClient.POST('/api/v1/media/upload-audio', { body: fd as never })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok') {
         const scene = project.scenes.find(s => s.id === sceneId)
         if (!scene) return
-        const remapped = recalculateTimingsProportionally(scene.fragments, data.duration)
+        const remapped = recalculateTimingsProportionally(scene.fragments, data.duration as number)
         const newFragments = remapped.map(f => ({
           ...f,
           audioFileName: data.path as string,

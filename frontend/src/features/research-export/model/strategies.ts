@@ -1,4 +1,4 @@
-import { API } from '@shared/lib'
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import type { ExportDataset, ExportOptions, ExportResult, ExportStrategy } from './types'
 import {
   projectVideosTable,
@@ -74,16 +74,16 @@ export const ExcelStrategy: ExportStrategy = {
         ),
       }
 
-      const res = await fetch(`${API}/api/v1/research/export/excel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const { data: response, error } = await fetchClient.POST('/api/v1/research/export/excel', {
+        body: payload,
+        parseAs: 'blob',
       })
+      if (error) throw new Error(apiErrorMessage(error))
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const blob = await res.blob()
+      const blob = response
       return { success: true, filename, blob }
-    } catch {
+    } catch (err) {
+      console.error('ExcelStrategy.execute:', err)
       const table = projectVideosTable(data, options)
       const csv = formatTableToCsv(table)
       const blob = createCsvBlobWithBom(csv)

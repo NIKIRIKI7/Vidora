@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import React, { useState } from 'react'
 import type { ProjectSettings } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
@@ -42,10 +43,12 @@ export const SceneSidebar = React.memo(({
     if (!stockQuery) return
     setIsSearching(true)
     try {
-      const res = await fetch(`${API}/api/v1/media/search-stock?query=${encodeURIComponent(stockQuery)}`)
-      const data = await res.json()
-      if (!res.ok || data.status === 'error') {
-        onShowNotification(data.detail || 'Ошибка поиска футажей', 'error')
+      const { data, error } = await fetchClient.GET('/api/v1/media/search-stock', {
+        params: { query: { query: stockQuery } }
+      })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'error') {
+        onShowNotification((data as { detail?: string | null }).detail || 'Ошибка поиска футажей', 'error')
         setStockResults([])
       } else {
         setStockResults(data.videos || [])
@@ -61,11 +64,10 @@ export const SceneSidebar = React.memo(({
   const handleDownloadStock = async (url: string, filename: string) => {
     onShowNotification('Скачивание со стока...', 'info')
     try {
-      const res = await fetch(`${API}/api/v1/media/download-stock`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_path: getProjectPath(project), url, filename }),
+      const { data, error } = await fetchClient.POST('/api/v1/media/download-stock', {
+        body: { project_path: getProjectPath(project), url, filename }
       })
-      const data = await res.json()
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok') onShowNotification(`Футаж скачан! Перетащите ${filename} на фрагмент.`, 'success')
     } catch { onShowNotification('Ошибка скачивания', 'error') }
   }

@@ -1,6 +1,7 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
-import { parseTcString, hashCode, API } from '@shared/lib'
+import { parseTcString, hashCode } from '@shared/lib'
 import { normalizeText, recalculateTimingsProportionally, applyBRollWithRipple, recalculateProjectTimecodes } from '@entities/project'
 import { getProjectPath } from '@entities/project'
 import type { BRollApplyParams } from '@features/manage-broll'
@@ -274,10 +275,8 @@ export const useTimelineOperations = ({
         const currentDur = Math.max(0.5, (targetFrag.endTime ?? 3.0) - (targetFrag.startTime ?? 0.0))
         const targetDuration = timingMode === 'trim' ? currentDur : params.duration
 
-        const procRes = await fetch(`${API}/api/v1/media/process-broll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const { data: procData, error } = await fetchClient.POST('/api/v1/media/process-broll', {
+          body: {
             project_path: projectPath,
             source_path: sourcePath,
             filename_prefix: `broll_${targetFrag.id.slice(0, 6)}`,
@@ -289,16 +288,16 @@ export const useTimelineOperations = ({
             loop_if_shorter: timingMode === 'trim',
             keep_audio: shouldKeepAudio,
             extract_audio: shouldExtractAudio
-          })
+          } as never
         })
-        const procData = await procRes.json()
-        if (!procRes.ok || procData.status !== 'ok') throw new Error(procData.detail || 'Processing error')
+        if (error || procData === undefined) throw new Error(apiErrorMessage(error))
+        if (procData.status !== 'ok') throw new Error((procData as typeof procData & { detail?: string | null }).detail || 'Processing error')
 
         let updatedFragments = activeScene.fragments.map(f => {
           if (f.id !== targetFragId) return f
           const updatedFrag: SceneFragment = {
             ...f,
-            bRollFileName: procData.filename,
+            bRollFileName: procData.filename ?? undefined,
             bRollAudioMode: audioMode,
           }
           if (audioMode === 'broll' && procData.extracted_audio_path) {
@@ -308,7 +307,7 @@ export const useTimelineOperations = ({
         })
 
         if (timingMode === 'ripple') {
-          updatedFragments = applyBRollWithRipple(updatedFragments, targetFragId, procData.duration)
+          updatedFragments = applyBRollWithRipple(updatedFragments, targetFragId, procData.duration as number)
         }
 
         const updatedScenes = recalculateProjectTimecodes(
@@ -319,10 +318,8 @@ export const useTimelineOperations = ({
         showNotification('B-Roll применен и тайминги пересчитаны!', 'success')
       } else if (scope === 'scene' && activeScene) {
         const totalSceneDur = Math.max(1.0, ...activeScene.fragments.map(f => f.endTime || 0))
-        const procRes = await fetch(`${API}/api/v1/media/process-broll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const { data: procData, error } = await fetchClient.POST('/api/v1/media/process-broll', {
+          body: {
             project_path: projectPath,
             source_path: sourcePath,
             filename_prefix: `broll_scene_${activeScene.id.slice(0, 6)}`,
@@ -333,14 +330,14 @@ export const useTimelineOperations = ({
             target_duration: timingMode === 'trim' ? totalSceneDur : params.duration,
             loop_if_shorter: true,
             keep_audio: shouldKeepAudio
-          })
+          } as never
         })
-        const procData = await procRes.json()
-        if (!procRes.ok || procData.status !== 'ok') throw new Error(procData.detail)
+        if (error || procData === undefined) throw new Error(apiErrorMessage(error))
+        if (procData.status !== 'ok') throw new Error((procData as typeof procData & { detail?: string | null }).detail ?? undefined)
 
         let updatedFragments: SceneFragment[] = activeScene.fragments.map(f => ({
           ...f,
-          bRollFileName: procData.filename,
+          bRollFileName: procData.filename ?? undefined,
           bRollAudioMode: audioMode,
         }))
 
@@ -354,10 +351,8 @@ export const useTimelineOperations = ({
         onUpdateProjectSync({ ...project, scenes: updatedScenes })
         showNotification(`B-Roll применен ко всей сцене "${activeScene.title}"!`, 'success')
       } else if (scope === 'project') {
-        const procRes = await fetch(`${API}/api/v1/media/process-broll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const { data: procData, error } = await fetchClient.POST('/api/v1/media/process-broll', {
+          body: {
             project_path: projectPath,
             source_path: sourcePath,
             filename_prefix: `broll_proj_bg`,
@@ -367,14 +362,14 @@ export const useTimelineOperations = ({
             fit_mode: fitMode,
             loop_if_shorter: true,
             keep_audio: shouldKeepAudio
-          })
+          } as never
         })
-        const procData = await procRes.json()
-        if (!procRes.ok || procData.status !== 'ok') throw new Error(procData.detail)
+        if (error || procData === undefined) throw new Error(apiErrorMessage(error))
+        if (procData.status !== 'ok') throw new Error((procData as typeof procData & { detail?: string | null }).detail ?? undefined)
 
         const updatedScenes = project.scenes.map(s => ({
           ...s,
-          fragments: s.fragments.map(f => ({ ...f, bRollFileName: procData.filename, bRollAudioMode: audioMode }))
+          fragments: s.fragments.map(f => ({ ...f, bRollFileName: procData.filename ?? undefined, bRollAudioMode: audioMode }))
         }))
 
         onUpdateProjectSync({ ...project, scenes: updatedScenes })

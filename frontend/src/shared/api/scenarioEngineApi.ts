@@ -1,4 +1,4 @@
-import { API } from '@shared/lib'
+import { fetchClient, apiErrorMessage } from '@shared/api'
 
 export type IssueSeverity = 'Info' | 'Warning' | 'Error'
 
@@ -64,59 +64,38 @@ export interface ScenarioRewriteSuggestion {
 export const isAstFragment = (node: AstNode): node is AstFragment => 'spoken_text' in node
 export const isAstTransition = (node: AstNode): node is AstTransition => 'transition_type' in node
 
-const ENGINE_BASE = `${API}/api/v1/production/engine`
-const PRODUCTION_BASE = `${API}/api/v1/production`
-
-const parseJson = async <T>(res: Response): Promise<T> => {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || body.message || `HTTP ${res.status}`)
-  }
-  return res.json() as Promise<T>
-}
-
 export const scenarioEngineApi = {
   // Двусторонняя синхронизация (Главный Шлюз / Facade)
   syncMarkdown: async (projectId: string, markdown: string): Promise<EngineSyncResponse> => {
-    const res = await fetch(`${ENGINE_BASE}/${encodeURIComponent(projectId)}/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown }),
+    const { data, error } = await fetchClient.POST('/api/v1/production/engine/{projectId}/sync', {
+      params: { path: { projectId } },
+      body: { markdown },
     })
-    const data = await parseJson<{ data: EngineSyncResponse }>(res)
-    return data.data
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    return data.data as unknown as EngineSyncResponse
   },
 
   // Stateless-проверка черновика (ScenarioBuilder): парсер -> линтер, без сохранения проекта
   lintDraft: async (markdown: string): Promise<DraftLintResponse> => {
-    const res = await fetch(`${ENGINE_BASE}/lint-draft`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown }),
-    })
-    const data = await parseJson<{ data: DraftLintResponse }>(res)
-    return data.data
+    const { data, error } = await fetchClient.POST('/api/v1/production/engine/lint-draft', { body: { markdown } })
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    return data.data as unknown as DraftLintResponse
   },
 
   // ИИ-Копайлот для рерайтинга (Центральный блок)
   rewriteFragment: async (projectId: string, fragmentId: string, command: string): Promise<ScenarioRewriteSuggestion[]> => {
-    const res = await fetch(`${ENGINE_BASE}/${encodeURIComponent(projectId)}/copilot/rewrite`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fragment_id: fragmentId, command }),
+    const { data, error } = await fetchClient.POST('/api/v1/production/engine/{projectId}/copilot/rewrite', {
+      params: { path: { projectId } },
+      body: { fragment_id: fragmentId, command },
     })
-    const data = await parseJson<{ suggestions: ScenarioRewriteSuggestion[] }>(res)
-    return data.suggestions
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    return data.suggestions as unknown as ScenarioRewriteSuggestion[]
   },
 }
 
 // Ленивое создание backend-проекта под локальный проект (первый /engine/sync)
 export const createProductionProject = async (title: string): Promise<string> => {
-  const res = await fetch(`${PRODUCTION_BASE}/projects`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  })
-  const data = await parseJson<{ id: string }>(res)
-  return data.id
+  const { data, error } = await fetchClient.POST('/api/v1/production/projects', { body: { title } })
+  if (error || data === undefined) throw new Error(apiErrorMessage(error))
+  return data.id as string
 }

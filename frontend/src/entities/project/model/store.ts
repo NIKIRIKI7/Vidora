@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type PersistOptions } from 'zustand/middleware'
-import type { ProjectSettings, ApiKeys, GlobalVoice, GlobalPromptSettings, PromptCategory, TaskType } from './types'
+import type { ProjectSettings, ApiKeys, GlobalPromptSettings, PromptCategory, TaskType } from './types'
 
 // ponytail: откладываем запись в localStorage — ввод текста сценария не дёргает main thread на каждый кейстроук.
 // Копия пишется раз в `delay` мс после последнего изменения; getItem всегда читает актуальное значение.
@@ -268,8 +268,6 @@ interface SettingsStore {
   setVisualPacingThreshold: (v: number) => void
   setAudioSilenceThreshold: (v: number) => void
   setAudioWpmMin: (v: number) => void
-  globalVoices: GlobalVoice[]
-  setGlobalVoices: (voices: GlobalVoice[]) => void
   whisperModel: string
   setWhisperModel: (v: string) => void
 
@@ -325,8 +323,6 @@ export const useSettingsStore = create<SettingsStore>()(
       setVisualPacingThreshold: (v) => set({ visualPacingThreshold: v }),
       setAudioSilenceThreshold: (v) => set({ audioSilenceThreshold: v }),
       setAudioWpmMin: (v) => set({ audioWpmMin: v }),
-      globalVoices: [],
-      setGlobalVoices: (v) => set({ globalVoices: v }),
       whisperModel: 'small',
       setWhisperModel: (v) => set({ whisperModel: v }),
 
@@ -385,7 +381,6 @@ export const useSettingsStore = create<SettingsStore>()(
           taskModes: migratedTaskModes,
           cloudEngines: migratedCloudEngines,
           localEngines: migratedLocalEngines,
-          globalVoices: persistedObj?.globalVoices || [],
           uiPreferences: { ...DEFAULT_UI_PREFS, ...persistedObj?.uiPreferences },
         }
       },

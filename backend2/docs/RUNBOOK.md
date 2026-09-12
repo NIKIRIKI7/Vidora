@@ -239,3 +239,42 @@ pnpm electron:dev       # окно Electron
 | `dotnet test` в корне ничего не находит | нет `.sln` | указывайте путь к проекту явно |
 | Порт `5116` занят | уже запущен другой экземпляр | завершить процесс или сменить `applicationUrl` профиля |
 | Фронтенд не видит backend | другой `VITE_API_URL` | проверить `frontend/.env` |
+
+## 9. OpenAPI и End-to-End типизация
+
+Бэкенд отдаёт Swagger UI — `http://localhost:5116/swagger` — и спецификацию `http://localhost:5116/swagger/v1/swagger.json` (Swashbuckle.AspNetCore).
+
+### 9.1. Генерация типов
+
+Бэкенд должен быть запущен (`dotnet run --launch-profile http`), затем:
+
+```powershell
+cd frontend
+pnpm api:generate
+```
+
+Скрипт скачивает `swagger.json` и перезаписывает `frontend/src/shared/api/schema.d.ts`. Выполнять после добавления/изменения роутов в `Api/Endpoints/*.cs`.
+
+### 9.2. Использование клиента
+
+Весь HTTP во фронтенде идёт через `openapi-fetch` (axios удалён). Единственное исключение — NDJSON-стрим `/api/v1/youtube/agent/stream`, где нужен `ReadableStream` (оставлен нативный `fetch`).
+
+- Vanilla / Zustand / хуки: `import { fetchClient, apiErrorMessage } from '@shared/api'`.
+- React-компоненты: `import { $api } from '@shared/api'` → `const { data, isLoading } = $api.useQuery('get', '/api/v1/system/status')`.
+
+Импорт всегда через публичный API слоя (`@shared/api`); прямой `@shared/api/client` FSD-линтер (`fsd/no-public-api-sidestep`) запрещает.
+
+### 9.3. Обработка ошибок
+
+`openapi-fetch`, в отличие от axios, **не бросает** исключение на non-2xx, а возвращает `{ data, error }`. Чтобы сохранить throw-семантику в существующих `try/catch`, используйте единый паттерн:
+
+```ts
+const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body })
+if (error || data === undefined) throw new Error(apiErrorMessage(error))
+```
+
+`apiErrorMessage(error)` достаёт человекочитаемый текст из `detail`/`message`/`error`.
+
+### 9.4. Точная типизация ответов
+
+`data` типизируется точно там, где эндпоинт объявлен с `.Produces<...>()`. Размечены все операции, возвращающие тело, включая бинарные стримы (file/SSE/NDJSON — как `byte[]`/`string` с соответствующим `contentType`). Response-схемы нет только у `204 No Content` (тела нет по определению) и у исключённого из документации WebSocket-роута `/ws/events/{clientId}`. При добавлении новых роутов сразу указывайте `.Produces<Dto>()`, иначе `data` будет `unknown`.

@@ -1,2 +1,2 @@
-export { FrictionBadge, detectFrictionCategory } from './FrictionBadge'
-export type { FrictionCategory } from './FrictionBadge'
+export { FrictionBadge } from './FrictionBadge'
+export { detectFrictionCategory, type FrictionCategory } from './detectFrictionCategory'

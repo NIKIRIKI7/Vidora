@@ -1,6 +1,6 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ProjectSettings } from '@entities/project'
-import { useSettingsStore } from '@entities/project'
 import { Button, FieldGroup, Select, Spinner, Switch } from '@shared/ui'
 import { Mic, SlidersHorizontal, MicVocal, Upload, Play, Download, Trash2, Volume2, AlignStartVertical, RotateCcw, Cpu, AudioLines } from 'lucide-react'
 import { DEFAULT_BACKGROUND_MUSIC } from '@shared/config'
@@ -27,7 +27,6 @@ interface AudioTabProps {
   onProcessAdvancedSilence?: (scope: 'scene' | 'project', targetSceneId?: string) => void
   onUnloadVram: () => void
   onRunSync: () => void
-  onUpdateActiveGlobalVoice: (voiceId?: string) => void
   onUpdateProjectSettings: (project: ProjectSettings) => void
   onOpenMusicSettings?: () => void
   onOpenMusicLibrary?: () => void
@@ -38,11 +37,10 @@ export const AudioTab = ({
   project, voiceModel, useWhisper, autoOffloadVram, isGeneratingAudio, isSyncing,
   onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram, onOpenVoicebox, onOpenAiSettings,
   onOpenCustomAudioModal, onRunVoiceGen, onResetAllSync, onResetAudio, onProcessAudio,
-  onProcessAdvancedSilence, onUnloadVram, onRunSync, onUpdateActiveGlobalVoice, onUpdateProjectSettings,
+  onProcessAdvancedSilence, onUnloadVram, onRunSync, onUpdateProjectSettings,
   onOpenMusicSettings, onOpenMusicLibrary, onShowNotification,
 }: AudioTabProps) => {
   const [processScope, setProcessScope] = useState<'scene' | 'project'>('scene')
-  const { globalVoices } = useSettingsStore()
   const anyAudioDirty = project.scenes.some(s => s.fragments.some(isAudioDirty))
 
   // Динамический список дикторов из бэкенда (SSOT)
@@ -83,18 +81,10 @@ export const AudioTab = ({
         </Button>
         <FieldGroup label="Голосовая модель">
           <div className="flex items-center gap-2">
-            <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel) || globalVoices.find(v => v.id === project.activeGlobalVoiceId); const profile = speakerProfiles.find(s => s.speaker_id === voiceModel); const url = isCustom?.refAudioPath ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : profile?.preview_audio_path ? `${API}/api/v1/render/media?path=${encodeURIComponent(profile.preview_audio_path)}` : `/samples/${voiceModel}.wav`; void new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
+            <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const profile = speakerProfiles.find(s => s.speaker_id === voiceModel); const url = isCustom?.refAudioPath ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : profile?.preview_audio_path ? `${API}/api/v1/render/media?path=${encodeURIComponent(profile.preview_audio_path)}` : `/samples/${voiceModel}.wav`; void new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
             <Select
-              value={project.activeGlobalVoiceId ? `global_${project.activeGlobalVoiceId}` : voiceModel}
-              onChange={e => {
-                const val = e.target.value
-                if (val.startsWith('global_')) {
-                  onUpdateActiveGlobalVoice(val.replace('global_', ''))
-                } else {
-                  onUpdateActiveGlobalVoice(undefined)
-                  onChangeVoiceModel(val)
-                }
-              }}
+              value={voiceModel}
+              onChange={e => onChangeVoiceModel(e.target.value)}
               className="flex-1 min-w-0 font-medium"
             >
               {builtInSpeakers.length > 0 ? (
@@ -117,11 +107,6 @@ export const AudioTab = ({
                   ))}
                 </optgroup>
               )}
-              {globalVoices.length > 0 && (
-                <optgroup label="Глобальные голоса (Audio Hub)">
-                  {globalVoices.map(v => <option key={`global_${v.id}`} value={`global_${v.id}`}>🌐 {v.name}</option>)}
-                </optgroup>
-              )}
               {project.customVoices && project.customVoices.length > 0 && (
                 <optgroup label="Локальные клоны проекта">
                   {project.customVoices.map(v => <option key={v.id} value={v.id}>🎙️ Cloned - {v.name}</option>)}
@@ -140,18 +125,14 @@ export const AudioTab = ({
               if (paths.length === 0) { onShowNotification('Нет аудио', 'error'); return }
               try {
                 const outPath = `${getProjectPath(project)}/assets/voice/Project_${project.name}_Full.wav`
-                const res = await fetch(`${API}/api/v1/audio/concat`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ audio_paths: paths, output_path: outPath })
-                })
-                if (res.ok) {
-                  const a = document.createElement('a')
-                  a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(outPath)}`
-                  a.download = `Full_Audio_${project.name}.wav`
-                  document.body.appendChild(a)
-                  a.click()
-                  a.remove()
-                } else { onShowNotification('Ошибка склейки', 'error') }
+                const { error } = await fetchClient.POST('/api/v1/audio/concat', { body: { audio_paths: paths, output_path: outPath } })
+                if (error) throw new Error(apiErrorMessage(error))
+                const a = document.createElement('a')
+                a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(outPath)}`
+                a.download = `Full_Audio_${project.name}.wav`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
               } catch { onShowNotification('Сбой скачивания', 'error') }
             }} title="Скачать все аудио проекта одним файлом"><Download size={18} /></button>
             <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors w-9 h-9 rounded hover:bg-white/5 border border-white/10" onClick={onResetAudio} title="Сбросить все аудио"><Trash2 size={18} /></button>

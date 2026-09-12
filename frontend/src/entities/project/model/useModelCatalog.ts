@@ -1,5 +1,5 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { API } from '@shared/lib'
 
 export type ModelTaskRole =
   | 'ScenarioDrafting'
@@ -27,13 +27,12 @@ export function useModelCatalog(role?: ModelTaskRole) {
     setIsLoading(true)
     setError(null)
     try {
-      const url = role
-        ? `${API}/api/v1/system/models/catalog?role=${encodeURIComponent(role)}`
-        : `${API}/api/v1/system/models/catalog`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: ModelCatalogEntry[] = await res.json()
-      setModels(data)
+      const { data, error } = await fetchClient.GET('/api/v1/system/models/catalog', {
+        params: { query: { role } },
+      })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      const catalog = data as unknown as ModelCatalogEntry[]
+      setModels(catalog)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить каталог моделей')
     } finally {

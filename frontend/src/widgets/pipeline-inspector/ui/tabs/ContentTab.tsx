@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import React, { useState, useRef, type DragEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { Button, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
@@ -41,13 +42,13 @@ const FragmentCard = React.memo(({
     fd.append('file', file)
     fd.append('project_path', getProjectPath(project))
     try {
-      const res = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
-      const data = await res.json()
-      if (res.ok && (data.status === 'ok' || data.id)) {
-        onUpdateFragmentBRoll(frag.id, data.filename ?? data.path)
+      const { data, error } = await fetchClient.POST('/api/v1/media/upload', { body: fd as never })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok' || data.id) {
+        onUpdateFragmentBRoll(frag.id, data.filename ?? data.path ?? '')
         onShowNotification('B-Roll привязан!', 'success')
       } else {
-        onShowNotification(data.detail || 'Ошибка загрузки медиа', 'error')
+        onShowNotification((data as { detail?: string | null }).detail || 'Ошибка загрузки медиа', 'error')
       }
     } catch {
       onShowNotification('Ошибка загрузки медиа', 'error')
@@ -125,9 +126,9 @@ const FragmentCard = React.memo(({
               fd.append('project_path', getProjectPath(project))
               fd.append('target_id', frag.id)
               try {
-                const res = await fetch(`${API}/api/v1/media/upload-audio`, { method: 'POST', body: fd })
-                const data = await res.json()
-                if (data.status === 'ok') { onReplaceFragmentAudio(frag.id, data.path); onShowNotification('Аудио заменено!', 'success') }
+                const { data, error } = await fetchClient.POST('/api/v1/media/upload-audio', { body: fd as never })
+                if (error || data === undefined) throw new Error(apiErrorMessage(error))
+                if (data.status === 'ok') { onReplaceFragmentAudio(frag.id, data.path ?? ''); onShowNotification('Аудио заменено!', 'success') }
               } catch { onShowNotification('Ошибка загрузки', 'error') }
               e.target.value = ''
             }} />

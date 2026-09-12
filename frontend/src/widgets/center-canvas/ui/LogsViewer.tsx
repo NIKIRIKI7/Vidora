@@ -1,6 +1,6 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useCallback, useEffect, useState } from 'react'
 import { Modal } from '@shared/ui'
-import { API } from '@shared/lib'
 import { RefreshCw, Copy, Check } from 'lucide-react'
 
 interface LogEntry {
@@ -28,9 +28,11 @@ export const LogsViewer: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/v1/system/logs?limit=300`)
-      const data = await res.json()
-      setLogs(data.logs || [])
+      const { data, error } = await fetchClient.GET('/api/v1/system/logs', {
+        params: { query: { limit: 300 } }
+      })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      setLogs((data as unknown as { logs?: LogEntry[] }).logs || [])
     } catch {
       setLogs([])
     } finally {

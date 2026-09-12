@@ -31,16 +31,3 @@ export interface ProjectCreatePayload {
     text: string
   }
 }
-
-export interface GlobalSettings {
-  routerai_api_key: string
-  aitunnel_api_key: string
-  openai_api_key: string
-  anthropic_api_key: string
-  elevenlabs_api_key: string
-  pexels_api_key: string
-  youtube_api_key: string
-  whisper_model: string
-  ollama_url: string
-  gpu_layers: number
-}

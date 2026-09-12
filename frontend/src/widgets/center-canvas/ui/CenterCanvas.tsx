@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import React, { useEffect, useState, useCallback } from 'react'
 import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
 import { useScenarioEngineStore } from '@entities/project'
@@ -51,10 +52,12 @@ export const CenterCanvas = ({
   // Ручные правки кода тоже уходят в историю версий на бэкенде
   const saveCodeRevision = () => {
     if (!activeScene?.remotionCode?.trim()) return
-    fetch(`${API}/api/v1/system/history`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_id: project.name, scene_id: activeScene.id, tsx_code: activeScene.remotionCode, prompt: 'Ручная правка' }),
-    }).catch(() => {})
+    fetchClient.POST('/api/v1/system/history', { body: { project_id: project.name, scene_id: activeScene.id, tsx_code: activeScene.remotionCode, prompt: 'Ручная правка' }     }).then(({ data, error }) => {
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      return data
+    }).catch((err) => {
+      console.error('CenterCanvas.saveCodeRevision:', err)
+    })
   }
 
   useEffect(() => {

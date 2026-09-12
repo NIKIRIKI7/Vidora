@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using MotionContext.Contracts;
 using Skills.Application.Commands;
 using Skills.Application.Services;
+using Skills.Contracts;
 using SystemContext.Application.Services;
 using SystemContext.Contracts;
 using SystemContext.Domain;
@@ -23,35 +24,35 @@ public static class SystemEndpoints
         {
             var status = await system.GetHardwareStatusAsync(ct);
             return Results.Ok(status);
-        });
+        }).Produces<SystemHardwareStatusDto>();
 
         // Список настроек системы
         group.MapGet("/settings", async (ISystemModule system, CancellationToken ct) =>
         {
             var settings = await system.GetAllSettingsAsync(ct);
             return Results.Ok(settings);
-        });
+        }).Produces<IReadOnlyList<SystemSettingDto>>();
 
         // Получение настройки по ключу
         group.MapGet("/settings/{key}", async (string key, ISystemModule system, CancellationToken ct) =>
         {
             var setting = await system.GetSettingAsync(key, ct);
             return Results.Ok(setting);
-        });
+        }).Produces<SystemSettingDto>();
 
         // Обновление настройки
         group.MapPut("/settings/{key}", async (string key, UpdateSettingRequest request, ISystemModule system, CancellationToken ct) =>
         {
             var updated = await system.SetSettingAsync(key, request.Value, ct);
             return Results.Ok(updated);
-        });
+        }).Produces<SystemSettingDto>();
 
         // Каталог AI моделей
         group.MapGet("/models", async (ISystemModule system, CancellationToken ct) =>
         {
             var models = await system.GetAiModelsAsync(ct);
             return Results.Ok(models);
-        });
+        }).Produces<IReadOnlyList<AiModelDto>>();
 
         // Единый каталог моделей по ролям конвейера
         group.MapGet("/models/catalog", async (
@@ -61,21 +62,21 @@ public static class SystemEndpoints
         {
             var entries = await catalog.GetCatalogAsync(role, ct);
             return Results.Ok(entries);
-        });
+        }).Produces<IReadOnlyList<ModelCatalogEntryDto>>();
 
         // Запуск загрузки весов модели
         group.MapPost("/models/{modelId}/download", async (string modelId, ISystemModule system, CancellationToken ct) =>
         {
             var result = await system.TriggerModelDownloadAsync(modelId, ct);
             return Results.Accepted($"/api/v1/system/models/{result.Id}", result);
-        });
+        }).Produces<AiModelDto>(StatusCodes.Status202Accepted);
 
         // Очистка временных файлов
         group.MapPost("/maintenance/clean-temp", async (ISystemModule system, CancellationToken ct) =>
         {
             await system.CleanSystemTempFilesAsync(ct);
             return Results.Ok(new { message = "Временные файлы очищены успешно." });
-        });
+        }).Produces<SystemMessageResponse>();
 
         // Мониторинг DLQ шины событий
         group.MapGet("/dead-letters", (IEventDeadLetterQueue dlq) =>
@@ -86,7 +87,8 @@ public static class SystemEndpoints
                 handler = f.HandlerName,
                 error = f.Error.Message,
                 failed_at = f.FailedAt
-            })));
+            })))
+            .Produces<IReadOnlyList<DeadLetterResponse>>();
 
         // Просмотр структурированных системных логов
         group.MapGet("/logs", async (
@@ -97,7 +99,7 @@ public static class SystemEndpoints
         {
             var logs = await system.GetRecentLogsAsync(limit, string.IsNullOrWhiteSpace(level) ? null : level, ct);
             return Results.Ok(logs);
-        });
+        }).Produces<IReadOnlyList<SystemLogEntryDto>>();
 
         // --- Compatibility aliases: история ревизий TSX (фронтенд зовёт /system/history) ---
         group.MapPost("/history", async (
@@ -120,7 +122,7 @@ public static class SystemEndpoints
 
             await motion.UpdateManualCodeAsync(sceneCode.Id, new UpdateSceneCodeManualRequest(request.TsxCode), ct);
             return Results.Ok(new { status = "ok" });
-        });
+        }).Produces<SystemStatusResponse>();
 
         group.MapGet("/history/{projectId}/{sceneId}", async (
             string projectId,
@@ -143,7 +145,7 @@ public static class SystemEndpoints
             });
 
             return Results.Ok(new { revisions });
-        });
+        }).Produces<SystemHistoryRevisionsResponse>();
 
         group.MapGet("/history/{projectId}/{sceneId}/{revisionId}", async (
             string projectId,
@@ -162,20 +164,20 @@ public static class SystemEndpoints
 
             var revision = await motion.GetRevisionAsync(sceneCode.Id, revisionNumber, ct);
             return Results.Ok(new { tsx_code = revision.SourceCode });
-        });
+        }).Produces<SystemRevisionCodeResponse>();
 
         // --- Compatibility: hardware info, model pull, skills reset alias ---
         group.MapGet("/hardware", async (ISystemModule system, CancellationToken ct) =>
         {
             var hw = await system.GetHardwareInfoAsync(ct);
             return Results.Ok(hw);
-        });
+        }).Produces<SystemHardwareInfoDto>();
 
         group.MapPost("/pull", async (PullModelRequest request, ISystemModule system, CancellationToken ct) =>
         {
             var result = await system.PullModelAsync(request.Engine, ct);
             return Results.Accepted($"/api/v1/system/models/{result.Id}", result);
-        });
+        }).Produces<AiModelDto>(StatusCodes.Status202Accepted);
 
         group.MapPost("/skills/{id}/reset", async (
             string id,
@@ -184,7 +186,7 @@ public static class SystemEndpoints
         {
             var updated = await skillService.ResetSkillToDefaultAsync(new ResetSkillToDefaultCommand(id), ct);
             return Results.Ok(updated);
-        });
+        }).Produces<SkillDto>();
 
         return endpoints;
     }
@@ -201,3 +203,28 @@ public sealed record SaveCodeRevisionRequest(
     [property: JsonPropertyName("scene_id")] string SceneId,
     [property: JsonPropertyName("tsx_code")] string TsxCode,
     [property: JsonPropertyName("prompt")] string? Prompt);
+
+public sealed record SystemMessageResponse(
+    [property: JsonPropertyName("message")] string Message);
+
+public sealed record DeadLetterResponse(
+    [property: JsonPropertyName("event_id")] Guid EventId,
+    [property: JsonPropertyName("event_type")] string EventType,
+    [property: JsonPropertyName("handler")] string Handler,
+    [property: JsonPropertyName("error")] string Error,
+    [property: JsonPropertyName("failed_at")] DateTimeOffset FailedAt);
+
+public sealed record SystemStatusResponse(
+    [property: JsonPropertyName("status")] string Status);
+
+public sealed record SystemHistoryRevisionItem(
+    [property: JsonPropertyName("revision_id")] string RevisionId,
+    [property: JsonPropertyName("timestamp")] string Timestamp,
+    [property: JsonPropertyName("prompt_snippet")] string? PromptSnippet,
+    [property: JsonPropertyName("char_count")] int CharCount);
+
+public sealed record SystemHistoryRevisionsResponse(
+    [property: JsonPropertyName("revisions")] IReadOnlyList<SystemHistoryRevisionItem> Revisions);
+
+public sealed record SystemRevisionCodeResponse(
+    [property: JsonPropertyName("tsx_code")] string? TsxCode);

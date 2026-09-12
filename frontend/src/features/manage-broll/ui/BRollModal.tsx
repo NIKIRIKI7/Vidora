@@ -1,8 +1,8 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef } from 'react'
 import { Modal, Button, FieldGroup, Select, Spinner, Input } from '@shared/ui'
 import { Search, Sparkles, Check, MonitorPlay } from 'lucide-react'
 import type { ProjectSettings, Scene, BRollAudioMode } from '@entities/project'
-import { API } from '@shared/lib'
 import { getProjectPath } from '@entities/project'
 
 interface StockVideo {
@@ -61,9 +61,11 @@ export const BRollModal = ({
     setIsSearching(true)
     try {
       const orientation = project.format === '9:16' ? 'portrait' : 'landscape'
-      const res = await fetch(`${API}/api/v1/media/search-stock?query=${encodeURIComponent(searchQuery)}&orientation=${orientation}`)
-      const data = await res.json()
-      if (data.status === 'ok') setStockVideos(data.videos || [])
+      const { data, error } = await fetchClient.GET('/api/v1/media/search-stock', {
+        params: { query: { query: searchQuery, orientation } }
+      })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok') setStockVideos((data.videos || []) as unknown as StockVideo[])
     } catch {
       setStockVideos([])
     } finally {
@@ -85,10 +87,10 @@ export const BRollModal = ({
         fd.append('file', selectedFile)
         fd.append('project_path', projectPath)
         fd.append('folder', 'b-roll-raw')
-        const upRes = await fetch(`${API}/api/v1/media/upload`, { method: 'POST', body: fd })
-        const upData = await upRes.json()
-        if (!upRes.ok || upData.status !== 'ok') throw new Error(upData.detail || 'Upload failed')
-        resolvedSourcePath = upData.path
+        const { data: upData, error: upError } = await fetchClient.POST('/api/v1/media/upload', { body: fd as never })
+        if (upError || upData === undefined) throw new Error(apiErrorMessage(upError))
+        if (upData.status !== 'ok') throw new Error((upData as { detail?: string | null }).detail || 'Upload failed')
+        resolvedSourcePath = upData.path ?? ''
         originalFilename = selectedFile.name
         fileDuration = upData.duration || 0
       } else if (sourceTab === 'pexels') {
@@ -96,16 +98,14 @@ export const BRollModal = ({
         const chosenFile = selectedStockVideo.video_files?.find(vf => vf.width === 1920 || vf.height === 1920) || selectedStockVideo.video_files?.[0]
         if (!chosenFile?.link) throw new Error('Нет прямой ссылки на видео')
         const filename = `pexels_${selectedStockVideo.id}_${Date.now()}.mp4`
-        const dlRes = await fetch(`${API}/api/v1/media/download-stock`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_path: projectPath, url: chosenFile.link, filename, folder: 'b-roll-raw' }),
+        const { data: dlData, error: dlError } = await fetchClient.POST('/api/v1/media/download-stock', {
+          body: { project_path: projectPath, url: chosenFile.link, filename, folder: 'b-roll-raw' }
         })
-        const dlData = await dlRes.json()
-        if (!dlRes.ok || dlData.status !== 'ok') throw new Error('Download failed')
-        resolvedSourcePath = dlData.path
+        if (dlError || dlData === undefined) throw new Error(apiErrorMessage(dlError))
+        if (dlData.status !== 'ok') throw new Error('Download failed')
+        resolvedSourcePath = dlData.path ?? ''
         originalFilename = filename
-        fileDuration = dlData.duration || selectedStockVideo.duration || 0
+        fileDuration = (dlData as { duration?: number }).duration || selectedStockVideo.duration || 0
       }
 
       await onApply({

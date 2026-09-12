@@ -33,7 +33,7 @@ public static class SkillsEndpoints
 
             var allSkills = await service.GetAllSkillsAsync(ct);
             return Results.Ok(allSkills);
-        });
+        }).Produces<IReadOnlyList<SkillDto>>();
 
         // Получение скомпонованного бандла промптов (query: max_tokens / maxTokens, custom_header / customHeader)
         group.MapGet("/bundle/{stage}", async (
@@ -55,14 +55,14 @@ public static class SkillsEndpoints
 
             var bundle = await catalog.GetSkillBundleForStageAsync(parsedStage, tokensLimit, headerInstructions, ct);
             return Results.Ok(bundle);
-        });
+        }).Produces<SkillBundleDto>();
 
         // Получение скила по ID
         group.MapGet("/{id}", async (string id, ISkillManagementService service, CancellationToken ct) =>
         {
             var skill = await service.GetSkillByIdAsync(id, ct);
             return Results.Ok(skill);
-        });
+        }).Produces<SkillDto>();
 
         // Создание нового пользовательского скила (поддержка snake_case и camelCase в теле)
         group.MapPost("/", async (CreateSkillRequest request, ISkillManagementService service, CancellationToken ct) =>
@@ -83,7 +83,7 @@ public static class SkillsEndpoints
 
             var created = await service.CreateCustomSkillAsync(command, ct);
             return Results.Created($"/api/v1/skills/{created.Id}", created);
-        });
+        }).Produces<SkillDto>(StatusCodes.Status201Created);
 
         // Обновление скила (поддержка is_enabled и isEnabled)
         async Task<IResult> UpdateSkillHandler(string id, UpdateSkillRequest request, ISkillManagementService service, CancellationToken ct)
@@ -101,22 +101,22 @@ public static class SkillsEndpoints
             return Results.Ok(updated);
         }
 
-        group.MapPut("/{id}", UpdateSkillHandler);
-        group.MapPatch("/{id}", UpdateSkillHandler);
+        group.MapPut("/{id}", UpdateSkillHandler).Produces<SkillDto>();
+        group.MapPatch("/{id}", UpdateSkillHandler).Produces<SkillDto>();
 
         // Сброс базового скила до системного шаблона
         group.MapPost("/{id}/reset", async (string id, ISkillManagementService service, CancellationToken ct) =>
         {
             var updated = await service.ResetSkillToDefaultAsync(new ResetSkillToDefaultCommand(id), ct);
             return Results.Ok(updated);
-        });
+        }).Produces<SkillDto>();
 
         // Удаление пользовательского скила
         group.MapDelete("/{id}", async (string id, ISkillManagementService service, CancellationToken ct) =>
         {
             await service.DeleteSkillAsync(new DeleteSkillCommand(id), ct);
             return Results.NoContent();
-        });
+        }).Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

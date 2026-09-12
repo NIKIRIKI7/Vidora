@@ -8,7 +8,7 @@ import { DashboardView } from '@widgets/dashboard'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { useSkillsStore } from '@features/settings'
 import { Spinner } from '@shared/ui'
-import { API } from '@shared/lib'
+import { $api } from '@shared/api'
 import { CircleCheckBig, TriangleAlert, Info, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 
 type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
@@ -18,7 +18,7 @@ const NotificationToast = ({ notification }: { notification: { message: string; 
   const [copied, setCopied] = useState(false)
 
   const copy = () => {
-    navigator.clipboard.writeText(`${notification.message}\n\n${notification.details || ''}`)
+    void navigator.clipboard.writeText(`${notification.message}\n\n${notification.details || ''}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -65,7 +65,6 @@ const NotificationToast = ({ notification }: { notification: { message: string; 
 }
 
 export const App = () => {
-  const [isBooting, setIsBooting] = useState(true)
   const [view, setView] = useState<ViewState>('hub')
 
   const [selectedIdea, setSelectedIdea] = useState<IdeaFormat | null>(null)
@@ -83,23 +82,17 @@ export const App = () => {
 
   useEffect(() => {
     // Подтягиваем свежие скилы из SQLite при старте интерфейса (единый источник для генерации промптов)
-    useSkillsStore.getState().fetchSkills().catch(() => {})
+    useSkillsStore.getState().fetchSkills().catch((err) => { console.error('App.fetchSkills:', err) })
   }, [])
 
-  useEffect(() => {
-    const ping = async () => {
-      try {
-        const res = await fetch(`${API}/api/health`)
-        if (res.ok) setTimeout(() => setIsBooting(false), 800)
-        else setTimeout(ping, 1000)
-      } catch {
-        setTimeout(ping, 1000)
-      }
-    }
-    void ping()
-  }, [])
+  const { data: health, isLoading: isBooting } = $api.useQuery(
+    'get',
+    '/api/health',
+    {},
+    { refetchInterval: query => (query.state.data ? false : 1000), retry: true },
+  )
 
-  if (isBooting) {
+  if (isBooting || !health) {
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-[200]">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent opacity-50" />
@@ -166,12 +159,19 @@ export const App = () => {
             setView('scenario')
           }}
           onOpenAudio={() => setView('audio-hub')}
+          onOpenSettings={() => setView('settings')}
         />
       )}
 
       {view === 'settings' && (
         <div className="fixed inset-0 z-[150] bg-background">
-          <GlobalSettingsView onBack={() => setView('hub')} />
+          <GlobalSettingsView
+            onBack={() => setView('hub')}
+            onGoToAudio={() => {
+              setActiveProject(null)
+              setView('audio-hub')
+            }}
+          />
         </div>
       )}
     </>

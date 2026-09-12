@@ -43,7 +43,7 @@ public static class WebSocketEndpoints
             }
 
             return Results.Empty;
-        });
+        }).ExcludeFromDescription();
 
         return endpoints;
     }

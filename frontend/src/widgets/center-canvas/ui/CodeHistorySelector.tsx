@@ -1,5 +1,5 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useCallback, useEffect, useState } from 'react'
-import { API } from '@shared/lib'
 import { History } from 'lucide-react'
 
 interface Revision {
@@ -21,21 +21,26 @@ export const CodeHistorySelector: React.FC<Props> = ({ projectId, sceneId, onRes
   const loadRevisions = useCallback(async () => {
     if (!projectId || !sceneId) return
     try {
-      const res = await fetch(`${API}/api/v1/system/history/${encodeURIComponent(projectId)}/${encodeURIComponent(sceneId)}`)
-      const data = await res.json()
-      setRevisions(data.revisions || [])
-    } catch {
+      const { data, error } = await fetchClient.GET('/api/v1/system/history/{projectId}/{sceneId}', {
+        params: { path: { projectId, sceneId } }
+      })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      setRevisions((data.revisions || []) as Revision[])
+    } catch (err) {
+      console.error('CodeHistorySelector.loadRevisions:', err)
       setRevisions([])
     }
   }, [projectId, sceneId])
 
   const restore = async (revisionId: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/system/history/${encodeURIComponent(projectId)}/${encodeURIComponent(sceneId)}/${encodeURIComponent(revisionId)}`)
-      const data = await res.json()
+      const { data, error } = await fetchClient.GET('/api/v1/system/history/{projectId}/{sceneId}/{revisionId}', {
+        params: { path: { projectId, sceneId, revisionId } }
+      })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.tsx_code) onRestoreCode(data.tsx_code)
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.error('CodeHistorySelector.restore:', err)
     }
   }
 

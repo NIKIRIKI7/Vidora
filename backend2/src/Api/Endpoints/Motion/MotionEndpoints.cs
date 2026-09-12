@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Kernel.Ports;
 using MotionContext.Application.Services;
 using MotionContext.Contracts;
@@ -22,13 +23,13 @@ public static class MotionEndpoints
         {
             var capabilities = await motion.GetAvailableCapabilitiesAsync(ct);
             return Results.Ok(capabilities);
-        });
+        }).Produces<IReadOnlyList<string>>();
 
         group.MapGet("/scenes/{id}", async (string id, IMotionModule motion, CancellationToken ct) =>
         {
             var result = await motion.GetSceneCodeAsync(id, ct);
             return Results.Ok(result);
-        });
+        }).Produces<SceneCodeDto>();
 
         group.MapGet("/projects/{projectId}/scenes/{sceneId}", async (
             string projectId,
@@ -38,7 +39,7 @@ public static class MotionEndpoints
         {
             var result = await motion.FindSceneCodeBySceneAsync(projectId, sceneId, ct);
             return result != null ? Results.Ok(result) : Results.NotFound();
-        });
+        }).Produces<SceneCodeDto>();
 
         group.MapGet("/scenes/{id}/revisions/{revision:int}", async (
             string id,
@@ -48,7 +49,7 @@ public static class MotionEndpoints
         {
             var result = await motion.GetRevisionAsync(id, revision, ct);
             return Results.Ok(result);
-        });
+        }).Produces<SceneRevisionDto>();
 
         group.MapPost("/scenes/generate", async (
             GenerateSceneCodeRequest request,
@@ -57,7 +58,7 @@ public static class MotionEndpoints
         {
             var result = await motion.GenerateSceneCodeAsync(request, ct);
             return Results.Created($"/api/v1/motion/scenes/{result.Id}", result);
-        });
+        }).Produces<SceneCodeDto>(StatusCodes.Status201Created);
 
         group.MapPut("/scenes/{id}", async (
             string id,
@@ -67,7 +68,7 @@ public static class MotionEndpoints
         {
             var result = await motion.UpdateManualCodeAsync(id, request, ct);
             return Results.Ok(result);
-        });
+        }).Produces<SceneCodeDto>();
 
         group.MapPost("/scenes/{id}/rollback", async (
             string id,
@@ -77,7 +78,7 @@ public static class MotionEndpoints
         {
             var result = await motion.RollbackRevisionAsync(id, request, ct);
             return Results.Ok(result);
-        });
+        }).Produces<SceneCodeDto>();
 
         group.MapPost("/scenes/{id}/render", async (
             string id,
@@ -87,7 +88,7 @@ public static class MotionEndpoints
         {
             var job = await motion.StartRenderAsync(id, request, ct);
             return Results.Accepted($"/api/v1/motion/renders/{job.Id}", job);
-        });
+        }).Produces<RenderJobDto>(StatusCodes.Status202Accepted);
 
         group.MapGet("/renders/{jobId}", async (
             string jobId,
@@ -96,7 +97,7 @@ public static class MotionEndpoints
         {
             var status = await motion.GetRenderStatusAsync(jobId, ct);
             return Results.Ok(status);
-        });
+        }).Produces<RenderJobDto>();
 
         group.MapPost("/renders/{jobId}/cancel", async (
             string jobId,
@@ -105,7 +106,7 @@ public static class MotionEndpoints
         {
             await motion.CancelRenderAsync(jobId, ct);
             return Results.Ok(new { message = "Задача рендеринга отменена." });
-        });
+        }).Produces<MotionMessageResponse>();
 
         // --- Compatibility aliases for frontend ---
         endpoints.MapPost("/api/v1/code/generate", async (
@@ -153,7 +154,7 @@ public static class MotionEndpoints
                 applied_stage = SkillStage.SceneGeneration.ToSnakeCase(),
                 included_skills = bundle.IncludedSkills.Select(s => s.Id).ToArray()
             });
-        });
+        }).Produces<CodeGenerateResponse>();
 
         endpoints.MapPost("/api/v1/render/start", async (
             [FromBody] JsonElement payload,
@@ -163,14 +164,30 @@ public static class MotionEndpoints
             var targetId = payload.GetProperty("target_id").GetString()!;
             var job = await motion.StartRenderAsync(targetId, new StartRenderRequest(null, null), ct);
             return Results.Ok(new { status = "ok", task_id = job.Id });
-        });
+        }).Produces<RenderStartResponse>();
 
         endpoints.MapPost("/api/v1/render/cancel/{jobId}", async (string jobId, IMotionModule motion, CancellationToken ct) =>
         {
             await motion.CancelRenderAsync(jobId, ct);
             return Results.Ok(new { status = "ok" });
-        });
+        }).Produces<MotionStatusResponse>();
 
         return endpoints;
     }
 }
+
+public sealed record MotionMessageResponse(
+    [property: JsonPropertyName("message")] string Message);
+
+public sealed record CodeGenerateResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("tsx_code")] string TsxCode,
+    [property: JsonPropertyName("applied_stage")] string AppliedStage,
+    [property: JsonPropertyName("included_skills")] IReadOnlyList<string> IncludedSkills);
+
+public sealed record RenderStartResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("task_id")] string TaskId);
+
+public sealed record MotionStatusResponse(
+    [property: JsonPropertyName("status")] string Status);

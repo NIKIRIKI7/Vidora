@@ -1,4 +1,4 @@
-import { API } from '@shared/lib'
+import { fetchClient, apiErrorMessage } from '@shared/api'
 
 export type SkillStage =
   | 'scene_generation'
@@ -41,38 +41,56 @@ export interface SkillUpdate {
   priority?: number
 }
 
-const API_BASE = `${API}/api/v1/skills`
-const SYSTEM_BASE = `${API}/api/v1/system/skills`
+interface RawSkillDto {
+  id: string
+  name: string
+  description?: string
+  content?: string
+  prompt?: string
+  stage?: SkillStage
+  is_enabled?: boolean
+  is_active?: boolean
+  is_default?: boolean
+  priority?: number
+  version?: number
+  created_at?: string
+  updated_at?: string
+}
+
+type ResolvedSkillDto = RawSkillDto & {
+  stage: SkillStage
+  priority: number
+  version: number
+  created_at: string
+  updated_at: string
+}
 
 export const skillsApi = {
   async getAll(stage?: SkillStage, isActive?: boolean): Promise<SkillItem[]> {
-    const params = new URLSearchParams()
-    if (stage) params.append('stage', stage)
-    if (isActive !== undefined) params.append('only_enabled', String(isActive))
-    const qs = params.toString()
-    const res = await fetch(qs ? `${API_BASE}?${qs}` : API_BASE)
-    if (!res.ok) throw new Error(`Ошибка загрузки скилов: ${res.statusText}`)
-    const data = await res.json()
+    const { data, error } = await fetchClient.GET('/api/v1/skills', {
+      params: { query: { stage, only_enabled: isActive } },
+    })
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
 
-    return data.map((d: any) => ({
+    return (data as unknown as ResolvedSkillDto[]).map((d) => ({
       id: d.id,
       name: d.name,
       description: d.description || '',
       prompt: d.content || d.prompt || '',
-      stage: d.stage,
+      stage: d.stage ?? 'general',
       is_active: d.is_enabled ?? d.is_active ?? true,
       is_custom: !d.is_default,
       priority: d.priority ?? 100,
       version: d.version ?? 1,
-      created_at: d.created_at,
-      updated_at: d.updated_at,
+      created_at: d.created_at ?? '',
+      updated_at: d.updated_at ?? '',
     }))
   },
 
   async getById(id: string): Promise<SkillItem> {
-    const res = await fetch(`${API_BASE}/${id}`)
-    if (!res.ok) throw new Error(`Скил не найден: ${id}`)
-    const d = await res.json()
+    const { data, error } = await fetchClient.GET('/api/v1/skills/{id}', { params: { path: { id } } })
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    const d = data as unknown as ResolvedSkillDto
     return {
       id: d.id,
       name: d.name,
@@ -89,20 +107,18 @@ export const skillsApi = {
   },
 
   async create(data: SkillCreate): Promise<SkillItem> {
-    const res = await fetch(API_BASE, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const { data: response, error } = await fetchClient.POST('/api/v1/skills', {
+      body: {
         id: `skill-${data.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
         name: data.name,
         description: data.description || '',
         content: data.prompt,
         stage: data.stage,
         priority: data.priority ?? 100,
-      }),
+      },
     })
-    if (!res.ok) throw new Error('Ошибка создания скила')
-    const d = await res.json()
+    if (error || response === undefined) throw new Error(apiErrorMessage(error))
+    const d = response as unknown as ResolvedSkillDto
     return {
       id: d.id,
       name: d.name,
@@ -119,19 +135,18 @@ export const skillsApi = {
   },
 
   async update(id: string, data: SkillUpdate): Promise<SkillItem> {
-    const res = await fetch(`${API_BASE}/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const { data: response, error } = await fetchClient.PATCH('/api/v1/skills/{id}', {
+      params: { path: { id } },
+      body: {
         name: data.name,
         description: data.description,
         content: data.prompt,
         is_enabled: data.is_active,
         priority: data.priority,
-      }),
+      },
     })
-    if (!res.ok) throw new Error(`Ошибка обновления скила ${id}`)
-    const d = await res.json()
+    if (error || response === undefined) throw new Error(apiErrorMessage(error))
+    const d = response as unknown as ResolvedSkillDto
     return {
       id: d.id,
       name: d.name,
@@ -148,14 +163,16 @@ export const skillsApi = {
   },
 
   async delete(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error(`Ошибка удаления скила ${id}`)
+    const { error } = await fetchClient.DELETE('/api/v1/skills/{id}', { params: { path: { id } } })
+    if (error) throw new Error(apiErrorMessage(error))
   },
 
   async resetSkill(id: string): Promise<SkillItem> {
-    const res = await fetch(`${SYSTEM_BASE}/${id}/reset`, { method: 'POST' })
-    if (!res.ok) throw new Error(`Ошибка сброса скила ${id}`)
-    const d = await res.json()
+    const { data, error } = await fetchClient.POST('/api/v1/system/skills/{id}/reset', {
+      params: { path: { id } },
+    })
+    if (error || data === undefined) throw new Error(apiErrorMessage(error))
+    const d = data as unknown as ResolvedSkillDto
     return {
       id: d.id,
       name: d.name,

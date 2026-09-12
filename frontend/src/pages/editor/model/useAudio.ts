@@ -1,8 +1,11 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect } from 'react'
-import { API, getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, formatShortTimecode, formatTimecode, concatSceneAudio } from '@entities/project'
+import { getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, formatShortTimecode, formatTimecode, concatSceneAudio } from '@entities/project'
 import { normalizeText, recalculateTimingsProportionally } from '@entities/project'
-import type { ProjectSettings, Scene, SceneFragment, CustomVoice, ApiKeys } from '@entities/project'
+import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { useSettingsStore } from '@entities/project'
+import { resolveCleanVoiceEngine } from '@shared/lib'
+import { isRequestCanceled } from '@shared/lib/http'
 import type { FragmentTiming } from './types'
 
 export interface AudioOptions {
@@ -16,9 +19,6 @@ export interface AudioOptions {
   postprocessOutput: boolean
   autoOffloadVram: boolean
   ttsEngine: string
-  apiKeys: ApiKeys
-  customVoices?: CustomVoice[]
-  designPrompt?: string
 }
 
 export interface CustomAudioUploadParams {
@@ -35,54 +35,16 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
   // ponytail: наследуем эмоцию первой фразы сцены во все фрагменты без своего [emotion: x] — единый тон всего блока
   const sceneEmotion = scene.fragments[0]?.text.match(/\[emotion:\s*[a-z-]+\]/i)?.[0] || ''
   const fragText = frag.text.match(/\[emotion:\s*[a-z-]+\]/i) ? frag.text : sceneEmotion ? `${sceneEmotion} ${frag.text}` : frag.text
-  let finalVoiceModel = opts.voiceModel
-  let finalSpeed = opts.speed
-  let finalNumSteps = opts.numSteps
-  let finalGuidanceScale = opts.guidanceScale
-  let finalTtsEngine = opts.ttsEngine
-  let finalRefAudioPath: string | null = null
-  let finalRefText: string | null = null
-  let finalDesignPrompt: string | null = opts.designPrompt || null
-
-  if (project.activeGlobalVoiceId) {
-    const { globalVoices } = useSettingsStore.getState()
-    const gv = globalVoices.find(v => v.id === project.activeGlobalVoiceId)
-    if (gv) {
-      finalVoiceModel = gv.voiceModel
-      finalSpeed = gv.settings.speed
-      finalNumSteps = gv.settings.numSteps
-      finalGuidanceScale = gv.settings.guidanceScale
-      finalTtsEngine = gv.ttsEngine
-      if (gv.refAudioPath) {
-        finalVoiceModel = 'clone'
-        finalRefAudioPath = gv.refAudioPath
-        finalRefText = gv.refText || null
-      } else if (gv.voiceModel === 'design') {
-        finalVoiceModel = 'design'
-        finalDesignPrompt = gv.designPrompt || null
-      } else if (!['aria', 'marcus', 'nova'].includes(gv.voiceModel) && (gv.ttsEngine === 'omnivoice' || gv.ttsEngine.toLowerCase().includes('omnivoice'))) {
-        finalVoiceModel = 'aria' // Защита от старых багованных сохранений
-      }
-    }
-  } else {
-    const customVoice = opts.customVoices?.find(v => v.id === finalVoiceModel)
-    if (customVoice) {
-      finalVoiceModel = 'clone'
-      finalRefAudioPath = customVoice.refAudioPath
-      finalRefText = customVoice.refText
-      finalDesignPrompt = customVoice.designPrompt || null
-    }
-  }
+  const speakerId = opts.voiceModel
+  const { speed, numSteps, guidanceScale, ttsEngine } = opts
 
   return {
     fragment_id: frag.id, file_prefix: `Frag_${sanitizeFilename(scene.title)}`, text: fragText,
-    voice_model: finalVoiceModel,
-    ref_audio_path: finalRefAudioPath,
-    ref_text: finalRefText,
-    design_prompt: finalDesignPrompt,
-    speed: finalSpeed, num_steps: finalNumSteps, guidance_scale: finalGuidanceScale, duration: opts.duration,
+    speaker_id: speakerId,
+    engine: resolveCleanVoiceEngine(speakerId, ttsEngine),
+    speed, num_steps: numSteps, guidance_scale: guidanceScale, duration: opts.duration,
     denoise: opts.denoise, preprocess_prompt: opts.preprocessPrompt, postprocess_output: opts.postprocessOutput,
-    project_path: getProjectPath(project), auto_offload_vram: opts.autoOffloadVram, engine: finalTtsEngine, api_keys: opts.apiKeys,
+    project_path: getProjectPath(project), auto_offload_vram: opts.autoOffloadVram,
   }
 }
 
@@ -101,8 +63,8 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       Promise.resolve().then(() => { if (!isCancelled) setAudioLoaded(null) })
       return
     }
-    fetch(`${API}/api/v1/render/media?path=${encodeURIComponent(expectedPath)}`, { method: 'HEAD' })
-      .then(res => { if (!isCancelled) setAudioLoaded(res.ok ? expectedPath : null) })
+    fetchClient.GET('/api/v1/render/media', { params: { query: { path: expectedPath } } })
+      .then(({ error }) => { if (error) throw new Error(apiErrorMessage(error)); if (!isCancelled) setAudioLoaded(expectedPath) })
       .catch(() => { if (!isCancelled) setAudioLoaded(null) })
     return () => { isCancelled = true }
   }, [expectedPath])
@@ -121,9 +83,8 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
 
       for (const scene of targetScenes) {
         if (abortControllerRef.current.signal.aborted) break
-        const res = await fetch(`${API}/api/v1/audio/process/advanced-silence`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const { data, error } = await fetchClient.POST('/api/v1/audio/process/advanced-silence', {
+          body: {
             scene_id: scene.id,
             audio_path: getAudioPathForScene(project, scene),
             project_path: projectPath,
@@ -131,13 +92,13 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
             min_silence_ms: audioProc.minSilenceMs,
             max_silence_ms: audioProc.maxSilenceMs,
             remove_edges: audioProc.removeEdges,
-          }),
+          } as never,
           signal: abortControllerRef.current.signal,
         })
-        const data = await res.json()
+        if (error || data === undefined) throw new Error(apiErrorMessage(error))
         if (data.status === 'ok') {
           successCount++
-          const newFragments = recalculateTimingsProportionally(scene.fragments, data.new_duration_sec)
+          const newFragments = recalculateTimingsProportionally(scene.fragments, data.new_duration_sec as number)
           processedTargetScenes.push({ ...scene, fragments: newFragments })
         }
       }
@@ -159,7 +120,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         }
       }
     } catch (e: unknown) {
-      if (e instanceof Error && e.name !== 'AbortError') showNotification('Ошибка умной обработки', 'error')
+      if (!isRequestCanceled(e)) showNotification('Ошибка умной обработки', 'error')
     } finally {
       setIsGeneratingAudio(false)
     }
@@ -176,12 +137,9 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       
       for (const scene of targetScenes) {
         if (abortControllerRef.current.signal.aborted) break
-        const res = await fetch(`${API}/api/v1/audio/process`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scene_id: scene.id, audio_path: getAudioPathForScene(project, scene), action, project_path: projectPath }),
-          signal: abortControllerRef.current.signal,
-        })
-        if ((await res.json()).status === 'ok') successCount++
+        const { data, error } = await fetchClient.POST('/api/v1/audio/process', { body: { scene_id: scene.id, audio_path: getAudioPathForScene(project, scene), action, project_path: projectPath } as never, signal: abortControllerRef.current.signal })
+        if (error || data === undefined) throw new Error(apiErrorMessage(error))
+        if (data.status === 'ok') successCount++
       }
       
       if (!abortControllerRef.current.signal.aborted) {
@@ -195,7 +153,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         }
       }
     } catch (e: unknown) {
-      if (e instanceof Error && e.name !== 'AbortError') showNotification('Ошибка обработки аудио', 'error')
+      if (!isRequestCanceled(e)) showNotification('Ошибка обработки аудио', 'error')
     } finally {
       setIsGeneratingAudio(false)
     }
@@ -208,9 +166,9 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       const frag = scene?.fragments.find(f => f.id === fragId)
       if (!scene || !frag) return
 
-      const res = await fetch(`${API}/api/v1/audio/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getVoicePayload(frag, scene, project, voiceOpts)) })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
+      const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body: getVoicePayload(frag, scene, project, voiceOpts) })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok') {
         const projectPath = getProjectPath(project)
         const relativeAudioPath = `${projectPath}/assets/voice/${data.audio_url}`
         const updatedScene = { ...scene, fragments: scene.fragments.map(f => f.id === frag.id ? { ...f, audioFileName: relativeAudioPath, lastAudioHash: hashCode(frag.text), lastAudioTextNormalized: normalizeText(frag.text) } : f) }
@@ -246,14 +204,10 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         if (!combinedText.trim()) return { scenes: project.scenes, activeAudio: null }
 
         const fakeFrag = { ...targetScenes[0].fragments[0], text: combinedText, id: 'project_voice' }
-        const res = await fetch(`${API}/api/v1/audio/generate`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(getVoicePayload(fakeFrag as SceneFragment, targetScenes[0], project, voiceOpts)),
-          signal: abortControllerRef.current.signal,
-        })
-        const data = await res.json()
+        const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body: getVoicePayload(fakeFrag as SceneFragment, targetScenes[0], project, voiceOpts), signal: abortControllerRef.current.signal })
+        if (error || data === undefined) throw new Error(apiErrorMessage(error))
 
-        if (res.ok && data.status === 'ok') {
+        if (data.status === 'ok') {
           const p = `${projectPath}/assets/voice/${data.audio_url}`
           const allFragments = targetScenes.flatMap(s => s.fragments)
           const recalculated = recalculateTimingsProportionally(allFragments, data.duration || 1)
@@ -294,12 +248,9 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
               continue
             }
             const fakeFrag = { ...scene.fragments[0], text: combinedText, id: scene.id }
-            const res = await fetch(`${API}/api/v1/audio/generate`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(getVoicePayload(fakeFrag as SceneFragment, scene, project, voiceOpts)), signal: abortControllerRef.current.signal,
-            })
-            const data = await res.json()
-            if (res.ok && data.status === 'ok') {
+            const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body: getVoicePayload(fakeFrag as SceneFragment, scene, project, voiceOpts), signal: abortControllerRef.current.signal })
+            if (error || data === undefined) throw new Error(apiErrorMessage(error))
+            if (data.status === 'ok') {
               const p = `${projectPath}/assets/voice/${data.audio_url}`
               scene.fragments = recalculateTimingsProportionally(scene.fragments, data.duration || 1)
               scene.fragments.forEach(f => {
@@ -317,12 +268,9 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
                 scene.fragments[fIdx] = frag
                 continue
               }
-              const res = await fetch(`${API}/api/v1/audio/generate`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(getVoicePayload(frag, scene, project, voiceOpts)), signal: abortControllerRef.current.signal,
-              })
-              const data = await res.json()
-              if (res.ok && data.status === 'ok') {
+              const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body: getVoicePayload(frag, scene, project, voiceOpts), signal: abortControllerRef.current.signal })
+              if (error || data === undefined) throw new Error(apiErrorMessage(error))
+              if (data.status === 'ok') {
                 const p = `${projectPath}/assets/voice/${data.audio_url}`
                 frag.audioFileName = p
                 frag.lastAudioHash = hashCode(frag.text)
@@ -353,7 +301,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       if (!abortControllerRef.current?.signal.aborted) showNotification(`Озвучка сгенерирована (${successCount}/${targetScenes.length})!`, 'success')
       return { scenes: updatedScenes, activeAudio: activeAudioPath }
     } catch (e: unknown) {
-      if (e instanceof Error && e.name !== 'AbortError') showNotification('Сбой генерации голоса', 'error')
+      if (!isRequestCanceled(e)) showNotification('Сбой генерации голоса', 'error')
       return { scenes: project.scenes, activeAudio: null }
     } finally {
       setIsGeneratingAudio(false)
@@ -375,20 +323,19 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         const globalAudioPath = targetScenes[0]?.fragments[0]?.audioFileName
         if (!globalAudioPath) throw new Error("Аудио не найдено")
 
-        const res = await fetch(`${API}/api/v1/audio/sync`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const { data, error } = await fetchClient.POST('/api/v1/audio/sync', {
+          body: {
             scene_id: 'project_sync', audio_path: globalAudioPath,
             fragments: allFragments, project_path: getProjectPath(project),
             use_whisper: useWhisper, auto_offload_vram: autoOffloadVram, whisper_model: whisperModel,
-          }),
+          } as never,
           signal: abortControllerRef.current.signal,
         })
-        const data = await res.json()
+        if (error || data === undefined) throw new Error(apiErrorMessage(error))
         if (data.fallback) fCount += allFragments.length; else wCount += allFragments.length
 
         if (data.status === 'ok' && data.fragments_timings) {
-          const timingMap = Object.fromEntries(data.fragments_timings.map((t: FragmentTiming) => [t.id, t]))
+          const timingMap = Object.fromEntries((data.fragments_timings as FragmentTiming[]).map((t: FragmentTiming) => [t.id, t]))
 
           for (const scene of targetScenes) {
             const firstTiming = timingMap[scene.fragments[0].id]
@@ -416,22 +363,21 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       } else {
         for (const scene of targetScenes) {
           if (abortControllerRef.current?.signal.aborted) break
-          const res = await fetch(`${API}/api/v1/audio/sync`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          const { data, error } = await fetchClient.POST('/api/v1/audio/sync', {
+            body: {
               scene_id: scene.id, audio_path: getAudioPathForScene(project, scene),
               fragments: scene.fragments.map(f => ({ id: f.id, text: f.text })),
               project_path: getProjectPath(project), use_whisper: useWhisper, auto_offload_vram: autoOffloadVram, whisper_model: whisperModel,
-            }),
+            } as never,
             signal: abortControllerRef.current.signal,
           })
-          const data = await res.json()
+          if (error || data === undefined) throw new Error(apiErrorMessage(error))
           if (data.fallback) fCount++
           else wCount++
 
           let syncedFragments = [...scene.fragments]
           if (data.status === 'ok' && data.fragments_timings) {
-            const timingMap = Object.fromEntries(data.fragments_timings.map((t: FragmentTiming) => [t.id, t]))
+            const timingMap = Object.fromEntries((data.fragments_timings as FragmentTiming[]).map((t: FragmentTiming) => [t.id, t]))
             syncedFragments = scene.fragments.map(f => {
               const t = timingMap[f.id]
               if (!t) return f
@@ -458,7 +404,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       if (!abortControllerRef.current?.signal.aborted) showNotification(`Синхронизация завершена (Whisper: ${wCount}, Fallback: ${fCount})`, fCount > 0 && wCount === 0 ? 'info' : 'success')
       return updatedScenes
     } catch (e: unknown) {
-      if (e instanceof Error && e.name !== 'AbortError') showNotification('Сбой синхронизации', 'error')
+      if (!isRequestCanceled(e)) showNotification('Сбой синхронизации', 'error')
       return project.scenes
     } finally {
       setIsSyncing(false)
@@ -467,8 +413,9 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
 
   const handleUnloadVram = async () => {
     try {
-      const res = await fetch(`${API}/api/v1/audio/vram/unload`, { method: 'POST' })
-      if (res.ok) showNotification('VRAM память видеокарты очищена!', 'success')
+      const { error } = await fetchClient.POST('/api/v1/audio/vram/unload')
+      if (error) throw new Error(apiErrorMessage(error))
+      showNotification('VRAM память видеокарты очищена!', 'success')
     } catch { showNotification('Ошибка очистки VRAM', 'error') }
   }
 
@@ -495,15 +442,15 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
     fd.append('project_path', getProjectPath(project))
     fd.append('target_id', sceneId)
     try {
-      const res = await fetch(`${API}/api/v1/media/upload-audio`, { method: 'POST', body: fd })
-      const data = await res.json()
+      const { data, error } = await fetchClient.POST('/api/v1/media/upload-audio', { body: fd as never })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok') {
         const scene = project.scenes.find(s => s.id === sceneId)
         if (!scene) return
-        const newFragments = recalculateTimingsProportionally(scene.fragments, data.duration)
+        const newFragments = recalculateTimingsProportionally(scene.fragments, data.duration as number)
 
         newFragments.forEach(f => {
-          f.audioFileName = data.path;
+          f.audioFileName = data.path ?? undefined;
           f.lastAudioHash = hashCode(f.text);
           f.lastAudioTextNormalized = normalizeText(f.text);
         });
@@ -542,10 +489,10 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         fd.append('scene_ids', JSON.stringify(sceneIds))
         batchFiles.forEach(f => fd.append('files', f))
 
-        const uploadRes = await fetch(`${API}/api/v1/audio/batch-upload-scenes`, { method: 'POST', body: fd })
-        const uploadData = await uploadRes.json()
-        if (!uploadRes.ok || uploadData.status !== 'ok') {
-          throw new Error(uploadData.detail || 'Ошибка пакетной загрузки аудио')
+        const { data: uploadData, error } = await fetchClient.POST('/api/v1/audio/batch-upload-scenes', { body: fd as never })
+        if (error || uploadData === undefined) throw new Error(apiErrorMessage(error))
+        if (uploadData.status !== 'ok') {
+          throw new Error((uploadData as typeof uploadData & { detail?: string | null }).detail || 'Ошибка пакетной загрузки аудио')
         }
 
         const matches = (uploadData.matches || []) as { scene_id: string; absolute_path: string; duration: number }[]
@@ -589,26 +536,22 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
     fd.append('target_id', scope === 'fragment' ? targetFragmentId || 'frag' : targetSceneId || 'scene')
 
     try {
-      const uploadRes = await fetch(`${API}/api/v1/media/upload-audio`, { method: 'POST', body: fd })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok || uploadData.status !== 'ok') {
-        throw new Error(uploadData.detail || 'Ошибка загрузки аудио')
+      const { data: uploadData, error } = await fetchClient.POST('/api/v1/media/upload-audio', { body: fd as never })
+      if (error || uploadData === undefined) throw new Error(apiErrorMessage(error))
+      if (uploadData.status !== 'ok') {
+        throw new Error((uploadData as typeof uploadData & { detail?: string | null }).detail || 'Ошибка загрузки аудио')
       }
 
-      const savedAudioPath = uploadData.path
+      const savedAudioPath = uploadData.path ?? undefined
       const audioDuration = uploadData.duration || 0
       let spokenText = manualRefText.trim()
 
       if (transcribeWithWhisper && !spokenText) {
         showNotification('Распознавание речи через Whisper...', 'info')
-        const transRes = await fetch(`${API}/api/v1/audio/transcribe`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio_path: savedAudioPath, whisper_model: 'small' }),
-        })
-        const transData = await transRes.json()
-        if (transRes.ok && transData.status === 'ok') {
-          spokenText = transData.text
+        const { data: transData, error } = await fetchClient.POST('/api/v1/audio/transcribe', { body: { audio_path: savedAudioPath, whisper_model: 'small' } as never })
+        if (error || transData === undefined) throw new Error(apiErrorMessage(error))
+        if (transData.status === 'ok') {
+          spokenText = transData.text ?? ''
         } else {
           showNotification('Не удалось распознать речь, используем текущий сценарий', 'info')
         }

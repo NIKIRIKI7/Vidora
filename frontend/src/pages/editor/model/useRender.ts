@@ -1,5 +1,7 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState } from 'react'
-import { API, getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, generateDefaultSceneTsx } from '@entities/project'
+import { isRequestCanceled } from '@shared/lib/http'
+import { getProjectPath, getAudioPathForScene, sanitizeFilename, hashCode, generateDefaultSceneTsx } from '@entities/project'
 import { generateRemotionPrompt } from '@features/editor-utils'
 import { serializeProjectToMarkdown } from '@entities/project'
 import type { ProjectSettings, Scene, SceneFragment, ApiKeys } from '@entities/project'
@@ -67,27 +69,24 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     abortControllerRef.current = new AbortController()
 
     try {
-      const res = await fetch(`${API}/api/v1/code/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_id: sceneToUse.id, prompt: generateRemotionPrompt(project, sceneToUse), project_data: project, project_path: getProjectPath(project), engine: llmEngine, api_keys: apiKeys }),
-        signal: abortControllerRef.current.signal,
-      })
-      const data = await res.json()
+      const { data, error } = await fetchClient.POST('/api/v1/code/generate', { body: { target_id: sceneToUse.id, prompt: generateRemotionPrompt(project, sceneToUse), project_data: project, project_path: getProjectPath(project), engine: llmEngine, api_keys: apiKeys }, signal: abortControllerRef.current.signal })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
 
       if (data.tsx_code && data.status === 'ok') {
+        const tsxCode = data.tsx_code
         onUpdateProject({
           ...project,
-          scenes: project.scenes.map(s => (s.id === sceneToUse.id ? { ...s, ...pushCodeHistory(sceneToUse, data.tsx_code, project) } : s)),
+          scenes: project.scenes.map(s => (s.id === sceneToUse.id ? { ...s, ...pushCodeHistory(sceneToUse, tsxCode, project) } : s)),
         })
         if (!abortControllerRef.current?.signal.aborted) showNotification('TSX код сгенерирован', 'success')
-        return data.tsx_code
+        return tsxCode
       }
       if (data.tsx_code && data.status !== 'ok' && !abortControllerRef.current?.signal.aborted) {
         const msg = data.tsx_code.replace(/^\/\/\s*/, '').trim()
         if (msg) showNotification(msg, 'error')
       }
     } catch (error: unknown) {
-      if (error instanceof Error && error.name !== 'AbortError') showNotification('Сбой генерации кода', 'error')
+      if (!isRequestCanceled(error)) showNotification('Сбой генерации кода', 'error')
     } finally {
       setIsGeneratingCode(false)
     }
@@ -108,11 +107,10 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       }
       signal.addEventListener('abort', onAbort, { once: true })
 
-      fetch(`${API}/api/v1/render/start`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, broll_sources: brollSources, background_music: project.backgroundMusic, render_quality: project.renderQuality || 'medium' }),
-        signal,
-      }).then(res => res.json()).then(data => {
+      fetchClient.POST('/api/v1/render/start', { body: { project_id: project.name, target: 'scene', target_id: sceneId, project_path: projectPath, tsx_code: code, audio_path: audioPath, broll_sources: brollSources, background_music: project.backgroundMusic, render_quality: project.renderQuality || 'medium' }, signal }).then(({ data, error }) => {
+        if (error || data === undefined) throw new Error(apiErrorMessage(error))
+        return data
+      }).then(data => {
         if (signal.aborted) return
         if (!data.task_id) {
           signal.removeEventListener('abort', onAbort)
@@ -153,20 +151,19 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       try {
         return await renderSingleScenePromise(scene.id, currentCode, audioPath, projectPath, signal)
       } catch (err: unknown) {
-        if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) return null
+        if (signal.aborted || isRequestCanceled(err)) return null
         if (attempt < retriesLeft && !scene.ignoreTsx) {
           showNotification(`Ошибка рендера. ИИ исправляет... (Попытка ${attempt + 1}/${retriesLeft})`, 'info')
           try {
             setIsGeneratingCode(true)
-            const res = await fetch(`${API}/api/v1/code/generate`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+            const { data, error } = await fetchClient.POST('/api/v1/code/generate', {
+              body: {
                 target_id: scene.id, prompt: generateRemotionPrompt(project, scene) + '\n\nПредыдущий код вызвал ошибку:\n' + (err as Error).message + '\n\nИсправь код и верни только полностью исправленный TSX.',
                 project_data: project, project_path: projectPath, engine: llmEngine, api_keys: apiKeys,
-              }),
+              },
               signal,
             })
-            const data = await res.json()
+            if (error || data === undefined) throw new Error(apiErrorMessage(error), { cause: err })
             if (data.tsx_code && data.status === 'ok' && isUsableCode(data.tsx_code)) {
               currentCode = data.tsx_code
               onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === scene.id ? { ...s, ...pushCodeHistory(scene, currentCode, project) } : s) })
@@ -182,7 +179,8 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
               try {
                 const fallbackResult = await renderSingleScenePromise(scene.id, fallbackCode, audioPath, projectPath, signal)
                 if (fallbackResult) return fallbackResult
-              } catch {
+              } catch (fallbackErr) {
+                console.error('Fallback scene render:', fallbackErr)
                 if (signal.aborted) return null
               }
             }
@@ -234,10 +232,10 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
         if (allScenesRendered && nextRenderedVideos[`Project_${project.name}`]) {
           showNotification('Обновление общего видео...', 'info')
           const finalProjectVideoPath = `${getProjectPath(project)}/preview/Project_${sanitizeFilename(project.name)}.mp4`
-          fetch(`${API}/api/v1/render/concat-video`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project_path: getProjectPath(project), video_paths: renderedSceneVideoPaths, output_path: finalProjectVideoPath }),
-          }).then(res => res.json()).then(concatData => {
+          fetchClient.POST('/api/v1/render/concat-video', { body: { project_path: getProjectPath(project), video_paths: renderedSceneVideoPaths, output_path: finalProjectVideoPath } }).then(({ data, error }) => {
+            if (error || data === undefined) throw new Error(apiErrorMessage(error))
+            return data
+          }).then(concatData => {
             if (concatData.status === 'ok') {
               setRenderedVideos(v => ({ ...v, [`Project_${project.name}`]: finalProjectVideoPath }))
               showNotification('Рендер сцены и склейка проекта завершены!', 'success')
@@ -300,12 +298,8 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       if (abortControllerRef.current.signal.aborted) return
 
       const finalProjectVideoPath = `${projectPath}/preview/Project_${sanitizeFilename(project.name)}.mp4`
-      const concatRes = await fetch(`${API}/api/v1/render/concat-video`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_path: projectPath, video_paths: renderedSceneVideoPaths, output_path: finalProjectVideoPath }),
-        signal: abortControllerRef.current.signal,
-      })
-      const concatData = await concatRes.json()
+      const { data: concatData, error } = await fetchClient.POST('/api/v1/render/concat-video', { body: { project_path: projectPath, video_paths: renderedSceneVideoPaths, output_path: finalProjectVideoPath }, signal: abortControllerRef.current.signal })
+      if (error || concatData === undefined) throw new Error(apiErrorMessage(error))
 
       if (concatData.status === 'ok') {
         setRenderedVideos(prev => ({ ...prev, [`Project_${project.name}`]: finalProjectVideoPath }))
@@ -315,7 +309,7 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
       } else { showNotification('Ошибка склейки проекта', 'error') }
 
     } catch (error: unknown) {
-      if (error instanceof Error && error.name !== 'AbortError') showNotification('Сбой сборки', 'error')
+      if (!isRequestCanceled(error)) showNotification('Сбой сборки', 'error')
     } finally {
       setIsRendering(false)
       setRenderType(null)
@@ -338,12 +332,9 @@ export const useRender = ({ project, onUpdateProject, activeScene, llmEngine, ap
     showNotification('Подготовка архива...', 'info')
     try {
       const markdownContent = serializeProjectToMarkdown(project)
-      const res = await fetch(`${API}/api/v1/render/export`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: getProjectPath(project), markdown: markdownContent }),
-      })
-      if (!res.ok) throw new Error('Export error')
-      const blob = await res.blob()
+      const { data, error } = await fetchClient.POST('/api/v1/render/export', { body: { project_name: getProjectPath(project), markdown: markdownContent }, parseAs: 'blob' })
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      const blob = data
 
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')

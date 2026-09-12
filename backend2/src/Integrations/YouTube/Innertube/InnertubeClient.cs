@@ -91,7 +91,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
             return _searchExtractor.Extract(root, maxResults);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[InnerTube] Search failed: {Query}", query);
             return [];
@@ -110,7 +110,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendNextAsync(videoId, lang, region, ct);
             return _watchNextExtractor.ExtractRelatedVideos(root, maxResults);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Related videos fetch failed for {VideoId}", videoId);
             return [];
@@ -126,7 +126,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendBrowseAsync(_options.BrowseIds.Trending, lang, region, ct);
             return ExtractBrowseVideos(root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Trending feed fetch failed");
             return [];
@@ -142,7 +142,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendBrowseAsync(_options.BrowseIds.HomeFeed, lang, region, ct);
             return ExtractHomeFeedVideos(root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Home feed fetch failed");
             return [];
@@ -180,7 +180,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
             return 0;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Channel subscribers fetch failed for {ChannelId}", channelId);
             return 0;
@@ -196,7 +196,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Android, ct);
             return _playerExtractor.ExtractSubtitleTracks(root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Subtitle tracks fetch failed for {VideoId}", videoId);
             return [];
@@ -213,7 +213,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var items = _playerExtractor.ExtractVideoItems(root, 1);
             return items.FirstOrDefault();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Video details fetch failed for {VideoId}", videoId);
             return null;
@@ -230,7 +230,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var comments = _watchNextExtractor.ExtractComments(root, maxComments);
             return comments.Select(c => c.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Comments fetch failed for {VideoId}", videoId);
             return [];
@@ -255,7 +255,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
             return comments.Concat(moreComments).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Detailed comments fetch failed for {VideoId}", videoId);
             return [];
@@ -271,7 +271,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Web, ct);
             return _playerExtractor.ExtractHeatmap(root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Heatmap fetch failed for {VideoId}", videoId);
             return [];
@@ -287,7 +287,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendNextAsync(videoId, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
             return _watchNextExtractor.ExtractChapters(root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Chapters fetch failed for {VideoId}", videoId);
             return [];
@@ -303,7 +303,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Web, ct);
             return _playerExtractor.ExtractWordTimestamps(root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Word timestamps fetch failed for {VideoId}", videoId);
             return [];
@@ -323,7 +323,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var root = await _transport.SendSearchAsync(query, lang, region, searchParams, ct);
             return _searchExtractor.Extract(root, maxResults);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[InnerTube] Filtered search failed: {Query}", query);
             return [];
@@ -365,7 +365,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
             return new InnerTubeChannelStats(subscriberCount, totalViewCount, videoCount, description);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Channel stats fetch failed for {ChannelId}", channelId);
             return new InnerTubeChannelStats(0, 0, 0, "");
@@ -423,7 +423,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
             return uploads.Take(maxUploads).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Channel uploads fetch failed for {ChannelId}", channelId);
             return [];
@@ -538,7 +538,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
             var clean = CleanSpacesRegex().Replace(sb.ToString(), " ").Trim();
             return clean.Length > _options.Subtitles.MinLength ? clean : null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Subtitles unavailable for {VideoId}", videoId);
             return null;

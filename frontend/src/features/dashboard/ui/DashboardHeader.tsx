@@ -1,15 +1,27 @@
 import React from 'react'
 import { Cpu, Settings, Sparkles } from 'lucide-react'
+import { $api } from '@shared/api'
 import { useDashboardStore } from '../model/useDashboardStore'
 
-export const DashboardHeader: React.FC = () => {
-  const { hardware, openModal, setCurrentView } = useDashboardStore()
+interface Props {
+  onOpenSettings?: () => void
+}
+
+export const DashboardHeader: React.FC<Props> = ({ onOpenSettings }) => {
+  const { setCurrentView } = useDashboardStore()
+
+  // Данные о железе берём напрямую из бэкенда (реактивно + кэш React Query).
+  const { data: hardware, isLoading } = $api.useQuery('get', '/api/v1/system/hardware', {})
 
   const isCuda = hardware?.gpu_type === 'cuda'
   const deviceShortName = hardware?.device
     ? hardware.device.replace(/^NVIDIA\s+GeForce\s+/i, '').replace(/^NVIDIA\s+/i, '')
     : 'CPU Mode'
-  const vramDisplay = hardware && isCuda ? `${hardware.vram_gb} GB VRAM` : 'RAM Engine'
+  const vramDisplay = isLoading
+    ? 'Загрузка...'
+    : hardware && isCuda
+      ? `${(hardware.vram_gb ?? 0).toFixed(1)} GB VRAM`
+      : 'RAM Engine'
 
   return (
     <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-2xl px-8 flex items-center justify-between sticky top-0 z-30 select-none">
@@ -28,15 +40,15 @@ export const DashboardHeader: React.FC = () => {
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-medium text-slate-300 shadow-sm">
           <Cpu size={14} className={isCuda ? 'text-emerald-400' : 'text-slate-400'} />
-          <span className="font-semibold text-white">{deviceShortName}</span>
+          <span className="font-semibold text-white">{isLoading ? 'Инициализация...' : deviceShortName}</span>
           <span className="text-slate-600">•</span>
           <span className="font-mono text-slate-400 text-[11px]">{vramDisplay}</span>
         </div>
 
         <button
-          onClick={() => openModal('settings')}
-          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-xs font-semibold"
-          title="Глобальные настройки"
+          onClick={onOpenSettings}
+          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+          title="Глобальные настройки (AI, API, Промпты)"
         >
           <Settings size={15} />
         </button>

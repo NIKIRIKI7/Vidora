@@ -59,7 +59,7 @@ public static class YouTubeAgentEndpoints
                 await context.Response.WriteAsync(line, ct);
                 await context.Response.Body.FlushAsync(ct);
             }
-        });
+        }).Produces<string>(StatusCodes.Status200OK, "application/x-ndjson");
 
         // 2. Competitor suggestions
         group.MapPost("/agent/suggest-competitors", async (
@@ -72,24 +72,43 @@ public static class YouTubeAgentEndpoints
             try
             {
                 var channels = await llm.GenerateJsonAsync<List<string>>(spec, ct);
-                return Results.Ok(new { status = "ok", channels = channels ?? ["Fireship", "NetworkChuck", "ThePrimeagen"] });
+                if (channels == null || channels.Count == 0)
+                {
+                    return Results.Problem("Не удалось сгенерировать список конкурентов");
+                }
+                return Results.Ok(new { status = "ok", channels });
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Ok(new { status = "ok", channels = new[] { "Fireship", "NetworkChuck", "ThePrimeagen", "TechLead" } });
+                return Results.Problem(ex.Message);
             }
-        });
+        }).Produces<SuggestCompetitorsResponse>();
 
         // 3. Channel analysis
-        group.MapPost("/agent/analyze-channel", (AnalyzeChannelRequest request) =>
+        group.MapPost("/agent/analyze-channel", async (
+            AnalyzeChannelRequest request,
+            IYouTubeVideoInspector inspector,
+            CancellationToken ct) =>
         {
-            var name = request.UrlOrName.Split('/').Last().Replace("@", "");
-            return Results.Ok(new
+            if (string.IsNullOrWhiteSpace(request.UrlOrName))
             {
-                status = "ok",
-                context = $"Канал {name}: фокус на динамичные IT-туториалы, средний хронометраж 4-8 минут, молодая аудитория разработчиков."
-            });
-        });
+                return Results.BadRequest(new { status = "error", error = "UrlOrName required" });
+            }
+
+            try
+            {
+                var summary = await inspector.GetMetadataSummaryAsync(request.UrlOrName, ct);
+                return Results.Ok(new
+                {
+                    status = "ok",
+                    context = $"Канал {summary.ChannelTitle}: {summary.Title} — {summary.Description}"
+                });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return Results.Problem(ex.Message);
+            }
+        }).Produces<AnalyzeChannelResponse>();
 
         // 4. Hook analysis
         group.MapPost("/agent/analyze-hook", async (
@@ -189,7 +208,7 @@ public static class YouTubeAgentEndpoints
                     },
                     statusCode: StatusCodes.Status502BadGateway);
             }
-        });
+        }).Produces<AnalyzeHookResponse>();
 
         static JsonElement JsonSerializedEmptyArray() => JsonDocument.Parse("[]").RootElement.Clone();
 
@@ -223,23 +242,11 @@ public static class YouTubeAgentEndpoints
                 var script = await llm.GenerateTextAsync(new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: 0.4f), ct);
                 return Results.Ok(new { status = "ok", markdown = script });
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                var defaultScript = $$"""
-                ---
-                title: "{{request.Title}}"
-                fps: 30
-                ---
-                [Хук] (00:00:00)
-                *(Постерный сплит: яркий заголовок)* {{request.Title}} — почему все говорят об этом прямо сейчас?
-                [Разбор темы] (00:00:12)
-                *(Инфографика: демонстрация шагов)* Давайте разберем главные принципы работы на практике.
-                [Финал] (00:00:35)
-                *(B-roll: логотип и ссылки)* Сохраняйте себе и делитесь с коллегами.
-                """;
-                return Results.Ok(new { status = "ok", markdown = defaultScript });
+                return Results.Problem("Ошибка при генерации сценария: " + ex.Message);
             }
-        });
+        }).Produces<DraftScriptResponse>();
 
         // 6. More videos
         group.MapPost("/more-videos", async (
@@ -278,7 +285,7 @@ public static class YouTubeAgentEndpoints
                     };
                 }).ToList();
             return Results.Ok(new { status = "ok", results });
-        });
+        }).Produces<MoreVideosResponse>();
 
         // 7. Download metadata
         group.MapPost("/download-meta", async (
@@ -297,7 +304,7 @@ public static class YouTubeAgentEndpoints
                     transcript_full = string.IsNullOrWhiteSpace(meta.Description) ? meta.Title : meta.Description
                 }
             });
-        });
+        }).Produces<DownloadMetaResponse>();
 
         // -------------------------------------------------------------
         // YouTube Video Deep-Dive & Retention Inspector
@@ -316,7 +323,7 @@ public static class YouTubeAgentEndpoints
 
             var heatmap = await inspector.GetHeatmapAsync(videoId, ct);
             return Results.Ok(new { heatmap });
-        });
+        }).Produces<VideoHeatmapResponse>();
 
         videoGroup.MapGet("/chapters", async (
             string videoId,
@@ -330,7 +337,7 @@ public static class YouTubeAgentEndpoints
 
             var chapters = await inspector.GetChaptersAsync(videoId, ct);
             return Results.Ok(new { chapters });
-        });
+        }).Produces<VideoChaptersResponse>();
 
         videoGroup.MapGet("/comments-detailed", async (
             string videoId,
@@ -346,7 +353,7 @@ public static class YouTubeAgentEndpoints
             maxComments = Math.Clamp(maxComments, 1, 100);
             var comments = await inspector.GetCommentsDetailedAsync(videoId, maxComments, ct);
             return Results.Ok(new { comments });
-        });
+        }).Produces<VideoCommentsResponse>();
 
         videoGroup.MapGet("/deep-dive", async (
             string videoId,
@@ -376,7 +383,7 @@ public static class YouTubeAgentEndpoints
 
             var result = new VideoDeepDiveDto(videoId, metadata, heatmap, chapters, comments);
             return Results.Ok(result);
-        });
+        }).Produces<VideoDeepDiveDto>();
 
         static async Task<T?> TryFetchAsync<T>(Func<Task<T>> fetch)
         {
@@ -461,3 +468,60 @@ public sealed record MoreVideosRequest(
 public sealed record DownloadMetaRequest(
     [property: JsonPropertyName("url")] string Url,
     [property: JsonPropertyName("project_path")] string? ProjectPath);
+
+public sealed record SuggestCompetitorsResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("channels")] IReadOnlyList<string> Channels);
+
+public sealed record AnalyzeChannelResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("context")] string Context);
+
+public sealed record AnalyzeHookResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("data")] IReadOnlyDictionary<string, object?> Data);
+
+public sealed record DraftScriptResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("markdown")] string Markdown);
+
+public sealed record MoreVideoItemResponse(
+    [property: JsonPropertyName("video_id")] string VideoId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("channel")] string Channel,
+    [property: JsonPropertyName("views")] long Views,
+    [property: JsonPropertyName("subs")] long Subs,
+    [property: JsonPropertyName("ratio")] double Ratio,
+    [property: JsonPropertyName("vph")] double Vph,
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("thumbnail_url")] string ThumbnailUrl,
+    [property: JsonPropertyName("published_at")] string PublishedAt,
+    [property: JsonPropertyName("duration_sec")] double DurationSec,
+    [property: JsonPropertyName("is_short")] bool IsShort,
+    [property: JsonPropertyName("transcript_status")] string TranscriptStatus,
+    [property: JsonPropertyName("transcript_sample")] string TranscriptSample,
+    [property: JsonPropertyName("m_score")] double MScore,
+    [property: JsonPropertyName("is_rocket")] bool IsRocket,
+    [property: JsonPropertyName("acceleration_pct")] string AccelerationPct);
+
+public sealed record MoreVideosResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("results")] IReadOnlyList<MoreVideoItemResponse> Results);
+
+public sealed record DownloadMetaDataResponse(
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("channel")] string Channel,
+    [property: JsonPropertyName("transcript_full")] string TranscriptFull);
+
+public sealed record DownloadMetaResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("data")] DownloadMetaDataResponse Data);
+
+public sealed record VideoHeatmapResponse(
+    [property: JsonPropertyName("heatmap")] IReadOnlyList<HeatmapPointDto> Heatmap);
+
+public sealed record VideoChaptersResponse(
+    [property: JsonPropertyName("chapters")] IReadOnlyList<VideoChapterDto> Chapters);
+
+public sealed record VideoCommentsResponse(
+    [property: JsonPropertyName("comments")] IReadOnlyList<DetailedCommentDto> Comments);

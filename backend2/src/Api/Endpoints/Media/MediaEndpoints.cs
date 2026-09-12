@@ -35,7 +35,7 @@ public static class MediaEndpoints
 
             var result = await media.GetAssetsAsync(filterType, page, pageSize, ct);
             return Results.Ok(result);
-        });
+        }).Produces<PagedResult<MediaAssetDto>>();
 
         group.MapGet("/{id}", async (
             string id,
@@ -44,7 +44,7 @@ public static class MediaEndpoints
         {
             var asset = await media.GetAssetByIdAsync(id, ct);
             return Results.Ok(asset);
-        });
+        }).Produces<MediaAssetDto>();
 
         group.MapPost("/upload", async (
             IFormFile file,
@@ -73,7 +73,7 @@ public static class MediaEndpoints
 
             var duration = await ProbeDurationAsync(processSupervisor, asset.StoragePath, ct);
             return Results.Ok(ToUploadResult(asset, duration));
-        }).DisableAntiforgery();
+        }).Produces<MediaUploadResult>().DisableAntiforgery();
 
         // Загрузка собственного аудио (озвучка/референс). Возвращает status/path/filename/duration.
         group.MapPost("/upload-audio", async (
@@ -96,7 +96,7 @@ public static class MediaEndpoints
 
             var duration = await ProbeDurationAsync(processSupervisor, asset.StoragePath, ct);
             return Results.Ok(ToUploadResult(asset, duration));
-        }).DisableAntiforgery();
+        }).Produces<MediaUploadResult>().DisableAntiforgery();
 
         // Загрузка пользовательского музыкального трека (аудиотека проекта).
         group.MapPost("/upload-music", async (
@@ -119,7 +119,7 @@ public static class MediaEndpoints
 
             var duration = await ProbeDurationAsync(processSupervisor, asset.StoragePath, ct);
             return Results.Ok(ToUploadResult(asset, duration));
-        }).DisableAntiforgery();
+        }).Produces<MediaUploadResult>().DisableAntiforgery();
 
         group.MapDelete("/{id}", async (
             string id,
@@ -128,7 +128,7 @@ public static class MediaEndpoints
         {
             await media.DeleteAssetAsync(id, ct);
             return Results.NoContent();
-        });
+        }).Produces(StatusCodes.Status204NoContent);
 
         group.MapPost("/{id}/normalize", async (
             string id,
@@ -144,7 +144,7 @@ public static class MediaEndpoints
                 ct);
 
             return Results.Ok(result);
-        });
+        }).Produces<NormalizedBrollDto>();
 
         group.MapGet("/music/catalog", async (
             string mood = "",
@@ -153,7 +153,7 @@ public static class MediaEndpoints
         {
             var catalog = await media.GetMusicCatalogAsync(mood, ct);
             return Results.Ok(catalog);
-        });
+        }).Produces<IReadOnlyList<MusicTrackDto>>();
 
         group.MapGet("/stock/search", async (
             string query = "",
@@ -171,7 +171,7 @@ public static class MediaEndpoints
                 ct);
 
             return Results.Ok(videos);
-        });
+        }).Produces<IReadOnlyList<StockVideoDto>>();
 
         group.MapPost("/stock/import", async (
             [FromBody] ImportStockVideoRequest request,
@@ -184,10 +184,11 @@ public static class MediaEndpoints
                 ct);
 
             return Results.Created($"/api/v1/media/{asset.Id}", asset);
-        });
+        }).Produces<MediaAssetDto>(StatusCodes.Status201Created);
 
         group.MapPost("/process-broll", async ([FromBody] ProcessBrollCommand cmd, IMediaModule media, CancellationToken ct) =>
-            Results.Ok(await media.ProcessBrollAsync(cmd, ct)));
+            Results.Ok(await media.ProcessBrollAsync(cmd, ct)))
+            .Produces<ProcessBrollResponse>();
 
         // AI-автоподбор B-Roll по визуальным ремаркам фрагментов.
         group.MapPost("/auto-broll", async (
@@ -197,7 +198,7 @@ public static class MediaEndpoints
         {
             var response = await media.AutoMatchBrollAsync(cmd, ct);
             return Results.Ok(response);
-        });
+        }).Produces<AutoBrollResponse>();
 
         // --- Media streaming endpoint (Range/206 for video scrubbing) ---
         group.MapGet("/stream", (
@@ -225,7 +226,7 @@ public static class MediaEndpoints
             };
 
             return Results.File(safePath, contentType, enableRangeProcessing: true);
-        });
+        }).Produces<byte[]>(StatusCodes.Status200OK, "application/octet-stream");
 
         // --- Compatibility aliases for frontend ---
         endpoints.MapGet("/api/v1/render/media", (
@@ -248,18 +249,28 @@ public static class MediaEndpoints
             };
 
             return Results.File(safePath, contentType, enableRangeProcessing: true);
-        });
+        }).Produces<byte[]>(StatusCodes.Status200OK, "application/octet-stream");
 
         endpoints.MapGet("/api/v1/media/search-stock", async (string query, string orientation = "", IMediaModule media = null!, CancellationToken ct = default) =>
-            Results.Ok(new { status = "ok", videos = await media.SearchStockVideosAsync(query, orientation, 1, 15, ct) }));
+            Results.Ok(new { status = "ok", videos = await media.SearchStockVideosAsync(query, orientation, 1, 15, ct) }))
+            .Produces<MediaSearchStockResponse>();
 
         endpoints.MapPost("/api/v1/media/download-stock", async ([FromBody] JsonElement payload, IMediaModule media, CancellationToken ct) =>
         {
-            var url = payload.GetProperty("url").GetString()!;
-            var filename = payload.GetProperty("filename").GetString()!;
+            if (payload.ValueKind != JsonValueKind.Object ||
+                !payload.TryGetProperty("url", out var urlProp) ||
+                !payload.TryGetProperty("filename", out var filenameProp) ||
+                urlProp.ValueKind != JsonValueKind.String ||
+                filenameProp.ValueKind != JsonValueKind.String)
+            {
+                return Results.BadRequest(new { error = "url and filename are required" });
+            }
+
+            var url = urlProp.GetString()!;
+            var filename = filenameProp.GetString()!;
             var asset = await media.DownloadAndImportStockVideoAsync(url, filename, ct);
             return Results.Ok(new { status = "ok", path = asset.StoragePath });
-        });
+        }).Produces<MediaDownloadStockResponse>();
 
         endpoints.MapGet("/api/v1/media/music-library", async (IMediaModule media, CancellationToken ct) =>
         {
@@ -270,7 +281,7 @@ public static class MediaEndpoints
                 categories = new[] { new { category = "default", category_title = "Standard Collection", tracks } },
                 custom_tracks = Array.Empty<object>()
             });
-        });
+        }).Produces<MediaMusicLibraryResponse>();
 
         return endpoints;
     }
@@ -381,3 +392,21 @@ public sealed record NormalizeBrollRequest(
 public sealed record ImportStockVideoRequest(
     [property: JsonPropertyName("download_url")] string DownloadUrl,
     [property: JsonPropertyName("title")] string Title);
+
+public sealed record MediaSearchStockResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("videos")] IReadOnlyList<StockVideoDto> Videos);
+
+public sealed record MediaDownloadStockResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("path")] string Path);
+
+public sealed record MusicCategoryResponse(
+    [property: JsonPropertyName("category")] string Category,
+    [property: JsonPropertyName("category_title")] string CategoryTitle,
+    [property: JsonPropertyName("tracks")] IReadOnlyList<MusicTrackDto> Tracks);
+
+public sealed record MediaMusicLibraryResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("categories")] IReadOnlyList<MusicCategoryResponse> Categories,
+    [property: JsonPropertyName("custom_tracks")] IReadOnlyList<object> CustomTracks);

@@ -27,7 +27,7 @@ public static class VoiceEndpoints
         {
             var engines = await voice.GetAvailableEnginesAsync(ct);
             return Results.Ok(engines);
-        });
+        }).Produces<IReadOnlyList<VoiceEngineInfoDto>>();
 
         group.MapPost("/synthesize", async (SynthesizeSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
@@ -49,7 +49,7 @@ public static class VoiceEndpoints
 
             var result = await voice.SynthesizeSpeechAsync(command, ct);
             return Results.Ok(result);
-        });
+        }).Produces<VoiceJobDto>();
 
         group.MapPost("/batch", async (BatchSynthesizeRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
@@ -66,13 +66,13 @@ public static class VoiceEndpoints
             var command = new BatchSynthesizeVoiceCommand(items, request.Filters);
             var result = await voice.BatchSynthesizeAsync(command, ct);
             return Results.Ok(result);
-        });
+        }).Produces<BatchVoiceResultDto>();
 
         group.MapGet("/jobs/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
         {
             var job = await voice.GetJobByIdAsync(id, ct);
             return Results.Ok(job);
-        });
+        }).Produces<VoiceJobDto>();
 
         group.MapPost("/ducking", async (DuckingRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
@@ -88,13 +88,13 @@ public static class VoiceEndpoints
 
             var result = await voice.ApplyDuckingAsync(command, ct);
             return Results.Ok(result);
-        });
+        }).Produces<DuckedAudioResultDto>();
 
         group.MapGet("/speakers", async (IVoiceModule voice, CancellationToken ct) =>
         {
             var speakers = await voice.GetAvailableSpeakersAsync(ct);
             return Results.Ok(speakers);
-        });
+        }).Produces<IReadOnlyList<VoiceSpeakerDto>>();
 
         var speakerGroup = group.MapGroup("/speakers/profiles").WithTags("Speaker Profiles");
 
@@ -102,13 +102,13 @@ public static class VoiceEndpoints
         {
             var profiles = await voice.GetAllSpeakersAsync(ct);
             return Results.Ok(profiles);
-        });
+        }).Produces<IReadOnlyList<SpeakerProfileDto>>();
 
         speakerGroup.MapGet("/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
         {
             var profile = await voice.GetSpeakerByIdAsync(id, ct);
             return profile is null ? Results.NotFound() : Results.Ok(profile);
-        });
+        }).Produces<SpeakerProfileDto>();
 
         speakerGroup.MapPost("/clone", async (
             [FromForm] string name,
@@ -142,62 +142,62 @@ public static class VoiceEndpoints
             var request = new CloneSpeakerRequest(name, engine, referenceText, language, localEngineId);
             var profile = await voice.CreateClonedSpeakerAsync(request, tempPath, ct);
             return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
-        }).DisableAntiforgery();
+        }).Produces<SpeakerProfileDto>(StatusCodes.Status201Created).DisableAntiforgery();
 
         speakerGroup.MapPost("/design", async (CreateDesignedSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var profile = await voice.CreateDesignedSpeakerAsync(request, ct);
             return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
-        });
+        }).Produces<SpeakerProfileDto>(StatusCodes.Status201Created);
 
         speakerGroup.MapPut("/{id}", async (string id, UpdateSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var profile = await voice.UpdateSpeakerAsync(id, request, ct);
             return Results.Ok(profile);
-        });
+        }).Produces<SpeakerProfileDto>();
 
         speakerGroup.MapDelete("/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
         {
             await voice.DeleteSpeakerAsync(id, ct);
             return Results.NoContent();
-        });
+        }).Produces(StatusCodes.Status204NoContent);
 
         speakerGroup.MapPost("/{id}/preview", async (string id, GeneratePreviewRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var job = await voice.GenerateSpeakerPreviewAsync(id, request, ct);
             return Results.Ok(job);
-        });
+        }).Produces<VoiceJobDto>();
 
         group.MapPost("/align", async (AlignSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var result = await voice.AlignSpeechAsync(request, ct);
             return Results.Ok(result);
-        });
+        }).Produces<AlignSpeechResponse>();
 
         group.MapPost("/transcribe", async (TranscribeAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var text = await voice.TranscribeAudioAsync(request.AudioPath, ct);
             return Results.Ok(new TranscribeAudioResponse("ok", text));
-        });
+        }).Produces<TranscribeAudioResponse>();
 
         group.MapPost("/process-dsp", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var res = await voice.ProcessAudioDspAsync(request, ct);
             return Results.Ok(res);
-        });
+        }).Produces<ProcessAudioDspResponse>();
 
         group.MapPost("/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
             var outPath = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct);
             return Results.Ok(new { status = "ok", output_path = outPath });
-        });
+        }).Produces<AudioConcatResponse>();
 
         group.MapPost("/vram/unload", async (IVoiceModule voice, IGpuManager gpu, CancellationToken ct) =>
         {
             await voice.UnloadVramAsync(ct); // локальный ML-воркер
             await gpu.CleanMemoryAsync(ct);  // нативный C# GPU-стек (Whisper и т.п.)
             return Results.Ok(new { status = "ok" });
-        });
+        }).Produces<VoiceStatusResponse>();
 
         // --- Compatibility aliases for frontend ---
         endpoints.MapPost("/api/v1/audio/generate", async (SynthesizeSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
@@ -225,29 +225,34 @@ public static class VoiceEndpoints
                 audio_url = Path.GetFileName(res.AudioPath ?? "output.wav"),
                 duration = res.DurationSeconds ?? 2.0
             });
-        });
+        }).Produces<AudioGenerateResponse>();
 
         endpoints.MapPost("/api/v1/audio/sync", async (AlignSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(await voice.AlignSpeechAsync(request, ct)));
+            Results.Ok(await voice.AlignSpeechAsync(request, ct)))
+            .Produces<AlignSpeechResponse>();
 
         endpoints.MapPost("/api/v1/audio/process", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(await voice.ProcessAudioDspAsync(request, ct)));
+            Results.Ok(await voice.ProcessAudioDspAsync(request, ct)))
+            .Produces<ProcessAudioDspResponse>();
 
         endpoints.MapPost("/api/v1/audio/process/advanced-silence", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(await voice.ProcessAudioDspAsync(request with { Action = "silence" }, ct)));
+            Results.Ok(await voice.ProcessAudioDspAsync(request with { Action = "silence" }, ct)))
+            .Produces<ProcessAudioDspResponse>();
 
         endpoints.MapPost("/api/v1/audio/transcribe", async (TranscribeAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(new TranscribeAudioResponse("ok", await voice.TranscribeAudioAsync(request.AudioPath, ct))));
+            Results.Ok(new TranscribeAudioResponse("ok", await voice.TranscribeAudioAsync(request.AudioPath, ct))))
+            .Produces<TranscribeAudioResponse>();
 
         endpoints.MapPost("/api/v1/audio/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(new { status = "ok", output_path = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct) }));
+            Results.Ok(new { status = "ok", output_path = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct) }))
+            .Produces<AudioConcatResponse>();
 
         endpoints.MapPost("/api/v1/audio/vram/unload", async (IVoiceModule voice, IGpuManager gpu, CancellationToken ct) =>
         {
             await voice.UnloadVramAsync(ct); // локальный ML-воркер
             await gpu.CleanMemoryAsync(ct);  // нативный C# GPU-стек (Whisper и т.п.)
             return Results.Ok(new { status = "ok" });
-        });
+        }).Produces<VoiceStatusResponse>();
 
         // Тест-драйв ducking: собирает короткий предпросмотр микса голос+музыка.
         endpoints.MapPost("/api/v1/audio/preview-ducking", async (
@@ -296,7 +301,7 @@ public static class VoiceEndpoints
             }
 
             return Results.Ok(new { status = "ok", preview_url = result });
-        });
+        }).Produces<DuckingPreviewResponse>();
 
         // Пакетная загрузка аудио для нескольких сцен (multipart/form-data).
         endpoints.MapPost("/api/v1/audio/batch-upload-scenes", async (
@@ -352,7 +357,7 @@ public static class VoiceEndpoints
             var cmd = new BatchUploadScenesCommand(projectPath, sceneIds, uploadFiles);
             var response = await voice.BatchUploadScenesAsync(cmd, ct);
             return Results.Ok(response);
-        }).DisableAntiforgery();
+        }).Produces<BatchUploadScenesResponse>().DisableAntiforgery();
 
         return endpoints;
     }
@@ -421,3 +426,19 @@ public sealed record PreviewDuckingRequest(
     [property: JsonPropertyName("threshold")] double Threshold = 0.08,
     [property: JsonPropertyName("attackMs")] int AttackMs = 40,
     [property: JsonPropertyName("releaseMs")] int ReleaseMs = 350);
+
+public sealed record AudioConcatResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("output_path")] string OutputPath);
+
+public sealed record VoiceStatusResponse(
+    [property: JsonPropertyName("status")] string Status);
+
+public sealed record AudioGenerateResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("audio_url")] string AudioUrl,
+    [property: JsonPropertyName("duration")] double Duration);
+
+public sealed record DuckingPreviewResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("preview_url")] string PreviewUrl);

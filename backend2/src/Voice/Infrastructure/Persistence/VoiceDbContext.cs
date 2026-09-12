@@ -50,7 +50,7 @@ public class VoiceDbContext : SqliteDbContextBase
             b.Property(j => j.Spec)
                 .HasConversion(
                     spec => JsonSerializer.Serialize(spec, (JsonSerializerOptions?)null),
-                    json => JsonSerializer.Deserialize<VoiceSpec>(json.Replace("LocalOmniVoice", "LocalTts"), (JsonSerializerOptions?)null)!)
+                    json => JsonSerializer.Deserialize<VoiceSpec>(json.Replace("\"LocalOmniVoice\"", "\"LocalTts\""), (JsonSerializerOptions?)null)!)
                 .HasColumnType("TEXT")
                 .IsRequired();
 

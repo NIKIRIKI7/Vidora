@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef, useEffect } from 'react'
 import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal } from '@shared/ui'
 import {
@@ -25,6 +26,14 @@ interface Props {
 interface AgentLog {
   message: string
   status: 'info' | 'success' | 'error' | 'warning'
+}
+
+interface BlueOceanSeed {
+  title?: string
+  query?: string
+  growth_pct?: string
+  vps_score?: number
+  source_platform?: string
 }
 
 type AnalysisData = DeepTrendAnalysis
@@ -62,7 +71,9 @@ const getSavedFilters = () => {
   try {
     const raw = localStorage.getItem(DEEP_TREND_SETTINGS_KEY)
     if (raw) return JSON.parse(raw)
-  } catch {}
+  } catch (err) {
+    console.error('YoutubeIdeasView.getSavedFilters:', err)
+  }
   return null
 }
 
@@ -88,7 +99,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
   const defaultSaved = getSavedFilters()
 
   const [activeTab, setActiveTab] = useState<'agent' | 'thumbnail'>('agent')
-  const [searchEngine, setSearchEngine] = useState<'auto' | 'ytscrape' | 'api' | 'ai' | 'script' | 'mcp'>(defaultSaved?.searchEngine || 'auto')
+  const [searchEngine, setSearchEngine] = useState<'auto' | 'ytscrape' | 'api'>(defaultSaved?.searchEngine || 'auto')
   const [searchMode, setSearchMode] = useState<'trending' | 'competitors'>(defaultSaved?.searchMode || 'trending')
   const [videoType, setVideoType] = useState<'all' | 'long' | 'short'>(defaultSaved?.videoType || 'all')
   const [language, setLanguage] = useState(defaultSaved?.language || 'ru')
@@ -174,19 +185,17 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
   const handleAnalyzeChannel = async () => {
     setIsAnalyzingChannel(true)
     try {
-      const res = await fetch(`${API}/api/v1/youtube/agent/analyze-channel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { data, error } = await fetchClient.POST('/api/v1/youtube/agent/analyze-channel', {
+        body: {
           url_or_name: channelContext,
           engine: agentEngine,
           language,
           youtube_key: apiKeys.youtube || '',
           api_keys: activeApiKeys
-        })
+        }
       })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok') {
         setChannelContext(data.context)
         showNotification('Канал проанализирован!', 'success')
       } else {
@@ -208,13 +217,12 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
     if (!finalQuery.trim()) { showNotification('Укажите нишу для подбора конкурентов', 'error'); return }
     setIsSuggestingCompetitors(true)
     try {
-      const res = await fetch(`${API}/api/v1/youtube/agent/suggest-competitors`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche: finalQuery, engine: agentEngine, language, api_keys: activeApiKeys })
+      const { data, error } = await fetchClient.POST('/api/v1/youtube/agent/suggest-competitors', {
+        body: { niche: finalQuery, engine: agentEngine, language, api_keys: activeApiKeys }
       })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') {
-        const newChannels = data.channels.filter((c: string) => !competitorChannels.includes(c))
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok') {
+        const newChannels = (data.channels ?? []).filter((c: string) => !competitorChannels.includes(c))
         setCompetitorChannels(prev => [...prev, ...newChannels])
         showNotification(`Добавлено ${newChannels.length} конкурентов`, 'success')
       } else { showNotification('Не удалось подобрать конкурентов', 'error') }
@@ -377,12 +385,13 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
   }
 
   const handleSynthesizeBlueOceansLocally = () => {
-    const derivedOceans: BlueOceanOpportunity[] = (earlySignals.length > 0 ? earlySignals : [
+    const seeds: BlueOceanSeed[] = earlySignals.length > 0 ? earlySignals : [
       { title: 'AI Engineering Roadmap 2026', growth_pct: '+180%', vps_score: 94 },
       { title: 'Vibe Coding для не-программистов', growth_pct: '+240%', vps_score: 88 },
       { title: 'DeepSeek Agent Harness на практике', growth_pct: '+150%', vps_score: 82 }
-    ]).slice(0, 8).map((s: any, idx: number) => ({
-      topic: s.title || s.query,
+    ]
+    const derivedOceans: BlueOceanOpportunity[] = seeds.slice(0, 8).map((s, idx) => ({
+      topic: s.title ?? s.query ?? '',
       opportunity_score: s.vps_score ? Math.min(99, Math.round(s.vps_score * 0.95 + 10)) : 88 - idx * 3,
       status: 'BLUE_OCEAN_UNCONTESTED' as const,
       actionable_angle: `Высокий поисковый спрос (${s.growth_pct || '+120%'}), где еще нет подробных роликов лидеров ниши. Рекомендуется пошаговый разбор без воды.`,
@@ -399,19 +408,18 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
     setHookModalOpen(true)
     setIsHookAnalyzing(true)
     try {
-      const res = await fetch(`${API}/api/v1/youtube/agent/analyze-hook`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { data, error } = await fetchClient.POST('/api/v1/youtube/agent/analyze-hook', {
+        body: {
           transcript: video.title,
           video_id: video.video_id,
           video_url: video.url,
           engine: effectiveEngine,
           language,
           api_keys: activeApiKeys
-        })
+        }
       })
-      const data = await res.json()
-      if (res.ok && data.status === 'ok') setHookData(data.data)
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
+      if (data.status === 'ok') setHookData(data.data as unknown as HookAnalysisData)
       else throw new Error()
     } catch {
       showNotification('Ошибка анализа хука', 'error')
@@ -439,7 +447,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
             <div className="w-[340px] xl:w-[380px] flex flex-col gap-4 bg-surface-container-lowest/30 border-r border-white/10 p-5 shrink-0 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-3">
                 <FieldGroup label="Источник поиска">
-                  <Select value={searchEngine} onChange={e => setSearchEngine(e.target.value as any)} className="text-xs">
+                  <Select value={searchEngine} onChange={e => setSearchEngine(e.target.value as 'auto' | 'ytscrape' | 'api')} className="text-xs">
                     <option value="auto">Авто (ytscrape + API)</option>
                     <option value="ytscrape">ytscrape (Scraper)</option>
                     <option value="api">YouTube API v3</option>
@@ -552,7 +560,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
 
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl flex flex-col gap-2">
                 <FieldGroup label="AI-движок">
-                  <Select value={enginePreference} onChange={e => setEnginePreference(e.target.value as any)} className="text-xs">
+                  <Select value={enginePreference} onChange={e => setEnginePreference(e.target.value as 'auto' | 'cloud' | 'local')} className="text-xs">
                     <option value="auto">Авто (облако / локально)</option>
                     <option value="cloud">Облако (Claude / GPT-4o)</option>
                     <option value="local">Локально (Ollama / GGUF)</option>
@@ -854,7 +862,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                                 )}
                                 {report.top_pains && report.top_pains.length > 0 && (
                                   <div className="flex flex-wrap gap-1.5 mt-1">
-                                    {report.top_pains.map((p: any, pIdx: number) => (
+                                    {report.top_pains.map((p, pIdx) => (
                                       <span key={pIdx} className="text-[11px] px-2 py-1 bg-black/40 border border-white/10 rounded-lg text-slate-300 flex items-center gap-1">
                                         <span className="text-amber-400">🔥</span> {p.topic} <b className="text-secondary font-mono">({p.count})</b>
                                       </span>
@@ -1008,16 +1016,17 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                   </linearGradient>
                 </defs>
                 {(() => {
-                  const pts = (hookData as any)?.heatmap && (hookData as any).heatmap.length > 0
-                    ? (hookData as any).heatmap.map((p: any, idx: number, arr: any[]) => ({
-                        x: (idx / Math.max(1, arr.length - 1)) * 1000,
+                  const heatmap = hookData?.heatmap ?? []
+                  const pts = heatmap.length > 0
+                    ? heatmap.map((p, idx) => ({
+                        x: (idx / Math.max(1, heatmap.length - 1)) * 1000,
                         y: 120 - Math.min(105, (p.intensity || 0.5) * 110)
                       }))
                     : [
                         { x: 0, y: 15 }, { x: 80, y: 35 }, { x: 140, y: 22 }, { x: 250, y: 45 },
                         { x: 450, y: 58 }, { x: 700, y: 72 }, { x: 1000, y: 88 }
                       ];
-                  const dStr = `M ${pts[0].x} ${pts[0].y} ` + pts.map((pt: any) => `L ${pt.x} ${pt.y}`).join(' ');
+                  const dStr = `M ${pts[0].x} ${pts[0].y} ` + pts.map((pt) => `L ${pt.x} ${pt.y}`).join(' ');
                   const areaStr = `${dStr} L 1000 120 L 0 120 Z`;
                   return (
                     <>
@@ -1067,12 +1076,14 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                   Адаптированные формулы хуков для вашего видео:
                 </span>
                 <div className="space-y-3">
-                  {(hookData.stolen_hooks || []).map((h: any, idx: number) => (
+                  {(hookData.stolen_hooks || []).map((h, idx) => {
+                    const hook = typeof h === 'string' ? { angle: h, hook_0_5s: '', hook_5_20s: '', why_it_converts: '' } : h
+                    return (
                     <div key={idx} className="p-3.5 bg-slate-900 border border-slate-800 hover:border-secondary/40 rounded-xl transition-all flex flex-col gap-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-secondary font-bold text-xs">Угол {idx + 1}: {h.angle}</span>
+                        <span className="text-secondary font-bold text-xs">Угол {idx + 1}: {hook.angle}</span>
                         <button
-                          onClick={() => copyToClipboard(`${h.hook_0_5s} ${h.hook_5_20s}`, `hook_${idx}`)}
+                          onClick={() => copyToClipboard(`${hook.hook_0_5s} ${hook.hook_5_20s}`, `hook_${idx}`)}
                           className="px-2.5 py-1 bg-secondary/15 hover:bg-secondary text-secondary hover:text-black font-semibold rounded-lg transition-all flex items-center gap-1 text-[11px]"
                         >
                           {copiedKey === `hook_${idx}` ? <><Check size={12} /> Скопировано</> : <><Copy size={12} /> Скопировать формулу</>}
@@ -1080,17 +1091,18 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                       </div>
                       <div className="p-2 rounded bg-black/50 border-l-2 border-rose-500 text-xs">
                         <span className="text-[10px] text-rose-400 uppercase font-mono block font-bold">0:00 - 0:05 (Разрыв шаблона):</span>
-                        <span className="text-white font-medium">{h.hook_0_5s}</span>
+                        <span className="text-white font-medium">{hook.hook_0_5s}</span>
                       </div>
                       <div className="p-2 rounded bg-black/50 border-l-2 border-secondary text-xs">
                         <span className="text-[10px] text-secondary uppercase font-mono block font-bold">0:05 - 0:20 (Закрепление интриги):</span>
-                        <span className="text-slate-200">{h.hook_5_20s}</span>
+                        <span className="text-slate-200">{hook.hook_5_20s}</span>
                       </div>
                       <div className="text-[10px] text-slate-400 italic">
-                        Почему это сработает: {h.why_it_converts}
+                        Почему это сработает: {hook.why_it_converts}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </div>

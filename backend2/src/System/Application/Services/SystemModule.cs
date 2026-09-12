@@ -4,6 +4,7 @@ using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Process;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SystemContext.Contracts;
@@ -19,9 +20,9 @@ public sealed class SystemModule : ISystemModule
     private readonly IAiModelRepository _modelRepo;
     private readonly ISystemMaintenanceRepository _maintenanceRepo;
     private readonly HardwareMonitorService _hardwareMonitor;
-    private readonly IProcessSupervisor _processSupervisor;
     private readonly IPathResolver _pathResolver;
     private readonly AppStorageConfig _storageConfig;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SystemModule> _logger;
 
     public SystemModule(
@@ -29,18 +30,18 @@ public sealed class SystemModule : ISystemModule
         IAiModelRepository modelRepo,
         ISystemMaintenanceRepository maintenanceRepo,
         HardwareMonitorService hardwareMonitor,
-        IProcessSupervisor processSupervisor,
         IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
+        IServiceProvider serviceProvider,
         ILogger<SystemModule> logger)
     {
         _settingRepo = settingRepo;
         _modelRepo = modelRepo;
         _maintenanceRepo = maintenanceRepo;
         _hardwareMonitor = hardwareMonitor;
-        _processSupervisor = processSupervisor;
         _pathResolver = pathResolver;
         _storageConfig = storageConfig.Value;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -93,28 +94,34 @@ public sealed class SystemModule : ISystemModule
         // Фоновая попытка загрузки через Ollama CLI (если установлена).
         _ = Task.Run(async () =>
         {
+            using var scope = _serviceProvider.CreateScope();
+            var supervisor = scope.ServiceProvider.GetRequiredService<IProcessSupervisor>();
+            var repo = scope.ServiceProvider.GetRequiredService<IAiModelRepository>();
             try
             {
-                var result = await _processSupervisor.RunAsync(
+                var result = await supervisor.RunAsync(
                     "ollama", $"pull {cleanEngine}", cancellationToken: CancellationToken.None);
 
-                if (result.ExitCode == 0)
+                var art = await repo.GetByIdAsync(safeId, CancellationToken.None);
+                if (art != null)
                 {
-                    artifact.MarkReady(4_000_000_000);
+                    if (result.ExitCode == 0)
+                    {
+                        art.MarkReady(4_000_000_000);
+                    }
+                    else
+                    {
+                        art.MarkFailed(result.StandardError);
+                    }
+                    await repo.UpdateAsync(art, CancellationToken.None);
+                    await repo.SaveChangesAsync(CancellationToken.None);
                 }
-                else
-                {
-                    artifact.MarkFailed(result.StandardError);
-                }
-
-                await _modelRepo.UpdateAsync(artifact, CancellationToken.None);
-                await _modelRepo.SaveChangesAsync(CancellationToken.None);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[System] Фоновый pull через ollama не выполнен: {Engine}", cleanEngine);
             }
-        }, CancellationToken.None);
+        });
 
         return MapModel(artifact);
     }

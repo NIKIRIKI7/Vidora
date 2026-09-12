@@ -7,21 +7,6 @@ export type FPS = '24' | '30' | '60'
 export type AudioGenerationMode = 'fragment' | 'scene' | 'project'
 export type TaskType = 'scenario' | 'visual' | 'audio' | 'broll'
 
-export interface GlobalVoice {
-  id: string
-  name: string
-  ttsEngine: string
-  voiceModel: string
-  refAudioPath?: string
-  refText?: string
-  designPrompt?: string
-  settings: {
-    speed: number
-    guidanceScale: number
-    numSteps: number
-  }
-}
-
 export interface IdeaFormat {
   titles?: string[]
   title?: string
@@ -298,7 +283,6 @@ export interface ProjectSettings {
   rawMarkdown: string
   promptOverrides?: Partial<PromptTemplates>
   audioMode: AudioGenerationMode
-  activeGlobalVoiceId?: string
   backendProjectId?: string
   audioProcessing: AudioProcessingSettings
   backgroundMusic?: BackgroundMusicSettings

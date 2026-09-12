@@ -88,7 +88,7 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[InnerTube] Сбой получения метаданных для {VideoId}", videoId);
         }
@@ -157,7 +157,7 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[InnerTube] Ошибка поиска по запросу '{Query}'", query);
         }
@@ -204,7 +204,7 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
                 ThumbnailUrl = item.ThumbnailUrl
             }).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Не удалось получить рекомендации для {VideoId}", videoId);
             return [];
@@ -230,7 +230,7 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
                 ThumbnailUrl = item.ThumbnailUrl
             }).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Не удалось загрузить Trending Feed");
             return [];
@@ -256,7 +256,7 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
                 ThumbnailUrl = item.ThumbnailUrl
             }).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Не удалось загрузить Home Feed");
             return [];

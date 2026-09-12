@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { resolveBRollVideoSrc } from './bRollSrc'
 import { normalizeText } from './timingAlgorithms'
@@ -57,13 +58,11 @@ export const isAudioDirty = (frag: SceneFragment) => {
 
 export const concatSceneAudio = async (projectPath: string, title: string, id: string, audioPaths: string[], signal?: AbortSignal) => {
   const sceneAudioPath = `${projectPath}/assets/voice/Scene_${sanitizeFilename(title)}_${id.slice(0, 6)}.wav`
-  const res = await fetch(`${API}/api/v1/audio/concat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ audio_paths: audioPaths, output_path: sceneAudioPath }),
+  const { error } = await fetchClient.POST('/api/v1/audio/concat', {
+    body: { audio_paths: audioPaths, output_path: sceneAudioPath },
     signal,
   })
-  if (!res.ok) throw new Error('Concat failed')
+  if (error) throw new Error(apiErrorMessage(error))
   return sceneAudioPath
 }
 

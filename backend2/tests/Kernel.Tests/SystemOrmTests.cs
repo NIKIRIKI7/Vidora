@@ -80,7 +80,7 @@ public class SystemOrmTests
         var pathResolver = new Mock<IPathResolver>().Object;
         var hardware = new HardwareMonitorService(gpuManager, supervisor, storageOptions, NullLogger<HardwareMonitorService>.Instance);
 
-        var module = new SystemModule(settingRepo, modelRepo, maintRepo, hardware, supervisor, pathResolver, storageOptions, NullLogger<SystemModule>.Instance);
+        var module = new SystemModule(settingRepo, modelRepo, maintRepo, hardware, pathResolver, storageOptions, new Mock<IServiceProvider>().Object, NullLogger<SystemModule>.Instance);
 
         var updated = await module.SetSettingAsync("motion.fps", "60");
 

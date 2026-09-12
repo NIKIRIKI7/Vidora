@@ -98,7 +98,10 @@ public sealed partial class SignalIngestor : ISignalIngestor
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogDebug(ex, "[SignalIngestor] Дополнительный источник сигналов недоступен");
+            }
         });
 
         await Task.WhenAll(tasks);
@@ -159,7 +162,7 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[SignalIngestor] LLM resolution failed for {Query}", cleanQuery);
         }
@@ -251,7 +254,7 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[SignalIngestor] Reddit fetch skipped");
         }
@@ -292,7 +295,10 @@ public sealed partial class SignalIngestor : ISignalIngestor
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogDebug(ex, "[SignalIngestor] Дополнительный источник сигналов недоступен");
+            }
         }
         return list;
     }
@@ -376,7 +382,7 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[SignalIngestor] HN fetch skipped");
         }

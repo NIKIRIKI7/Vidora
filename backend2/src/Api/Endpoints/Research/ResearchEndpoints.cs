@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Kernel.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -17,25 +19,25 @@ public static class ResearchEndpoints
         {
             var summary = await research.StartSessionAsync(request, ct);
             return Results.Accepted($"/api/v1/research/runs/{summary.Id}", summary);
-        });
+        }).Produces<ResearchRunSummaryDto>(StatusCodes.Status202Accepted);
 
         group.MapGet("/runs", async (int page = 1, int pageSize = 20, IResearchModule research = null!, CancellationToken ct = default) =>
         {
             var paged = await research.GetSessionsPagedAsync(page, pageSize, ct);
             return Results.Ok(paged);
-        });
+        }).Produces<PagedResult<ResearchRunSummaryDto>>();
 
         group.MapGet("/runs/{id}", async (string id, IResearchModule research, CancellationToken ct) =>
         {
             var details = await research.GetSessionByIdAsync(id, ct);
             return Results.Ok(details);
-        });
+        }).Produces<ResearchRunDetailsDto>();
 
         group.MapGet("/runs/{id}/opportunities", async (string id, IResearchModule research, CancellationToken ct) =>
         {
             var opportunities = await research.GetOpportunitiesAsync(id, ct);
             return Results.Ok(opportunities);
-        });
+        }).Produces<IReadOnlyList<OpportunityDto>>();
 
         group.MapGet("/runs/{id}/export", async (string id, IResearchModule research, CancellationToken ct) =>
         {
@@ -44,7 +46,7 @@ public static class ResearchEndpoints
                 fileContents: bytes,
                 contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileDownloadName: $"deeptrend_research_{id}.xlsx");
-        });
+        }).Produces<byte[]>(StatusCodes.Status200OK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
         group.MapPost("/export/excel", async (
             AdHocExportData request,
@@ -57,13 +59,13 @@ public static class ResearchEndpoints
                 fileContents: bytes,
                 contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileDownloadName: $"vidora_{cleanQuery}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx");
-        });
+        }).Produces<byte[]>(StatusCodes.Status200OK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
         group.MapPost("/runs/{id}/cancel", async (string id, IResearchModule research, CancellationToken ct) =>
         {
             await research.CancelSessionAsync(id, ct);
             return Results.Ok(new { message = "Сессия исследования отменена." });
-        });
+        }).Produces<ResearchMessageResponse>();
 
         group.MapGet("/runs/{id}/stream", async (string id, IResearchModule research, HttpContext context, CancellationToken ct) =>
         {
@@ -77,8 +79,11 @@ public static class ResearchEndpoints
                 await context.Response.WriteAsync($"data: {json}\n\n", ct);
                 await context.Response.Body.FlushAsync(ct);
             }
-        });
+        }).Produces<string>(StatusCodes.Status200OK, "text/event-stream");
 
         return endpoints;
     }
 }
+
+public sealed record ResearchMessageResponse(
+    [property: JsonPropertyName("message")] string Message);

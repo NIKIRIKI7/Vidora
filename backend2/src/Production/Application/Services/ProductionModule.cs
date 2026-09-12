@@ -2,6 +2,7 @@ using Kernel.Contracts;
 using Kernel.Exceptions;
 using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ProductionContext.Contracts;
@@ -16,24 +17,24 @@ public sealed class ProductionModule : IProductionModule
 {
     private readonly IProjectRepository _repository;
     private readonly IScenarioParser _scenarioParser;
-    private readonly IProductionPipelineOrchestrator _orchestrator;
     private readonly IPathResolver _pathResolver;
     private readonly AppStorageConfig _storageConfig;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ProductionModule> _logger;
 
     public ProductionModule(
         IProjectRepository repository,
         IScenarioParser scenarioParser,
-        IProductionPipelineOrchestrator orchestrator,
         IPathResolver pathResolver,
         IOptions<AppStorageConfig> storageConfig,
+        IServiceProvider serviceProvider,
         ILogger<ProductionModule> logger)
     {
         _repository = repository;
         _scenarioParser = scenarioParser;
-        _orchestrator = orchestrator;
         _pathResolver = pathResolver;
         _storageConfig = storageConfig.Value;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -133,7 +134,12 @@ public sealed class ProductionModule : IProductionModule
         var bgm = request?.BgmAssetId;
         var rerender = request?.ForceRerender ?? false;
 
-        _ = Task.Run(() => _orchestrator.ExecuteAsync(id, speaker, bgm, rerender, CancellationToken.None));
+        _ = Task.Run(async () =>
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IProductionPipelineOrchestrator>();
+            await orchestrator.ExecuteAsync(id, speaker, bgm, rerender, CancellationToken.None);
+        });
 
         return new BuildStatusDto(
             ProjectId: project.Id.Value,

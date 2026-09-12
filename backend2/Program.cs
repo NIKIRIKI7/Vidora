@@ -33,6 +33,14 @@ builder.Services.AddCors(options =>
     });
 });
 
+// OpenAPI / Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "Vidora API", Version = "v1" });
+    c.CustomSchemaIds(type => type.FullName?.Replace("+", "_"));
+});
+
 // 2. Инфраструктура ядра
 builder.Services.AddKernelServices(builder.Configuration, builder.Logging);
 
@@ -64,9 +72,12 @@ app.UseCors("AllowAll");
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseWebSockets();
 
-app.MapGet("/", () => Results.Json(new { service = "vidora-backend2", status = "ok" }));
-app.MapGet("/health", () => Results.Json(new { status = "healthy" }));
-app.MapGet("/api/health", () => Results.Json(new { status = "healthy" }));
+app.UseSwagger();
+app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Vidora API v1"));
+
+app.MapGet("/", () => Results.Json(new { service = "vidora-backend2", status = "ok" })).ExcludeFromDescription();
+app.MapGet("/health", () => Results.Json(new { status = "healthy" })).Produces<HealthResponse>();
+app.MapGet("/api/health", () => Results.Json(new { status = "healthy" })).Produces<HealthResponse>();
 
 app.MapSkillsEndpoints();
 app.MapSystemEndpoints();
@@ -81,3 +92,5 @@ app.MapYouTubeAgentEndpoints();
 app.MapWebSocketEndpoints();
 
 app.Run();
+
+public record HealthResponse(string status);

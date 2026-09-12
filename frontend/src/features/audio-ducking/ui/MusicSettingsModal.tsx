@@ -1,3 +1,4 @@
+import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState } from 'react'
 import { Modal, Button, FieldGroup, Slider, Switch, Spinner } from '@shared/ui'
 import { Play, Sliders, AudioLines, Zap, Check } from 'lucide-react'
@@ -44,10 +45,8 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
     setPreviewAudioUrl(null)
 
     try {
-      const res = await fetch(`${API}/api/v1/audio/preview-ducking`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { data, error } = await fetchClient.POST('/api/v1/audio/preview-ducking', {
+        body: {
           voicePath: getAudioPathForScene(project, activeScene),
           musicPath: settings.customTrackPath,
           projectPath: 'vidora_projects',
@@ -64,14 +63,14 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
             midCarveFreqHz: settings.eq.midCarveFreqHz,
             midCarveGainDb: settings.eq.midCarveGainDb,
           },
-        }),
+        } as never
       })
-      const data = await res.json()
+      if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok' && data.preview_url) {
         setPreviewAudioUrl(`${API}/api/v1/render/media?path=${encodeURIComponent(data.preview_url)}`)
       }
-    } catch {
-      // сеть/ffmpeg недоступны — молча
+    } catch (err) {
+      console.error('MusicSettingsModal.handleTestDrive:', err)
     } finally {
       setIsPreviewing(false)
     }

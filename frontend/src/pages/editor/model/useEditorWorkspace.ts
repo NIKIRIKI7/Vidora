@@ -67,22 +67,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const activeScene = project.scenes.find(s => s.id === activeSceneId)
 
-  // Активный глобальный голос сменился — применяем его настройки к слайдерам.
-  // Guarded render-phase reset (React-рекомендованный паттерн "adjust state on prop change").
-  // Нельзя выносить в useEffect: react-hooks/set-state-in-effect запрещает синхронный setState в эффекте.
-  const [appliedVoiceId, setAppliedVoiceId] = useState(project.activeGlobalVoiceId)
-  if (project.activeGlobalVoiceId !== appliedVoiceId) {
-    setAppliedVoiceId(project.activeGlobalVoiceId)
-    const gv = project.activeGlobalVoiceId
-      ? useSettingsStore.getState().globalVoices.find(v => v.id === project.activeGlobalVoiceId)
-      : undefined
-    if (gv) {
-      setSpeed(gv.settings.speed)
-      setNumSteps(gv.settings.numSteps)
-      setGuidanceScale(gv.settings.guidanceScale)
-    }
-  }
-
   const handleUpdateProjectSync = useCallback(
     (newProject: ProjectSettings, skipMdSync = false) => {
       if (
@@ -109,8 +93,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     postprocessOutput,
     autoOffloadVram,
     ttsEngine,
-    apiKeys: activeApiKeys,
-    customVoices: project.customVoices,
   }
 
   const audio = useAudio({

@@ -25,7 +25,7 @@ public static class ScenarioEngineEndpoints
         {
             var response = await gateway.SyncMarkdownAsync(projectId, request.Markdown, ct);
             return Results.Ok(new { status = "ok", data = response });
-        });
+        }).Produces<EngineSyncEnvelopeResponse>();
 
         // Stateless-проверка черновика (ScenarioBuilder): парсер -> линтер, без сохранения в БД
         group.MapPost("/lint-draft", (
@@ -34,7 +34,7 @@ public static class ScenarioEngineEndpoints
         {
             var response = gateway.LintDraftMarkdown(request.Markdown);
             return Results.Ok(new { status = "ok", data = response });
-        });
+        }).Produces<DraftLintEnvelopeResponse>();
 
         // Правый блок: режиссёрский линтер (эвристики, без LLM). Фронт дергает с debounce.
         group.MapPost("/{projectId}/lint", async (
@@ -66,7 +66,7 @@ public static class ScenarioEngineEndpoints
                     estimated_duration_seconds = Math.Round(project.Scenes.Sum(s => s.Fragments.Sum(f => f.EstimateDuration())), 2)
                 }
             });
-        });
+        }).Produces<ScenarioLintResponse>();
 
         // Центральный блок: ИИ-рерайтинг фрагмента (LLM Copilot, Structured Outputs)
         group.MapPost("/{projectId}/copilot/rewrite", async (
@@ -110,7 +110,7 @@ public static class ScenarioEngineEndpoints
                 ct: ct);
 
             return Results.Ok(new { status = "ok", suggestions });
-        });
+        }).Produces<CopilotRewriteResponse>();
 
         return endpoints;
     }
@@ -123,3 +123,25 @@ public sealed record CopilotRewriteRequest(
 
 public sealed record EngineSyncRequest(
     [property: JsonPropertyName("markdown")] string Markdown);
+
+public sealed record EngineSyncEnvelopeResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("data")] EngineSyncResponse Data);
+
+public sealed record DraftLintEnvelopeResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("data")] DraftLintResponse Data);
+
+public sealed record ScenarioLintSummaryResponse(
+    [property: JsonPropertyName("scenes")] int Scenes,
+    [property: JsonPropertyName("fragments")] int Fragments,
+    [property: JsonPropertyName("estimated_duration_seconds")] double EstimatedDurationSeconds);
+
+public sealed record ScenarioLintResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("issues")] IReadOnlyList<ScenarioIssue> Issues,
+    [property: JsonPropertyName("summary")] ScenarioLintSummaryResponse Summary);
+
+public sealed record CopilotRewriteResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("suggestions")] IReadOnlyList<ScenarioRewriteSuggestion> Suggestions);

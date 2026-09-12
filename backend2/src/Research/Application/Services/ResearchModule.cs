@@ -1,6 +1,7 @@
 using Kernel.Contracts;
 using Kernel.Exceptions;
 using Kernel.Platform.WebSockets;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Research.Application.Pipelines;
 using Research.Contracts;
@@ -15,23 +16,23 @@ public sealed class ResearchModule : IResearchModule
     private readonly IResearchRunRepository _repository;
     private readonly IDeepTrendDagPipeline _pipeline;
     private readonly IResearchReportExporter _exporter;
-    private readonly IWebSocketGateway _webSocketGateway;
     private readonly IYouTubeSearchIngestor _youtubeSearch;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ResearchModule> _logger;
 
     public ResearchModule(
         IResearchRunRepository repository,
         IDeepTrendDagPipeline pipeline,
         IResearchReportExporter exporter,
-        IWebSocketGateway webSocketGateway,
         IYouTubeSearchIngestor youtubeSearch,
+        IServiceProvider serviceProvider,
         ILogger<ResearchModule> logger)
     {
         _repository = repository;
         _pipeline = pipeline;
         _exporter = exporter;
-        _webSocketGateway = webSocketGateway;
         _youtubeSearch = youtubeSearch;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -47,22 +48,26 @@ public sealed class ResearchModule : IResearchModule
 
         _ = Task.Run(async () =>
         {
+            using var scope = _serviceProvider.CreateScope();
+            var pipeline = scope.ServiceProvider.GetRequiredService<IDeepTrendDagPipeline>();
+            var repo = scope.ServiceProvider.GetRequiredService<IResearchRunRepository>();
+            var gateway = scope.ServiceProvider.GetRequiredService<IWebSocketGateway>();
             try
             {
-                await foreach (var progress in _pipeline.RunAsync(run, request.MaxCandidates, CancellationToken.None))
+                await foreach (var progress in pipeline.RunAsync(run, request.MaxCandidates, CancellationToken.None))
                 {
-                    await _repository.UpdateAsync(run, CancellationToken.None);
-                    await _repository.SaveChangesAsync(CancellationToken.None);
+                    await repo.UpdateAsync(run, CancellationToken.None);
+                    await repo.SaveChangesAsync(CancellationToken.None);
 
-                    await _webSocketGateway.BroadcastAsync("RESEARCH_PROGRESS", progress, CancellationToken.None);
+                    await gateway.BroadcastAsync("RESEARCH_PROGRESS", progress, CancellationToken.None);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[ResearchModule] Сбой выполнения DAG для {RunId}", run.Id.Value);
                 run.MarkFailed(ex.Message);
-                await _repository.UpdateAsync(run, CancellationToken.None);
-                await _repository.SaveChangesAsync(CancellationToken.None);
+                await repo.UpdateAsync(run, CancellationToken.None);
+                await repo.SaveChangesAsync(CancellationToken.None);
             }
         });
 
@@ -226,7 +231,7 @@ public sealed class ResearchModule : IResearchModule
                 .Select(r => $"- \"{r.Title}\" — {r.ViewCount:N0} просмотров (канал: {r.ChannelTitle})")
                 .ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[ResearchModule] Не удалось получить трендовые хуки для '{Topic}'", topic);
             return [];

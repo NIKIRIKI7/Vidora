@@ -9,5 +9,4 @@ export type {
   HardwareInfo,
   ProjectItem,
   ProjectCreatePayload,
-  GlobalSettings,
 } from './model/types'
