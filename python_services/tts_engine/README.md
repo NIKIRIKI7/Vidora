@@ -4,42 +4,51 @@
 
 **Главный принцип — архитектура Stateless.** C# оркестратор передаёт сюда абсолютные пути к файлам. Микросервис читает файлы с диска, генерирует звук/векторы и кладёт их обратно на диск. Микросервис не содержит базы данных и не хранит состояние между запросами (кроме одной загруженной модели в VRAM).
 
-**Первичный движок — OmniVoice (k2-fsa).** Основной режим — **GGUF** (квантованные веса, ggml/CrispASR, без PyTorch): `cstr/omnivoice-GGUF`. Legacy-режим — официальный PyTorch-чекпоинт `k2-fsa/OmniVoice` (fp16/int8/fp32).
+**Движок — OmniVoice (k2-fsa) на PyTorch.** Единственный поддерживаемый режим: официальный чекпоинт `k2-fsa/OmniVoice` (fp16/int8/fp32). GGUF/CrispASR-режим удалён.
 
 ---
 
-## OmniVoice GGUF (основной режим)
+## OmniVoice на PyTorch (основной режим)
 
-Адаптер автоматически выбирает GGUF, если находит файлы:
+Адаптер (`adapters/omni_voice_adapter.py`) поднимает официальный чекпоинт `k2-fsa/OmniVoice` через пакет `omnivoice`:
 
-| Файл | Назначение | Размер |
-|------|-----------|--------|
-| `omnivoice-q8_0.gguf` | Qwen3-0.6B бэкбон + audio embeddings/heads | ~780 MB |
-| `omnivoice-tokenizer-f16.gguf` | HiggsAudioV2 audio-codec (HuBERT + DAC) | ~385 MB |
+| Компонент | Назначение |
+|-----------|-----------|
+| `model.safetensors` (~2.4 GB) | Qwen3-бэкбон + audio embeddings/heads |
+| `audio_tokenizer/model.safetensors` (~0.8 GB) | HiggsAudioV2 audio-codec (HuBERT + DAC) |
+| `tokenizer.json`, `config.json`, ... | токенизатор и конфиги |
 
-Скачивание и размещение (ASCII-путь обязателен, см. ниже):
+Скачивание в `<TTS_MODELS_DIR>/OmniVoice` (по умолчанию `python_services/tts_engine/ai-models/OmniVoice`):
 
 ```bash
-python -c "from huggingface_hub import snapshot_download; snapshot_download('cstr/omnivoice-GGUF', local_dir=r'%LOCALAPPDATA%\Vidora\Models\OmniVoice-GGUF', allow_patterns=['omnivoice-q8_0.gguf','omnivoice-tokenizer-f16.gguf'])"
+python -c "from huggingface_hub import snapshot_download; snapshot_download('k2-fsa/OmniVoice', local_dir=r'python_services/tts_engine/ai-models/OmniVoice')"
 ```
 
-Порядок поиска GGUF в адаптере:
-1. `OMNIVOICE_GGUF_MODEL` (+ `OMNIVOICE_GGUF_CODEC`);
-2. `OMNIVOICE_GGUF_DIR`;
-3. `<TTS_MODELS_DIR>/OmniVoice-GGUF`;
-4. `%LOCALAPPDATA%\Vidora\Models\OmniVoice-GGUF`.
+Порядок поиска чекпоинта в адаптере:
+1. `OMNIVOICE_CHECKPOINT` (точный путь к локальному каталогу или HF-репозиторий);
+2. `<TTS_MODELS_DIR>/OmniVoice`;
+3. сам `<TTS_MODELS_DIR>` (если в его корне лежит `config.json`);
+4. `k2-fsa/OmniVoice` (репозиторий на Hugging Face — скачается на ходу);
+5. при `OMNIVOICE_QUANTIZE=int8` — предквантованный `kawshikbuet17/OmniVoice-int8-bnb`.
 
-> **Windows + не-ASCII путь.** `libcrispasr` открывает GGUF нативным `fopen` и не
-> понимает кириллицу. Если репозиторий лежит в пути вида `...\Проекты\...`,
-> GGUF нужно держать в ASCII-каталоге (пункт 4 выше) или задать
-> `OMNIVOICE_GGUF_DIR`. Иначе будет `RuntimeError: ... backend not supported`.
+Полезные переменные: `OMNIVOICE_QUANTIZE` (`auto`/`fp16`/`bf16`/`int8`/`fp32`),
+`OMNIVOICE_STEPS` (шаги диффузии), `OMNIVOICE_GUIDANCE`, `OMNIVOICE_VOICE`
+(профиль голоса без клонирования).
 
-Полезные переменные: `OMNIVOICE_STEPS` (шаги диффузии), `OMNIVOICE_LANGUAGE`
-(ISO 639-3, напр. `rus`/`eng`), `OMNIVOICE_THREADS`, `OMNIVOICE_CRISPASR_RAW=1`
-(вывод без встроенного водяного знака CrispASR).
+Клонирование строит **voice clone prompt** (`create_voice_clone_prompt`) из
+reference-WAV и сохраняет его на диск в `.pt` (`prompt.save`). При синтезе воркер
+поднимает `.pt` обратно (`VoiceClonePrompt.load`) — C# передаёт путь в
+`speaker_embedding_path`.
 
-Клонирование в GGUF-режиме строится из reference-WAV (C# передаёт
-`reference_audio_path`), `.pt`-вектор не требуется — на диск пишется сайдкар.
+> **Текст эталона (reference_text) обязателен.** Если он не передан, воркер
+> бросает ошибку: ASR внутри Python не используется. Транскрипцию эталона
+> выполняет C# (`VoiceModule`) нативным `FasterWhisper.NET` и всегда передаёт
+> `reference_text`.
+
+> **torch>=2.6.** В `torch.load` по умолчанию `weights_only=True`. Современные
+> `.pt` (plain dict) грузятся штатно; для старых чекпоинтов адаптер использует
+> `torch.serialization.safe_globals([VoiceClonePrompt])`, а при необходимости —
+> фоллбэк `weights_only=False`.
 
 ---
 
@@ -56,10 +65,13 @@ python -c "from huggingface_hub import snapshot_download; snapshot_download('cst
    venv\Scripts\activate             # Windows
    pip install -r requirements.txt
    ```
-   Для CUDA-сборки CrispASR (NVIDIA):
+   Для CUDA-сборки PyTorch (NVIDIA, Windows/Linux) — torch и torchaudio ставятся
+   с индекса `cu128` и должны совпадать по версии:
    ```bash
-   pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/cuda/
+   pip install torch==2.11.0+cu128 torchaudio==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
    ```
+   > CUDA-колёса 2.11 — последняя версия torchaudio на индексе `cu128`. Более новый
+   > `torch` без соответствующего `torchaudio` ломает `libtorchaudio.pyd`.
 3. Запуск сервера локально:
    ```bash
    python main.py
@@ -91,6 +103,11 @@ $env:TTS_MODELS_DIR = "C:\Models"
 $env:OMNIVOICE_QUANTIZE = "int8"
 python main.py
 ```
+
+> **Мало VRAM (например, 4 ГБ ноутбучной RTX 3050).** fp16-чекпоинт занимает
+> ~1.9 ГБ и нормально укладывается. Если всё же ловите OOM — используйте
+> `OMNIVOICE_QUANTIZE=int8` (`pip install bitsandbytes`) либо CPU-fallback
+> `OMNIVOICE_QUANTIZE=fp32`.
 
 ---
 
