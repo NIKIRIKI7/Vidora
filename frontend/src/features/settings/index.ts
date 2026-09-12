@@ -1,11 +1,11 @@
 export { SkillsSettingsView } from './ui/SkillsSettingsView'
-export { useSkillsStore } from './model/useSkillsStore'
+export { useSkillsStore } from '@entities/skill'
+export { skillsApi } from '@entities/skill'
 
 export type {
   SkillItem,
   SkillCreate,
   SkillUpdate,
   SkillStage,
-} from './api/skillsApi'
-export { skillsApi } from './api/skillsApi'
+} from '@entities/skill'
 export { STAGE_CONFIG } from './ui/constants'

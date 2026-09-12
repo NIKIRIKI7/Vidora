@@ -10,9 +10,9 @@ import {
   RefreshCw,
   Info,
 } from 'lucide-react'
-import type { SkillCreate, SkillItem, SkillStage, SkillUpdate } from '../api/skillsApi'
-import { skillsApi } from '../api/skillsApi'
-import { useSkillsStore } from '../model/useSkillsStore'
+import type { SkillCreate, SkillItem, SkillStage, SkillUpdate } from '@entities/skill'
+import { skillsApi } from '@entities/skill'
+import { useSkillsStore } from '@entities/skill'
 import { STAGE_CONFIG } from './constants'
 import { SkillEditModal } from './SkillEditModal'
 

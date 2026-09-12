@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import type { VideoCandidateMeta, VideoDeepDiveData } from '@shared/api/youtube'
-import { fetchVideoDeepDive } from '@shared/api/youtube'
+import type { VideoCandidateMeta, VideoDeepDiveData } from '@shared/api'
+import { fetchVideoDeepDive } from '@shared/api'
 
 interface VideoInspectorState {
   isOpen: boolean

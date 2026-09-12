@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { useProjectStore } from '@entities/project'
 import type { FPS, ProjectSettings } from '@entities/project'
 import { dashboardApi } from '../api/dashboardApi'
-import type { GlobalSettings, HardwareInfo, ProjectCreatePayload, ProjectItem } from '../types'
+import type { GlobalSettings, HardwareInfo, ProjectCreatePayload, ProjectItem } from './types'
 
 const calculateProjectDuration = (p: ProjectSettings): number => {
   let totalSec = 0

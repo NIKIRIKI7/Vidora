@@ -1,4 +1,4 @@
-import type { ExportDataset, ExportOptions } from '../types'
+import type { ExportDataset, ExportOptions } from '../../model/types'
 
 export const formatDatasetToJson = (data: ExportDataset, options: ExportOptions): string => {
   const filteredVideos = options.onlyRockets

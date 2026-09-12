@@ -1,5 +1,5 @@
 import { API } from '@shared/lib'
-import type { ExportDataset, ExportOptions, ExportResult, ExportStrategy } from '../types'
+import type { ExportDataset, ExportOptions, ExportResult, ExportStrategy } from './types'
 import {
   projectVideosTable,
   projectSignalsTable,
@@ -61,9 +61,9 @@ export const ExcelStrategy: ExportStrategy = {
         })),
         goldmine: data.goldmine.flatMap((entry) =>
           [
-            ...(entry.report.unresolved_questions || []).map((p) => ({ cat: 'Вопрос', ...p })),
-            ...(entry.report.author_omissions || []).map((p) => ({ cat: 'Упущение', ...p })),
-            ...(entry.report.community_debates || []).map((p) => ({ cat: 'Спор', ...p })),
+            ...(entry.report?.unresolved_questions || []).map((p) => ({ cat: 'Вопрос', ...p })),
+            ...(entry.report?.author_omissions || []).map((p) => ({ cat: 'Упущение', ...p })),
+            ...(entry.report?.community_debates || []).map((p) => ({ cat: 'Спор', ...p })),
           ].map((pain) => ({
             video_title: entry.video_title,
             category: pain.cat,

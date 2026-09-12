@@ -1,5 +1,5 @@
 import { API } from '@shared/lib'
-import type { GlobalSettings, HardwareInfo } from '../types'
+import type { GlobalSettings, HardwareInfo } from '../model/types'
 
 const API_BASE = `${API}/api/v1`
 

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Sparkles, Brain, AlertTriangle, ArrowRight, Check, Zap } from 'lucide-react'
-import type { HookAnalysisData, StolenHook } from '@shared/api/youtube'
-import { analyzeHook } from '@shared/api/youtube'
+import type { HookAnalysisData, StolenHook } from '@shared/api'
+import { analyzeHook } from '@shared/api'
 import { WORDS_PER_SECOND } from '@shared/config'
 
 interface HookDeconstructionPanelProps {

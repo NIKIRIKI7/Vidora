@@ -36,7 +36,7 @@ import {
   type AlignmentEngineType,
   type TimedWord,
   type VoiceEngineInfoDto,
-} from '@shared/api/voice'
+} from '@shared/api'
 
 type StudioAction = 'synthesize' | 'design' | 'clone'
 

@@ -12,7 +12,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { Modal, Spinner } from '@shared/ui'
-import type { ExportDataset, ExportFormatId, ExportOptions, ExportScope } from '../types'
+import type { ExportDataset, ExportFormatId, ExportOptions, ExportScope } from '../model/types'
 import { ExportStrategyRegistry } from '../model/strategies'
 
 interface Props {

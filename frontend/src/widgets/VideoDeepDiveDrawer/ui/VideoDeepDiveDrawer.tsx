@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 import { X, Flame, MessageSquare, Sparkles, ExternalLink, Users, Eye, Zap } from 'lucide-react'
-import { useVideoInspectorStore } from '@features/inspect-video/model/useVideoInspectorStore'
+import { useVideoInspectorStore } from '@features/inspect-video'
 import { RetentionHeatmapChart } from '@shared/ui/retention-chart'
-import { DetailedCommentsFeed } from '@features/mine-comments/ui/DetailedCommentsFeed'
-import { HookDeconstructionPanel } from '@features/analyze-hook/ui/HookDeconstructionPanel'
-import type { StolenHook } from '@shared/api/youtube'
+import { DetailedCommentsFeed } from '@features/mine-comments'
+import { HookDeconstructionPanel } from '@features/analyze-hook'
+import type { StolenHook } from '@shared/api'
 
 interface VideoDeepDiveDrawerProps {
   onApplyHookToScenario?: (hook: StolenHook) => void

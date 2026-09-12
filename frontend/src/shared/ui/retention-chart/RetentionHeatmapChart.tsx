@@ -1,6 +1,6 @@
 import { useState, useMemo, type ReactNode } from 'react'
 import { Flame, Clock, Award } from 'lucide-react'
-import type { HeatmapPoint, VideoChapter } from '@shared/api/youtube'
+import type { HeatmapPoint, VideoChapter } from '@shared/api'
 
 interface RetentionHeatmapChartProps {
   heatmap: HeatmapPoint[]
@@ -31,7 +31,7 @@ export const RetentionHeatmapChart = ({
     return 1
   }, [totalDurationSeconds, heatmap])
 
-  const { pointsStr, maxIntensity, peakPoint } = useMemo(() => {
+  const { pointsStr, maxIntensity, peakPoint } = useMemo<{ pointsStr: string; maxIntensity: number; peakPoint: HeatmapPoint | null }>(() => {
     if (heatmap.length === 0) return { pointsStr: '', maxIntensity: 1, peakPoint: null }
 
     let max = 0

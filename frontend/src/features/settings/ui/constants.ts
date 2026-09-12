@@ -1,4 +1,4 @@
-import type { SkillStage } from '../api/skillsApi'
+import type { SkillStage } from '@entities/skill'
 
 export const STAGE_CONFIG: Record<SkillStage, { label: string; color: string; desc: string }> = {
   scene_generation: {

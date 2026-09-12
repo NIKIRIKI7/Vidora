@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { StolenHook } from '@shared/api/youtube/types'
+import type { StolenHook } from '@shared/api'
 
 interface ScenarioBridgeState {
   currentScenarioMarkdown: string

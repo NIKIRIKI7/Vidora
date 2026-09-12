@@ -5,7 +5,7 @@ import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolut
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { API, formatTimecode } from '@shared/lib'
 import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt } from '@entities/project'
-import { useModelCatalog } from '@entities/project/model/useModelCatalog'
+import { useModelCatalog } from '@entities/project'
 import { useSkillsStore } from '@features/settings'
 import { scenarioEngineApi, type IssueSeverity, type ScenarioIssue } from '@shared/api'
 

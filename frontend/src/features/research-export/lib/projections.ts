@@ -1,4 +1,4 @@
-import type { ExportDataset, ExportOptions } from '../types'
+import type { ExportDataset, ExportOptions } from '../model/types'
 
 export interface TabularTable {
   sheetName: string
@@ -85,7 +85,7 @@ export const projectOpportunitiesTable = (data: ExportDataset): TabularTable => 
     o.status,
     o.actionable_angle,
     o.demand_source,
-    `${Math.round(o.max_competitor_similarity * 100)}%`,
+    `${Math.round((o.max_competitor_similarity ?? 0) * 100)}%`,
   ])
 
   return { sheetName: 'Голубые океаны', headers, rows }
@@ -103,6 +103,7 @@ export const projectGoldmineTable = (data: ExportDataset): TabularTable => {
   const rows: (string | number | boolean)[][] = []
   for (const entry of data.goldmine) {
     const report = entry.report
+    if (!report) continue
     const allPains = [
       ...(report.unresolved_questions || []).map((p) => ({ ...p, cat: 'Нерешенный вопрос' })),
       ...(report.author_omissions || []).map((p) => ({ ...p, cat: 'Упущение автора' })),

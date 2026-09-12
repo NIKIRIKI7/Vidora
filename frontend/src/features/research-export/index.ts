@@ -8,4 +8,4 @@ export type {
   ExportResult,
   ExportScope,
   ExportStrategy,
-} from './types'
+} from './model/types'

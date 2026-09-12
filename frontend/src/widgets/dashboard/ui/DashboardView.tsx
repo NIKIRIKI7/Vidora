@@ -4,10 +4,10 @@ import {
   StudioLaunchpad,
   ProjectsMatrix,
   NewProjectModal,
-  GlobalSettingsModal,
   useDashboardStore,
 } from '@features/dashboard'
 import type { StudioModuleId } from '@features/dashboard'
+import { GlobalSettingsModal } from './GlobalSettingsModal'
 
 interface Props {
   onOpenTrends: () => void

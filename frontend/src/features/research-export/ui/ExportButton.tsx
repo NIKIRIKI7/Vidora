@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Download } from 'lucide-react'
 import { Button } from '@shared/ui'
-import type { ExportDataset } from '../types'
+import type { ExportDataset } from '../model/types'
 import { ExportModal } from './ExportModal'
 
 interface Props {

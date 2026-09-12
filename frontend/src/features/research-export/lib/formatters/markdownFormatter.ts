@@ -1,4 +1,4 @@
-import type { ExportDataset, ExportOptions } from '../types'
+import type { ExportDataset, ExportOptions } from '../../model/types'
 import {
   projectVideosTable,
   projectSignalsTable,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, Sparkles, Code2 } from 'lucide-react'
-import type { SkillCreate, SkillItem, SkillStage, SkillUpdate } from '../api/skillsApi'
+import type { SkillCreate, SkillItem, SkillStage, SkillUpdate } from '@entities/skill'
 import { STAGE_CONFIG } from './constants'
 
 interface Props {

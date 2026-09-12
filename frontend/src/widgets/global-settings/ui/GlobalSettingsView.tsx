@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, FieldGroup, Slider, Spinner } from '@shared/ui'
 import { ArrowLeft, Eye, EyeOff, Cloud, Server, Download, RotateCcw, Plus, Trash2, Video } from 'lucide-react'
 import { useSettingsStore, useNotificationStore, type GlobalPromptSettings, type PromptCategory } from '@entities/project'
-import { useModelCatalog } from '@entities/project/model/useModelCatalog'
+import { useModelCatalog } from '@entities/project'
 import { SkillsSettingsView } from '@features/settings'
 import { API } from '@shared/lib'
 

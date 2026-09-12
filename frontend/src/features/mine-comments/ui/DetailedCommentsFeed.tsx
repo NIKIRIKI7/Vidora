@@ -1,6 +1,6 @@
 import { useState, useMemo, type ReactNode } from 'react'
 import { ThumbsUp, Copy, Check, Search, Filter } from 'lucide-react'
-import type { DetailedComment } from '@shared/api/youtube'
+import type { DetailedComment } from '@shared/api'
 import { FrictionBadge, detectFrictionCategory } from '@shared/ui/friction-badge'
 import type { FrictionCategory } from '@shared/ui/friction-badge'
 
