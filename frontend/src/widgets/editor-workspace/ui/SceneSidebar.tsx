@@ -4,6 +4,7 @@ import { useSettingsStore } from '@entities/project'
 import { SceneCard, Input, Button, Spinner } from '@shared/ui'
 import { Plus, GripVertical, Copy, ClipboardPaste, Download, Upload, Trash2, Search } from 'lucide-react'
 import { API, getProjectPath, isCodeDirty, isAudioDirty } from '@widgets/editor-workspace/lib/helpers'
+import { SceneStatusBadges } from '@features/inspect-pacing'
 
 interface Props {
   project: ProjectSettings
@@ -153,39 +154,24 @@ export const SceneSidebar = React.memo(({
                     </div>
                   </div>
                   <SceneCard scene={`Сцена ${idx + 1}`} time={scene.timecode} description={scene.fragments[0]?.text.substring(0, 50) + '...'} isActive={isSceneActive} />
-                  <div className="flex flex-wrap gap-1.5 pl-1 mt-1">
-                    {audioDirty ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded border border-warning/30 text-warning bg-warning/10 font-medium" title="Аудио устарело">⚠️ Аудио</span>
-                    ) : (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasAudio ? 'border-secondary/40 text-secondary bg-secondary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>🎙️ Аудио</span>
-                    )}
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasSync ? 'border-primary/40 text-primary bg-primary/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>⏱️ Тайминги</span>
-                    {isIgnored ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/20 text-on-surface-variant bg-black font-medium" title="Черный экран при рендере">⬛ Чёрный экран</span>
-                    ) : codeDirty ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded border border-warning/30 text-warning bg-warning/10 font-medium" title="Код устарел">⚠️ TSX</span>
-                    ) : (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${hasCode ? 'border-accent/40 text-accent bg-accent/10 font-medium' : 'border-white/10 text-on-surface-variant/30 bg-white/5'}`}>💻 TSX</span>
-                    )}
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors font-medium ${isVisualBoring ? 'border-error/40 text-error bg-error/10' : 'border-secondary/40 text-secondary bg-secondary/10'}`} title={`Визуал: 1 смена кадра в ${pacing.toFixed(1)}с (Порог: ${visualPacingThreshold}с). ${isVisualBoring ? 'Разбейте текст на больше фрагментов.' : 'Отличный темп!'}`}>
-                      {isVisualBoring ? '🐌 Визуал' : '🔥 Визуал'}
-                    </span>
-                    {isVisualBoring && (
-                      <button onClick={(e) => { e.stopPropagation(); onCopyFixPacingPrompt?.(scene.id, pacing, visualPacingThreshold) }} className="text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium" title="Скопировать промпт для ИИ, чтобы он автоматически добавил динамики">
-                        ✨ ИИ
-                      </button>
-                    )}
-                    {hasSync && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors font-medium ${isAudioBoring ? 'border-warning/40 text-warning bg-warning/10' : 'border-secondary/40 text-secondary bg-secondary/10'}`} title={`Тишина: ${maxSilence.toFixed(1)}с (Порог: ${audioSilenceThreshold}с). Темп: ${Math.round(wpm)} WPM (Мин: ${audioWpmMin}).`}>
-                        {isAudioBoring ? '🐌 Аудио' : '🔥 Аудио'}
-                      </span>
-                    )}
-                    {isAudioBoring && (
-                      <button onClick={(e) => { e.stopPropagation(); onFixAudioPacing?.(scene.id) }} className="text-[10px] px-1.5 py-0.5 rounded border border-accent/40 text-accent bg-accent/10 hover:bg-accent/20 transition-colors flex items-center gap-1 font-medium" title="Автоматически вырезать тишину и пересинхронизировать тайминги">
-                        ✂️ Исправить
-                      </button>
-                    )}
-                  </div>
+                  <SceneStatusBadges
+                    audioDirty={audioDirty}
+                    hasAudio={hasAudio}
+                    hasSync={hasSync}
+                    codeDirty={codeDirty}
+                    hasCode={hasCode}
+                    isIgnored={isIgnored}
+                    isVisualBoring={isVisualBoring}
+                    isAudioBoring={isAudioBoring}
+                    wpm={wpm}
+                    pacingSeconds={pacing}
+                    visualPacingThreshold={visualPacingThreshold}
+                    audioSilenceThreshold={audioSilenceThreshold}
+                    audioWpmMin={audioWpmMin}
+                    maxSilence={maxSilence}
+                    onCopyFixPacingPrompt={() => onCopyFixPacingPrompt?.(scene.id, pacing, visualPacingThreshold)}
+                    onFixAudioPacing={() => onFixAudioPacing?.(scene.id)}
+                  />
                 </div>
               )
             })}
