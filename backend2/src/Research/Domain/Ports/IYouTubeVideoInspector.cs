@@ -24,9 +24,30 @@ public sealed record DetailedCommentDto(
 
 public sealed record VideoMetadataSummaryDto(string Title, string ChannelTitle, string Description);
 
+/// <summary>
+/// Типизированный слепок метаданных видео (зеркало Integrations.YouTube.YouTubeVideoMetadata),
+/// отдаваемый в /youtube/video/{id}/deep-dive. Integrations не протекает в Api напрямую.
+/// </summary>
+public sealed record VideoCandidateMetaDto
+{
+    [JsonPropertyName("video_id")] public string? VideoId { get; init; }
+    [JsonPropertyName("title")] public string? Title { get; init; }
+    [JsonPropertyName("description")] public string? Description { get; init; }
+    [JsonPropertyName("channel_title")] public string? ChannelTitle { get; init; }
+    [JsonPropertyName("channel_id")] public string? ChannelId { get; init; }
+    [JsonPropertyName("subscriber_count")] public long? SubscriberCount { get; init; }
+    [JsonPropertyName("view_count")] public long? ViewCount { get; init; }
+    [JsonPropertyName("duration")] public string? Duration { get; init; }
+    [JsonPropertyName("upload_date")] public string? UploadDate { get; init; }
+    [JsonPropertyName("published_at")] public DateTimeOffset? PublishedAt { get; init; }
+    [JsonPropertyName("keywords")] public IReadOnlyList<string>? Keywords { get; init; }
+    [JsonPropertyName("thumbnail_url")] public string? ThumbnailUrl { get; init; }
+    [JsonPropertyName("comments")] public IReadOnlyList<string>? Comments { get; init; }
+}
+
 public sealed record VideoDeepDiveDto(
     [property: JsonPropertyName("video_id")] string VideoId,
-    [property: JsonPropertyName("metadata")] object? Metadata,
+    [property: JsonPropertyName("metadata")] VideoCandidateMetaDto? Metadata,
     [property: JsonPropertyName("heatmap")] IReadOnlyList<HeatmapPointDto> Heatmap,
     [property: JsonPropertyName("chapters")] IReadOnlyList<VideoChapterDto> Chapters,
     [property: JsonPropertyName("comments")] IReadOnlyList<DetailedCommentDto> Comments);
@@ -42,5 +63,5 @@ public interface IYouTubeVideoInspector
     Task<IReadOnlyList<VideoChapterDto>> GetChaptersAsync(string videoUrlOrId, CancellationToken ct = default);
     Task<IReadOnlyList<DetailedCommentDto>> GetCommentsDetailedAsync(string videoUrlOrId, int maxComments = 50, CancellationToken ct = default);
     Task<VideoMetadataSummaryDto> GetMetadataSummaryAsync(string videoUrlOrId, CancellationToken ct = default);
-    Task<object?> GetMetadataAsync(string videoUrlOrId, CancellationToken ct = default);
+    Task<VideoCandidateMetaDto?> GetMetadataAsync(string videoUrlOrId, CancellationToken ct = default);
 }

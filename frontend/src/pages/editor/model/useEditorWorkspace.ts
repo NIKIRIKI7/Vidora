@@ -22,7 +22,7 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
   const [centerView, setCenterView] = useState<CenterViewMode>('player')
   const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
-  const [voiceModel, setVoiceModel] = useState('aria')
+  const [voiceModel, setVoiceModel] = useState('')
   const [speed, setSpeed] = useState(1)
   const [numSteps, setNumSteps] = useState(64)
   const [guidanceScale, setGuidanceScale] = useState(3.0)

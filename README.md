@@ -181,6 +181,51 @@ Integrations   адаптеры портов: LLM, FFmpeg, Pexels, YouTube, Whis
 
 **WebSocket:** `ws://localhost:5116/ws/events/{clientId}` — конверт `{ "event": "...", "data": { ... }, "timestamp": "..." }`. Типовые события — `AUDIO_GEN_PROGRESS`, `RENDER_PROGRESS`.
 
+## Скилы (навыки ИИ)
+
+**Скилы** — это переиспользуемые промпт-пакеты, привязанные к стадии конвейера. Они хранятся в SQLite (`skills.db`), подмешиваются в системный промпт при генерации и правятся без перезапуска сервиса.
+
+### Стадии
+
+| Стадия (`stage`) | Где применяется |
+|------------------|-----------------|
+| `scene_generation` | Генерация Remotion TSX для сцены |
+| `hook_analysis` | Анализ вступления/хука видео |
+| `script_drafting` | Черновик сценария (YouTube-агент) |
+| `visual_analysis` | Визуальный разбор и подбор |
+| `trend_research` | Темы и тренды DeepTrend |
+| `broll_matching` | Подбор B-Roll по визуальным ремаркам |
+
+### Как собирается промпт
+
+`SkillsCatalog.GetSkillBundleForStageAsync(stage, maxTokenLimit, customHeader)` берёт **только включённые** скилы стадии, `PromptBuilder` сортирует их по `priority`, склеивает `content` и укладывает в лимит токенов. На выходе — `SkillBundleDto`: `system_prompt`, `included_skills`, `omitted_skills`, `total_estimated_tokens`. Именно этот бандл получает LLM на стадии (см. ответ `/api/v1/code/generate` → `applied_stage`, `included_skills`).
+
+### Поля скила
+
+`id`, `name`, `description`, `stage`, `content`, `priority`, `version`, `is_default`, `is_enabled`, `tags`, `estimated_tokens`, `updated_at`.
+
+### API
+
+| Метод | Путь | Назначение |
+|-------|------|-----------|
+| `GET` | `/api/v1/skills` | Список скилов (`?stage=`, `?only_enabled=true`) |
+| `GET` | `/api/v1/skills/bundle/{stage}` | Скомпонованный бандл (`?max_tokens=`, `?custom_header=`) |
+| `GET` | `/api/v1/skills/{id}` | Один скил |
+| `POST` | `/api/v1/skills` | Создать пользовательский скил |
+| `PUT` / `PATCH` | `/api/v1/skills/{id}` | Обновить (включая `is_enabled`) |
+| `POST` | `/api/v1/skills/{id}/reset` | Вернуть дефолтный скил к системному шаблону |
+| `DELETE` | `/api/v1/skills/{id}` | Удалить пользовательский скил |
+
+Каждый эндпоинт задокументирован в Swagger UI (`/swagger`) — краткая суть, описание, входные и выходные данные.
+
+### Seed и синхронизация
+
+- Источник дефолтного набора — `backend2/src/Skills/Infrastructure/Seeding/skills_seed.json`.
+- На старте `SkillsSeederHostedService` делает **upsert** дефолтных скилов и **деактивирует** те, что пропали из seed; пользовательские скилы не трогаются. `reset` восстанавливает системный шаблон конкретного скила.
+- UI: **Глобальные настройки → «Скиллы (Навыки ИИ)»** (`SkillsSettingsView`, стор `useSkillsStore`).
+
+Спецификация контекста — [`backend2/docs/SKILLS_SPEC.md`](./backend2/docs/SKILLS_SPEC.md).
+
 ## Начало работы
 
 ### Требования

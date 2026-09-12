@@ -2,7 +2,7 @@ import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ProjectSettings } from '@entities/project'
 import { Button, FieldGroup, Select, Spinner, Switch } from '@shared/ui'
-import { Mic, SlidersHorizontal, MicVocal, Upload, Play, Download, Trash2, Volume2, AlignStartVertical, RotateCcw, Cpu, AudioLines } from 'lucide-react'
+import { SlidersHorizontal, MicVocal, Upload, Play, Download, Trash2, Volume2, AlignStartVertical, RotateCcw, Cpu, AudioLines } from 'lucide-react'
 import { DEFAULT_BACKGROUND_MUSIC } from '@shared/config'
 import { API, getProjectPath, isAudioDirty } from '@entities/project'
 import { voiceApi, type SpeakerProfileDto } from '@shared/api'
@@ -66,22 +66,42 @@ export const AudioTab = ({
     [speakerProfiles]
   )
 
+  // Единый источник правды — бэкенд. Если сохранённый голос отсутствует в каталоге,
+  // автоматически выбираем первый доступный (предпочитая локальный движок).
+  useEffect(() => {
+    if (!speakersLoaded || speakerProfiles.length === 0) return
+    const isKnown =
+      speakerProfiles.some(s => s.speaker_id === voiceModel) ||
+      (project.customVoices ?? []).some(v => v.id === voiceModel)
+    if (isKnown) return
+    const preferred = speakerProfiles.find(s => s.mode === 'local') ?? speakerProfiles[0]
+    onChangeVoiceModel(preferred.speaker_id)
+  }, [speakersLoaded, speakerProfiles, voiceModel, project.customVoices, onChangeVoiceModel])
+
+  // Прослушивание сэмпла: только реальные данные с бэкенда (превью профиля или локальный клон проекта).
+  const playVoiceSample = useCallback(() => {
+    const custom = project.customVoices?.find(v => v.id === voiceModel)
+    const profile = speakerProfiles.find(s => s.speaker_id === voiceModel)
+    const path = custom?.refAudioPath ?? profile?.preview_audio_path
+    if (!path) {
+      onShowNotification('Для этого голоса нет превью-сэмпла', 'info')
+      return
+    }
+    const url = `${API}/api/v1/render/media?path=${encodeURIComponent(path)}`
+    void new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error'))
+  }, [project.customVoices, voiceModel, speakerProfiles, onShowNotification])
+
   return (
     <>
       <section className="flex flex-col gap-3">
-        <div className="flex justify-between items-center bg-primary/10 p-2 rounded-lg border border-primary/20 gap-2">
-          <span className="font-label text-xs uppercase tracking-wide text-primary flex items-center gap-1.5 truncate"><Mic size={16}/> Озвучка (TTS)</span>
-          <div className="flex items-center gap-1 shrink-0">
-            <button className="text-[11px] text-primary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-primary/20 border border-primary/30" onClick={onOpenAiSettings} title="Настройки TTS"><SlidersHorizontal size={14} /></button>
-            <button className="text-[11px] text-secondary hover:text-white px-2 py-1 rounded transition-colors flex items-center gap-1 bg-secondary/20 border border-secondary/30" onClick={onOpenVoicebox} title="Voicebox (Клонирование)"><MicVocal size={14} /></button>
-          </div>
-        </div>
         <Button variant="secondary" onClick={() => onOpenCustomAudioModal?.('scene')} className="w-full py-2 text-xs font-semibold">
           <Upload size={14} className="mr-2" /> Загрузить свое аудио (Файл / Озвучка)
         </Button>
         <FieldGroup label="Голосовая модель">
           <div className="flex items-center gap-2">
-            <button onClick={() => { const isCustom = project.customVoices?.find(v => v.id === voiceModel); const profile = speakerProfiles.find(s => s.speaker_id === voiceModel); const url = isCustom?.refAudioPath ? `${API}/api/v1/render/media?path=${encodeURIComponent(isCustom.refAudioPath)}` : profile?.preview_audio_path ? `${API}/api/v1/render/media?path=${encodeURIComponent(profile.preview_audio_path)}` : `/samples/${voiceModel}.wav`; void new Audio(url).play().catch(() => onShowNotification('Сэмпл не найден', 'error')) }} className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
+            <button onClick={playVoiceSample} title="Прослушать сэмпл" className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
+            <button onClick={onOpenAiSettings} title="Настройки TTS" className="p-1.5 bg-primary/10 hover:bg-primary/20 rounded border border-primary/30 text-primary hover:text-white shrink-0 transition-colors"><SlidersHorizontal size={16} /></button>
+            <button onClick={onOpenVoicebox} title="Voicebox (Клонирование)" className="p-1.5 bg-secondary/10 hover:bg-secondary/20 rounded border border-secondary/30 text-secondary hover:text-white shrink-0 transition-colors"><MicVocal size={16} /></button>
             <Select
               value={voiceModel}
               onChange={e => onChangeVoiceModel(e.target.value)}

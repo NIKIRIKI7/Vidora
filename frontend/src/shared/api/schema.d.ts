@@ -167,7 +167,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Api.Endpoints.Media.DownloadStockCompatRequest"];
                 };
             };
             responses: {
@@ -584,7 +584,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Api.Endpoints.Motion.CodeGenerateCompatRequest"];
                 };
             };
             responses: {
@@ -623,7 +623,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Api.Endpoints.Motion.RenderStartCompatRequest"];
                 };
             };
             responses: {
@@ -699,7 +699,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Api.Endpoints.Production.ConcatVideoCompatRequest"];
                 };
             };
             responses: {
@@ -738,7 +738,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Api.Endpoints.Production.ExportProjectCompatRequest"];
                 };
             };
             responses: {
@@ -4343,6 +4343,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        "Api.Endpoints.Media.DownloadStockCompatRequest": {
+            url?: string | null;
+            filename?: string | null;
+            project_path?: string | null;
+            folder?: string | null;
+        };
         "Api.Endpoints.Media.ImportStockVideoRequest": {
             download_url?: string | null;
             title?: string | null;
@@ -4354,7 +4360,7 @@ export interface components {
         "Api.Endpoints.Media.MediaMusicLibraryResponse": {
             status?: string | null;
             categories?: components["schemas"]["Api.Endpoints.Media.MusicCategoryResponse"][] | null;
-            custom_tracks?: unknown[] | null;
+            custom_tracks?: components["schemas"]["MediaContext.Contracts.MusicTrackDto"][] | null;
         };
         "Api.Endpoints.Media.MediaSearchStockResponse": {
             status?: string | null;
@@ -4396,6 +4402,14 @@ export interface components {
             /** Format: double */
             fps?: number;
         };
+        "Api.Endpoints.Motion.CodeGenerateCompatRequest": {
+            prompt?: string | null;
+            target_id?: string | null;
+            project_path?: string | null;
+            engine?: string | null;
+            project_data?: components["schemas"]["Kernel.Contracts.ProjectDataPayloadDto"];
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
+        };
         "Api.Endpoints.Motion.CodeGenerateResponse": {
             status?: string | null;
             tsx_code?: string | null;
@@ -4408,9 +4422,25 @@ export interface components {
         "Api.Endpoints.Motion.MotionStatusResponse": {
             status?: string | null;
         };
+        "Api.Endpoints.Motion.RenderStartCompatRequest": {
+            target_id?: string | null;
+            project_id?: string | null;
+            target?: string | null;
+            project_path?: string | null;
+            tsx_code?: string | null;
+            audio_path?: string | null;
+            broll_sources?: string[] | null;
+            background_music?: components["schemas"]["Kernel.Contracts.BackgroundMusicSettingsDto"];
+            render_quality?: string | null;
+        };
         "Api.Endpoints.Motion.RenderStartResponse": {
             status?: string | null;
             task_id?: string | null;
+        };
+        "Api.Endpoints.Production.ConcatVideoCompatRequest": {
+            video_paths?: string[] | null;
+            output_path?: string | null;
+            project_path?: string | null;
         };
         "Api.Endpoints.Production.CopilotRewriteRequest": {
             fragment_id?: string | null;
@@ -4430,6 +4460,10 @@ export interface components {
             data?: components["schemas"]["ProductionContext.Application.Services.EngineSyncResponse"];
         };
         "Api.Endpoints.Production.EngineSyncRequest": {
+            markdown?: string | null;
+        };
+        "Api.Endpoints.Production.ExportProjectCompatRequest": {
+            project_name?: string | null;
             markdown?: string | null;
         };
         "Api.Endpoints.Production.ProductionMessageResponse": {
@@ -4456,7 +4490,7 @@ export interface components {
             engine?: string | null;
             language?: string | null;
             youtube_key?: string | null;
-            api_keys?: unknown;
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.AnalyzeChannelResponse": {
             status?: string | null;
@@ -4468,13 +4502,11 @@ export interface components {
             video_url?: string | null;
             engine?: string | null;
             language?: string | null;
-            api_keys?: unknown;
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.AnalyzeHookResponse": {
             status?: string | null;
-            data?: {
-                [key: string]: unknown;
-            } | null;
+            data?: components["schemas"]["Api.Endpoints.Research.HookAnalysisDto"];
         };
         "Api.Endpoints.Research.DownloadMetaDataResponse": {
             title?: string | null;
@@ -4503,6 +4535,14 @@ export interface components {
         "Api.Endpoints.Research.DraftScriptResponse": {
             status?: string | null;
             markdown?: string | null;
+        };
+        "Api.Endpoints.Research.HookAnalysisDto": {
+            original_hook?: string | null;
+            transcript_snippet?: string | null;
+            psychology?: string | null;
+            flaws_identified?: string | null;
+            stolen_hooks?: components["schemas"]["Api.Endpoints.Research.StolenHookDto"][] | null;
+            heatmap?: components["schemas"]["Research.Domain.Ports.HeatmapPointDto"][] | null;
         };
         "Api.Endpoints.Research.MoreVideoItemResponse": {
             video_id?: string | null;
@@ -4535,7 +4575,7 @@ export interface components {
             settings?: components["schemas"]["Api.Endpoints.Research.StreamAgentSettings"];
             language?: string | null;
             youtube_key?: string | null;
-            api_keys?: unknown;
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.MoreVideosResponse": {
             status?: string | null;
@@ -4544,13 +4584,19 @@ export interface components {
         "Api.Endpoints.Research.ResearchMessageResponse": {
             message?: string | null;
         };
+        "Api.Endpoints.Research.StolenHookDto": {
+            angle?: string | null;
+            hook_0_5s?: string | null;
+            hook_5_20s?: string | null;
+            why_it_converts?: string | null;
+        };
         "Api.Endpoints.Research.StreamAgentRequest": {
             query?: string | null;
             project_path?: string | null;
             settings?: components["schemas"]["Api.Endpoints.Research.StreamAgentSettings"];
             youtube_key?: string | null;
             llm_engine?: string | null;
-            api_keys?: unknown;
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.StreamAgentSettings": {
             /** Format: int32 */
@@ -4577,7 +4623,7 @@ export interface components {
             niche?: string | null;
             engine?: string | null;
             language?: string | null;
-            api_keys?: unknown;
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.SuggestCompetitorsResponse": {
             status?: string | null;
@@ -4754,6 +4800,15 @@ export interface components {
         HealthResponse: {
             status?: string | null;
         };
+        "Kernel.Contracts.ApiKeysDto": {
+            elevenlabs?: string | null;
+            anthropic?: string | null;
+            openai?: string | null;
+            routerai?: string | null;
+            aitunnel?: string | null;
+            youtube?: string | null;
+            pexels?: string | null;
+        };
         "Kernel.Contracts.AppColorsDto": {
             primary?: string | null;
             secondary?: string | null;
@@ -4761,6 +4816,50 @@ export interface components {
             surface?: string | null;
             accent?: string | null;
             text?: string | null;
+        };
+        "Kernel.Contracts.AudioProcessingSettingsDto": {
+            /** Format: double */
+            silenceThresholdDb?: number | null;
+            /** Format: int32 */
+            minSilenceMs?: number | null;
+            /** Format: int32 */
+            maxSilenceMs?: number | null;
+            removeEdges?: boolean | null;
+        };
+        "Kernel.Contracts.BackgroundMusicSettingsDto": {
+            enabled?: boolean | null;
+            trackId?: string | null;
+            trackName?: string | null;
+            customTrackPath?: string | null;
+            preset?: string | null;
+            /** Format: double */
+            baseVolume?: number | null;
+            /** Format: double */
+            duckedVolume?: number | null;
+            /** Format: double */
+            threshold?: number | null;
+            /** Format: double */
+            attackMs?: number | null;
+            /** Format: double */
+            releaseMs?: number | null;
+            /** Format: double */
+            holdMs?: number | null;
+            /** Format: double */
+            fadeInSec?: number | null;
+            /** Format: double */
+            fadeOutSec?: number | null;
+            loop?: boolean | null;
+            /** Format: double */
+            loopCrossfadeSec?: number | null;
+            eq?: components["schemas"]["Kernel.Contracts.MusicEqSettingsDto"];
+        };
+        "Kernel.Contracts.CustomVoicePayloadDto": {
+            id?: string | null;
+            name?: string | null;
+            refAudioPath?: string | null;
+            refText?: string | null;
+            designPrompt?: string | null;
+            tags?: string[] | null;
         };
         "Kernel.Contracts.FragmentTimingDto": {
             /** Format: double */
@@ -4778,6 +4877,16 @@ export interface components {
             animation_style?: string | null;
             typography?: string | null;
             colors?: components["schemas"]["Kernel.Contracts.AppColorsDto"];
+        };
+        "Kernel.Contracts.MusicEqSettingsDto": {
+            enableLowCut?: boolean | null;
+            /** Format: double */
+            lowCutFreqHz?: number | null;
+            enableMidCarve?: boolean | null;
+            /** Format: double */
+            midCarveFreqHz?: number | null;
+            /** Format: double */
+            midCarveGainDb?: number | null;
         };
         "Kernel.Contracts.PagedResult`1[[MediaContext.Contracts.MediaAssetDto, backend2, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]": {
             items?: components["schemas"]["MediaContext.Contracts.MediaAssetDto"][] | null;
@@ -4816,6 +4925,36 @@ export interface components {
             montage?: components["schemas"]["Kernel.Contracts.MontageSettingsDto"];
             scenes?: components["schemas"]["Kernel.Contracts.SceneDto"][] | null;
         };
+        "Kernel.Contracts.ProjectDataPayloadDto": {
+            name?: string | null;
+            format?: string | null;
+            resolution?: string | null;
+            metadata?: components["schemas"]["Kernel.Contracts.ProjectMetadataPayloadDto"];
+            montage?: components["schemas"]["Kernel.Contracts.ProjectMontagePayloadDto"];
+            scenes?: components["schemas"]["Kernel.Contracts.ScenePayloadDto"][] | null;
+            customVoices?: components["schemas"]["Kernel.Contracts.CustomVoicePayloadDto"][] | null;
+            rawMarkdown?: string | null;
+            audioMode?: string | null;
+            backendProjectId?: string | null;
+            audioProcessing?: components["schemas"]["Kernel.Contracts.AudioProcessingSettingsDto"];
+            backgroundMusic?: components["schemas"]["Kernel.Contracts.BackgroundMusicSettingsDto"];
+            renderQuality?: string | null;
+            use3D?: boolean | null;
+            autoBRollEnabled?: boolean | null;
+        };
+        "Kernel.Contracts.ProjectMetadataPayloadDto": {
+            title?: string | null;
+            description?: string | null;
+            tags?: string[] | null;
+            thumbnail?: string | null;
+        };
+        "Kernel.Contracts.ProjectMontagePayloadDto": {
+            fps?: string | null;
+            animationStyle?: string | null;
+            transitions?: string[] | null;
+            colors?: components["schemas"]["Kernel.Contracts.AppColorsDto"];
+            typography?: components["schemas"]["Kernel.Contracts.TypographyPayloadDto"];
+        };
         "Kernel.Contracts.SceneDto": {
             scene_id: string | null;
             title?: string | null;
@@ -4830,11 +4969,44 @@ export interface components {
             voice_asset_id?: string | null;
             broll_asset_id?: string | null;
         };
+        "Kernel.Contracts.SceneFragmentPayloadDto": {
+            id?: string | null;
+            visualNote?: string | null;
+            text?: string | null;
+            /** Format: double */
+            startTime?: number | null;
+            /** Format: double */
+            endTime?: number | null;
+            remotionCode?: string | null;
+            audioFileName?: string | null;
+            bRollFileName?: string | null;
+            bRollAudioMode?: string | null;
+            lastAudioHash?: string | null;
+            lastAudioTextNormalized?: string | null;
+        };
+        "Kernel.Contracts.ScenePayloadDto": {
+            id?: string | null;
+            title?: string | null;
+            timecode?: string | null;
+            fragments?: components["schemas"]["Kernel.Contracts.SceneFragmentPayloadDto"][] | null;
+            remotionCode?: string | null;
+            ignoreTsx?: boolean | null;
+            remotionCodeHistory?: string[] | null;
+            /** Format: int32 */
+            historyIndex?: number | null;
+            lastCodeHash?: string | null;
+            /** Format: double */
+            audioOffset?: number | null;
+        };
+        "Kernel.Contracts.TypographyPayloadDto": {
+            heading?: string | null;
+            body?: string | null;
+        };
         "MediaContext.Contracts.AutoBrollCommand": {
             project_path?: string | null;
             format?: string | null;
             engine?: string | null;
-            api_keys?: unknown;
+            api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
             fragments?: components["schemas"]["MediaContext.Contracts.AutoBrollFragmentItem"][] | null;
         };
         "MediaContext.Contracts.AutoBrollFragmentItem": {
@@ -5325,6 +5497,24 @@ export interface components {
             /** Format: double */
             intensity?: number;
         };
+        "Research.Domain.Ports.VideoCandidateMetaDto": {
+            video_id?: string | null;
+            title?: string | null;
+            description?: string | null;
+            channel_title?: string | null;
+            channel_id?: string | null;
+            /** Format: int64 */
+            subscriber_count?: number | null;
+            /** Format: int64 */
+            view_count?: number | null;
+            duration?: string | null;
+            upload_date?: string | null;
+            /** Format: date-time */
+            published_at?: string | null;
+            keywords?: string[] | null;
+            thumbnail_url?: string | null;
+            comments?: string[] | null;
+        };
         "Research.Domain.Ports.VideoChapterDto": {
             /** Format: int32 */
             startSeconds?: number;
@@ -5335,7 +5525,7 @@ export interface components {
         };
         "Research.Domain.Ports.VideoDeepDiveDto": {
             video_id?: string | null;
-            metadata?: unknown;
+            metadata?: components["schemas"]["Research.Domain.Ports.VideoCandidateMetaDto"];
             heatmap?: components["schemas"]["Research.Domain.Ports.HeatmapPointDto"][] | null;
             chapters?: components["schemas"]["Research.Domain.Ports.VideoChapterDto"][] | null;
             comments?: components["schemas"]["Research.Domain.Ports.DetailedCommentDto"][] | null;
@@ -5428,7 +5618,7 @@ export interface components {
             /** Format: int32 */
             event_id?: number;
             message?: string | null;
-            exception?: unknown;
+            exception?: string | null;
         };
         "SystemContext.Contracts.SystemSettingDto": {
             key?: string | null;

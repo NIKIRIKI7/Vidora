@@ -536,7 +536,7 @@ public sealed class VoiceModule : IVoiceModule
 
     public async Task<AlignSpeechResponse> AlignSpeechAsync(AlignSpeechRequest request, CancellationToken ct = default)
     {
-        var safeAudio = _pathResolver.ResolveSafePath(request.AudioPath);
+        var safeAudio = ResolveExistingAudioPath(request.AudioPath);
         var combinedText = string.Join(" ", request.Fragments.Select(f => f.Text));
         var aligner = _alignmentRegistry.Resolve(AlignmentEngineType.Whisper);
         var alignmentData = await aligner.AlignAsync(safeAudio, combinedText, ct);
@@ -562,7 +562,7 @@ public sealed class VoiceModule : IVoiceModule
 
     public async Task<string> TranscribeAudioAsync(string audioFilePath, CancellationToken ct = default)
     {
-        var safeAudio = _pathResolver.ResolveSafePath(audioFilePath);
+        var safeAudio = ResolveExistingAudioPath(audioFilePath);
         var aligner = _alignmentRegistry.Resolve(AlignmentEngineType.Whisper);
         var data = await aligner.AlignAsync(safeAudio, "", ct);
         return string.Join(" ", data.Words.Select(w => w.Word)).Trim();
@@ -570,7 +570,7 @@ public sealed class VoiceModule : IVoiceModule
 
     public async Task<ProcessAudioDspResponse> ProcessAudioDspAsync(ProcessAudioDspRequest request, CancellationToken ct = default)
     {
-        var safeInput = _pathResolver.ResolveSafePath(request.AudioPath);
+        var safeInput = ResolveExistingAudioPath(request.AudioPath);
         var ext = Path.GetExtension(safeInput);
         var dir = Path.GetDirectoryName(safeInput)!;
         var safeOutput = Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(safeInput)}_dsp{ext}");
@@ -595,7 +595,7 @@ public sealed class VoiceModule : IVoiceModule
         Directory.CreateDirectory(dir);
 
         var listFile = Path.Combine(dir, $"concat_{Guid.NewGuid():N}.txt");
-        var lines = audioPaths.Select(p => $"file '{_pathResolver.ResolveSafePath(p).Replace('\\', '/')}'");
+        var lines = audioPaths.Select(p => $"file '{ResolveExistingAudioPath(p).Replace('\\', '/')}'");
         await File.WriteAllLinesAsync(listFile, lines, ct);
 
         try
@@ -664,6 +664,14 @@ public sealed class VoiceModule : IVoiceModule
         var aligner = _alignmentRegistry.Resolve(spec.AlignmentEngine);
         return await aligner.AlignAsync(rawFilePath, expectedText, ct);
     }
+
+    /// <summary>
+    /// Умный резолвер аудио: находит физический файл, даже если клиент прислал
+    /// относительный путь проекта ("test/assets/voice/x.wav") или просто имя файла,
+    /// а сам файл лежит в temp/voice (после TTS) или в projects/{project}/assets/voice.
+    /// </summary>
+    private string ResolveExistingAudioPath(string inputPath, string? projectPath = null) =>
+        StorageFileLocator.ResolveExistingAsset(_pathResolver, _storageConfig, _logger, inputPath, projectPath);
 
     private string PrepareDirectory(string relativePath)
     {

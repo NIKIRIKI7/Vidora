@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Kernel.Contracts;
 using Kernel.Ports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -176,18 +177,20 @@ public static class YouTubeAgentEndpoints
             try
             {
                 var data = await llm.GenerateJsonAsync<JsonElement>(new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: 0.3f, JsonMode: true), ct);
-                var responseObj = new Dictionary<string, object?>
-                {
-                    ["original_hook"] = data.TryGetProperty("original_hook", out var oh) ? oh.GetString() : openingSnippet,
-                    ["transcript_snippet"] = openingSnippet,
-                    ["psychology"] = data.TryGetProperty("psychology", out var psy) ? psy.GetString() : "Удержание через когнитивный диссонанс и незакрытую петлю",
-                    ["flaws_identified"] = data.TryGetProperty("flaws_identified", out var fl) ? fl.GetString() : "Недостаточно резкий визуальный хук в первые 2 секунды",
-                    ["stolen_hooks"] = data.TryGetProperty("stolen_hooks", out var sh) && sh.ValueKind == JsonValueKind.Array ? sh : JsonSerializedEmptyArray(),
-                    ["heatmap"] = rawHeatmap.Count > 0
-                        ? rawHeatmap.Select(h => (object)new { startSeconds = h.StartSeconds, endSeconds = h.EndSeconds, intensity = h.Intensity }).ToList()
-                        : new object[] { }
-                };
-                return Results.Ok(new { status = "ok", data = responseObj });
+
+                var stolenHooks = data.TryGetProperty("stolen_hooks", out var sh) && sh.ValueKind == JsonValueKind.Array
+                    ? sh.Deserialize<List<StolenHookDto>>() ?? []
+                    : [];
+
+                var hookData = new HookAnalysisDto(
+                    OriginalHook: data.TryGetProperty("original_hook", out var oh) ? oh.GetString() : openingSnippet,
+                    TranscriptSnippet: openingSnippet,
+                    Psychology: data.TryGetProperty("psychology", out var psy) ? psy.GetString() : "Удержание через когнитивный диссонанс и незакрытую петлю",
+                    FlawsIdentified: data.TryGetProperty("flaws_identified", out var fl) ? fl.GetString() : "Недостаточно резкий визуальный хук в первые 2 секунды",
+                    StolenHooks: stolenHooks,
+                    Heatmap: rawHeatmap);
+
+                return Results.Ok(new AnalyzeHookResponse("ok", hookData));
             }
             catch
             {
@@ -209,8 +212,6 @@ public static class YouTubeAgentEndpoints
                     statusCode: StatusCodes.Status502BadGateway);
             }
         }).Produces<AnalyzeHookResponse>();
-
-        static JsonElement JsonSerializedEmptyArray() => JsonDocument.Parse("[]").RootElement.Clone();
 
         // 5. Script drafting
         group.MapPost("/agent/draft-script", async (
@@ -407,7 +408,7 @@ public sealed record StreamAgentRequest(
     [property: JsonPropertyName("settings")] StreamAgentSettings? Settings,
     [property: JsonPropertyName("youtube_key")] string? YouTubeKey,
     [property: JsonPropertyName("llm_engine")] string? LlmEngine,
-    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys);
+    [property: JsonPropertyName("api_keys")] ApiKeysDto? ApiKeys);
 
 public sealed record StreamAgentSettings(
     [property: JsonPropertyName("days_back")] int DaysBack = 30,
@@ -429,14 +430,14 @@ public sealed record SuggestCompetitorsRequest(
     [property: JsonPropertyName("niche")] string Niche,
     [property: JsonPropertyName("engine")] string? Engine,
     [property: JsonPropertyName("language")] string? Language,
-    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys);
+    [property: JsonPropertyName("api_keys")] ApiKeysDto? ApiKeys);
 
 public sealed record AnalyzeChannelRequest(
     [property: JsonPropertyName("url_or_name")] string UrlOrName,
     [property: JsonPropertyName("engine")] string? Engine,
     [property: JsonPropertyName("language")] string? Language,
     [property: JsonPropertyName("youtube_key")] string? YouTubeKey,
-    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys);
+    [property: JsonPropertyName("api_keys")] ApiKeysDto? ApiKeys);
 
 public sealed record AnalyzeHookRequest(
     [property: JsonPropertyName("transcript")] string? Transcript,
@@ -444,7 +445,7 @@ public sealed record AnalyzeHookRequest(
     [property: JsonPropertyName("video_url")] string? VideoUrl,
     [property: JsonPropertyName("engine")] string? Engine,
     [property: JsonPropertyName("language")] string? Language,
-    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys);
+    [property: JsonPropertyName("api_keys")] ApiKeysDto? ApiKeys);
 
 public sealed record DraftScriptRequest(
     [property: JsonPropertyName("title")] string Title,
@@ -463,7 +464,7 @@ public sealed record MoreVideosRequest(
     [property: JsonPropertyName("settings")] StreamAgentSettings? Settings,
     [property: JsonPropertyName("language")] string? Language,
     [property: JsonPropertyName("youtube_key")] string? YouTubeKey,
-    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys);
+    [property: JsonPropertyName("api_keys")] ApiKeysDto? ApiKeys);
 
 public sealed record DownloadMetaRequest(
     [property: JsonPropertyName("url")] string Url,
@@ -477,9 +478,23 @@ public sealed record AnalyzeChannelResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("context")] string Context);
 
+public sealed record StolenHookDto(
+    [property: JsonPropertyName("angle")] string? Angle,
+    [property: JsonPropertyName("hook_0_5s")] string? Hook05s,
+    [property: JsonPropertyName("hook_5_20s")] string? Hook520s,
+    [property: JsonPropertyName("why_it_converts")] string? WhyItConverts);
+
+public sealed record HookAnalysisDto(
+    [property: JsonPropertyName("original_hook")] string? OriginalHook,
+    [property: JsonPropertyName("transcript_snippet")] string? TranscriptSnippet,
+    [property: JsonPropertyName("psychology")] string? Psychology,
+    [property: JsonPropertyName("flaws_identified")] string? FlawsIdentified,
+    [property: JsonPropertyName("stolen_hooks")] IReadOnlyList<StolenHookDto>? StolenHooks,
+    [property: JsonPropertyName("heatmap")] IReadOnlyList<HeatmapPointDto>? Heatmap);
+
 public sealed record AnalyzeHookResponse(
     [property: JsonPropertyName("status")] string Status,
-    [property: JsonPropertyName("data")] IReadOnlyDictionary<string, object?> Data);
+    [property: JsonPropertyName("data")] HookAnalysisDto Data);
 
 public sealed record DraftScriptResponse(
     [property: JsonPropertyName("status")] string Status,

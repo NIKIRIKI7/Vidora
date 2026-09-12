@@ -257,7 +257,7 @@ public sealed class SystemModule : ISystemModule
                     root.GetProperty("category").GetString() ?? "",
                     root.GetProperty("event_id").GetInt32(),
                     root.GetProperty("message").GetString() ?? "",
-                    root.TryGetProperty("exception", out var ex) && ex.ValueKind != JsonValueKind.Null ? ex.Clone() : null));
+                    root.TryGetProperty("exception", out var ex) && ex.ValueKind != JsonValueKind.Null ? ex.GetRawText() : null));
             }
             catch { }
         }

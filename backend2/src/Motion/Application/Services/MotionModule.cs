@@ -147,6 +147,49 @@ public sealed class MotionModule : IMotionModule
         return MapToDto(aggregate);
     }
 
+    public async Task<SceneCodeDto> SaveSceneCodeAsync(SaveSceneCodeRequest request, CancellationToken ct = default)
+    {
+        var sanitization = _codeExtractor.ExtractAndSanitize(request.TsxCode);
+        var existing = await _sceneCodeRepository.GetByProjectAndSceneAsync(request.ProjectId, request.SceneId, ct);
+
+        int width = request.Width is > 0 ? request.Width.Value : existing?.Composition.Width ?? 1920;
+        int height = request.Height is > 0 ? request.Height.Value : existing?.Composition.Height ?? 1080;
+        int fps = request.Fps is > 0 ? request.Fps.Value : existing?.Composition.Fps ?? 30;
+        int durationInFrames = request.DurationInFrames is > 0
+            ? request.DurationInFrames.Value
+            : existing?.Composition.DurationInFrames ?? Math.Max(1, fps * 5);
+
+        var composition = new CompositionConfig(width, height, fps, durationInFrames);
+
+        if (existing == null)
+        {
+            var created = SceneCode.Create(
+                SceneCodeId.New(),
+                request.ProjectId,
+                request.SceneId,
+                composition,
+                sanitization.SanitizedCode,
+                RevisionOrigin.UserEdited,
+                sanitization.DetectedCapabilities);
+
+            await _sceneCodeRepository.AddAsync(created, ct);
+            await _sceneCodeRepository.SaveChangesAsync(ct);
+            _logger.LogInformation("[MotionModule] Создана сцена {Id} из кода редактора (проект {Project})", created.Id.Value, request.ProjectId);
+            return MapToDto(created);
+        }
+
+        existing.UpdateComposition(composition);
+        if (!string.Equals(existing.GetCurrentRevision().SourceHash, sanitization.SanitizedCode.Sha256Hash, StringComparison.OrdinalIgnoreCase))
+        {
+            existing.AddRevision(sanitization.SanitizedCode, RevisionOrigin.UserEdited, sanitization.DetectedCapabilities);
+        }
+
+        await _sceneCodeRepository.UpdateAsync(existing, ct);
+        await _sceneCodeRepository.SaveChangesAsync(ct);
+        _logger.LogInformation("[MotionModule] Обновлена сцена {Id} из кода редактора (ревизия #{Rev})", existing.Id.Value, existing.CurrentRevisionNumber.Value);
+        return MapToDto(existing);
+    }
+
     public async Task<SceneCodeDto> RollbackRevisionAsync(string sceneCodeId, RollbackSceneCodeRequest request, CancellationToken ct = default)
     {
         var id = ParseSceneCodeId(sceneCodeId);

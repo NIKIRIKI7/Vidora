@@ -6,6 +6,7 @@ using Api.Endpoints.Research;
 using Api.Endpoints.Skills;
 using Api.Endpoints.System;
 using Api.Endpoints.Voice;
+using Api.OpenApi;
 using Api.WebSockets;
 using Integrations;
 using Integrations.YouTube;
@@ -39,6 +40,7 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Vidora API", Version = "v1" });
     c.CustomSchemaIds(type => type.FullName?.Replace("+", "_"));
+    c.OperationFilter<ApiDocumentationOperationFilter>();
 });
 
 // 2. Инфраструктура ядра

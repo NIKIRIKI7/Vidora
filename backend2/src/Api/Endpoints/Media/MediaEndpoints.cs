@@ -1,8 +1,8 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Kernel.Platform.Audio;
 using Kernel.Contracts;
 using Kernel.Exceptions;
+using Kernel.Platform.Config;
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Process;
 using MediaContext.Contracts;
@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Api.Endpoints.Media;
 
@@ -203,12 +205,14 @@ public static class MediaEndpoints
         // --- Media streaming endpoint (Range/206 for video scrubbing) ---
         group.MapGet("/stream", (
             [FromQuery] string path,
-            IPathResolver pathResolver) =>
+            IPathResolver pathResolver,
+            IOptions<AppStorageConfig> storageConfig,
+            ILoggerFactory loggerFactory) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.BadRequest();
 
-            var cleanPath = path.Split('?')[0];
-            var safePath = pathResolver.ResolveSafePath(cleanPath);
+            var safePath = StorageFileLocator.ResolveExistingAsset(
+                pathResolver, storageConfig.Value, loggerFactory.CreateLogger("MediaEndpoints"), path);
 
             if (!File.Exists(safePath)) return Results.NotFound(new { error = $"File not found: {path}" });
 
@@ -231,10 +235,14 @@ public static class MediaEndpoints
         // --- Compatibility aliases for frontend ---
         endpoints.MapGet("/api/v1/render/media", (
             [FromQuery] string path,
-            IPathResolver pathResolver) =>
+            IPathResolver pathResolver,
+            IOptions<AppStorageConfig> storageConfig,
+            ILoggerFactory loggerFactory) =>
         {
-            var cleanPath = path.Split('?')[0];
-            var safePath = pathResolver.ResolveSafePath(cleanPath);
+            if (string.IsNullOrWhiteSpace(path)) return Results.NotFound();
+
+            var safePath = StorageFileLocator.ResolveExistingAsset(
+                pathResolver, storageConfig.Value, loggerFactory.CreateLogger("MediaEndpoints"), path);
             if (!File.Exists(safePath)) return Results.NotFound();
 
             var ext = Path.GetExtension(safePath).ToLowerInvariant();
@@ -255,20 +263,14 @@ public static class MediaEndpoints
             Results.Ok(new { status = "ok", videos = await media.SearchStockVideosAsync(query, orientation, 1, 15, ct) }))
             .Produces<MediaSearchStockResponse>();
 
-        endpoints.MapPost("/api/v1/media/download-stock", async ([FromBody] JsonElement payload, IMediaModule media, CancellationToken ct) =>
+        endpoints.MapPost("/api/v1/media/download-stock", async (DownloadStockCompatRequest request, IMediaModule media, CancellationToken ct) =>
         {
-            if (payload.ValueKind != JsonValueKind.Object ||
-                !payload.TryGetProperty("url", out var urlProp) ||
-                !payload.TryGetProperty("filename", out var filenameProp) ||
-                urlProp.ValueKind != JsonValueKind.String ||
-                filenameProp.ValueKind != JsonValueKind.String)
+            if (string.IsNullOrWhiteSpace(request.Url) || string.IsNullOrWhiteSpace(request.Filename))
             {
                 return Results.BadRequest(new { error = "url and filename are required" });
             }
 
-            var url = urlProp.GetString()!;
-            var filename = filenameProp.GetString()!;
-            var asset = await media.DownloadAndImportStockVideoAsync(url, filename, ct);
+            var asset = await media.DownloadAndImportStockVideoAsync(request.Url, request.Filename, ct);
             return Results.Ok(new { status = "ok", path = asset.StoragePath });
         }).Produces<MediaDownloadStockResponse>();
 
@@ -279,7 +281,7 @@ public static class MediaEndpoints
             {
                 status = "ok",
                 categories = new[] { new { category = "default", category_title = "Standard Collection", tracks } },
-                custom_tracks = Array.Empty<object>()
+                custom_tracks = Array.Empty<MusicTrackDto>()
             });
         }).Produces<MediaMusicLibraryResponse>();
 
@@ -401,6 +403,15 @@ public sealed record MediaDownloadStockResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("path")] string Path);
 
+/// <summary>
+/// Тело запроса совместимости для /api/v1/media/download-stock.
+/// </summary>
+public sealed record DownloadStockCompatRequest(
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("filename")] string Filename,
+    [property: JsonPropertyName("project_path")] string? ProjectPath = null,
+    [property: JsonPropertyName("folder")] string? Folder = null);
+
 public sealed record MusicCategoryResponse(
     [property: JsonPropertyName("category")] string Category,
     [property: JsonPropertyName("category_title")] string CategoryTitle,
@@ -409,4 +420,4 @@ public sealed record MusicCategoryResponse(
 public sealed record MediaMusicLibraryResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("categories")] IReadOnlyList<MusicCategoryResponse> Categories,
-    [property: JsonPropertyName("custom_tracks")] IReadOnlyList<object> CustomTracks);
+    [property: JsonPropertyName("custom_tracks")] IReadOnlyList<MusicTrackDto> CustomTracks);

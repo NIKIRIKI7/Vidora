@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using Kernel.Contracts;
 using MediaContext.Domain;
 
 namespace MediaContext.Contracts;
@@ -114,7 +114,7 @@ public sealed record AutoBrollCommand(
     [property: JsonPropertyName("project_path")] string ProjectPath,
     [property: JsonPropertyName("format")] string Format,
     [property: JsonPropertyName("engine")] string? Engine,
-    [property: JsonPropertyName("api_keys")] JsonElement? ApiKeys,
+    [property: JsonPropertyName("api_keys")] ApiKeysDto? ApiKeys,
     [property: JsonPropertyName("fragments")] IReadOnlyList<AutoBrollFragmentItem> Fragments);
 
 public sealed record AutoBrollMatchResult(

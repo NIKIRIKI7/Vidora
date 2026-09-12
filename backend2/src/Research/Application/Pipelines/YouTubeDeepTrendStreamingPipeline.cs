@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using Kernel.Contracts;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
 using Research.Domain.Entities;
@@ -793,5 +794,5 @@ public sealed record DeepTrendExecutionOptions
     public bool IsExpandSearch { get; init; } = false;
     public string? YouTubeApiKey { get; init; }
     public string? LlmEngine { get; init; }
-    public JsonElement? ApiKeys { get; init; }
+    public ApiKeysDto? ApiKeys { get; init; }
 }

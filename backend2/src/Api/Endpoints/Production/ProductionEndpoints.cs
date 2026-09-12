@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Kernel.Contracts;
 using Kernel.Platform.FileSystem;
@@ -81,25 +80,25 @@ public static class ProductionEndpoints
 
         // --- Compatibility aliases for frontend ---
         endpoints.MapPost("/api/v1/render/concat-video", async (
-            [FromBody] JsonElement payload,
+            ConcatVideoCompatRequest request,
             IVideoStitcher stitcher,
             IPathResolver pathResolver,
             CancellationToken ct) =>
         {
-            var videoPaths = payload.GetProperty("video_paths").EnumerateArray().Select(x => x.GetString()!).ToList();
-            var outPath = payload.GetProperty("output_path").GetString()!;
-            var items = videoPaths.Select(v => new StitchVideoItem(pathResolver.ResolveSafePath(v), 5.0)).ToList();
+            var items = request.VideoPaths
+                .Select(v => new StitchVideoItem(pathResolver.ResolveSafePath(v), 5.0))
+                .ToList();
 
-            await stitcher.ConcatenateScenesAsync(items, outPath, ct);
+            await stitcher.ConcatenateScenesAsync(items, request.OutputPath, ct);
             return Results.Ok(new { status = "ok" });
         }).Produces<ProductionStatusResponse>();
 
         endpoints.MapPost("/api/v1/render/export", async (
-            [FromBody] JsonElement payload,
+            ExportProjectCompatRequest request,
             CancellationToken ct) =>
         {
-            var projectName = payload.GetProperty("project_name").GetString()!;
-            var markdown = payload.GetProperty("markdown").GetString()!;
+            var projectName = request.ProjectName;
+            var markdown = request.Markdown;
 
             using var memoryStream = new MemoryStream();
             using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
@@ -122,3 +121,18 @@ public sealed record ProductionMessageResponse(
 
 public sealed record ProductionStatusResponse(
     [property: JsonPropertyName("status")] string Status);
+
+/// <summary>
+/// Тело запроса совместимости для /api/v1/render/concat-video.
+/// </summary>
+public sealed record ConcatVideoCompatRequest(
+    [property: JsonPropertyName("video_paths")] IReadOnlyList<string> VideoPaths,
+    [property: JsonPropertyName("output_path")] string OutputPath,
+    [property: JsonPropertyName("project_path")] string? ProjectPath = null);
+
+/// <summary>
+/// Тело запроса совместимости для /api/v1/render/export.
+/// </summary>
+public sealed record ExportProjectCompatRequest(
+    [property: JsonPropertyName("project_name")] string ProjectName,
+    [property: JsonPropertyName("markdown")] string Markdown);

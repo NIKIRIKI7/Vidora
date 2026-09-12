@@ -9,6 +9,7 @@ public interface IMotionModule
     Task<SceneRevisionDto> GetRevisionAsync(string sceneCodeId, int revisionNumber, CancellationToken ct = default);
     Task<SceneCodeDto> GenerateSceneCodeAsync(GenerateSceneCodeRequest request, CancellationToken ct = default);
     Task<SceneCodeDto> UpdateManualCodeAsync(string sceneCodeId, UpdateSceneCodeManualRequest request, CancellationToken ct = default);
+    Task<SceneCodeDto> SaveSceneCodeAsync(SaveSceneCodeRequest request, CancellationToken ct = default);
     Task<SceneCodeDto> RollbackRevisionAsync(string sceneCodeId, RollbackSceneCodeRequest request, CancellationToken ct = default);
 
     Task<RenderJobDto> StartRenderAsync(string sceneCodeId, StartRenderRequest request, CancellationToken ct = default);

@@ -102,3 +102,13 @@ backend/remotion-project/src/widgets/
 
 # AI Models (large files)
 backend2/ai-models/
+
+# OpenCode local skill state (personal tooling, not project source)
+.skills.json
+
+# Backend runtime data (SQLite, generated audio/render artifacts)
+backend2/data_storage/
+backend2/logs/
+
+# Spreadsheet exports
+*.xlsx

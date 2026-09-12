@@ -55,6 +55,20 @@ public sealed record GenerateSceneCodeRequest(
 public sealed record UpdateSceneCodeManualRequest(
     [property: JsonPropertyName("code")] string Code);
 
+/// <summary>
+/// Идемпотентный upsert кода сцены по паре (project_id, scene_id).
+/// Используется редактором перед рендером: если ревизии ещё нет — создаёт,
+/// если есть — обновляет композицию и добавляет ревизию только при изменении кода.
+/// </summary>
+public sealed record SaveSceneCodeRequest(
+    [property: JsonPropertyName("project_id")] string ProjectId,
+    [property: JsonPropertyName("scene_id")] string SceneId,
+    [property: JsonPropertyName("tsx_code")] string TsxCode,
+    [property: JsonPropertyName("width")] int? Width = null,
+    [property: JsonPropertyName("height")] int? Height = null,
+    [property: JsonPropertyName("fps")] int? Fps = null,
+    [property: JsonPropertyName("duration_in_frames")] int? DurationInFrames = null);
+
 public sealed record RollbackSceneCodeRequest(
     [property: JsonPropertyName("target_revision")] int TargetRevision);
 

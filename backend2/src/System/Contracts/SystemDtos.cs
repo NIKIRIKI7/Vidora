@@ -56,7 +56,7 @@ public sealed record SystemLogEntryDto(
     [property: JsonPropertyName("category")] string Category,
     [property: JsonPropertyName("event_id")] int EventId,
     [property: JsonPropertyName("message")] string Message,
-    [property: JsonPropertyName("exception")] object? Exception);
+    [property: JsonPropertyName("exception")] string? Exception);
 
 public sealed record ModelCatalogEntryDto(
     [property: JsonPropertyName("id")] string Id,

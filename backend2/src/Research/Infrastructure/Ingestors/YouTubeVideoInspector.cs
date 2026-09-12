@@ -42,6 +42,26 @@ public sealed class YouTubeVideoInspector : IYouTubeVideoInspector
         return new VideoMetadataSummaryDto(meta.Title, meta.ChannelTitle, meta.Description);
     }
 
-    public async Task<object?> GetMetadataAsync(string videoUrlOrId, CancellationToken ct = default)
-        => await _client.GetMetadataAsync(videoUrlOrId, ct);
+    public async Task<VideoCandidateMetaDto?> GetMetadataAsync(string videoUrlOrId, CancellationToken ct = default)
+    {
+        var meta = await _client.GetMetadataAsync(videoUrlOrId, ct);
+        if (meta == null) return null;
+
+        return new VideoCandidateMetaDto
+        {
+            VideoId = meta.VideoId,
+            Title = meta.Title,
+            Description = meta.Description,
+            ChannelTitle = meta.ChannelTitle,
+            ChannelId = meta.ChannelId,
+            SubscriberCount = meta.SubscriberCount,
+            ViewCount = meta.ViewCount,
+            Duration = meta.Duration.ToString(),
+            UploadDate = meta.UploadDate,
+            PublishedAt = meta.PublishedAt,
+            Keywords = meta.Keywords,
+            ThumbnailUrl = meta.ThumbnailUrl,
+            Comments = meta.Comments,
+        };
+    }
 }
