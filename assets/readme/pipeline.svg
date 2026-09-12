@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="486" viewBox="0 0 1200 486"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Пайплайн Vidora: шесть стадий от сценария до финального MP4</title>
+  <desc id="desc">Поток выполнения: импорт SCENARIO.md, синтез речи, пословное выравнивание, генерация Remotion TSX, рендер сцены и финальная склейка с мастерингом. Прогресс идёт по WebSocket, артефакты и метаданные — в SQLite и data_storage.</desc>
+
+  <rect width="1200" height="486" rx="24" fill="#0b1326"/>
+  <rect x="0" y="0" width="1200" height="3" fill="#ddb7ff"/>
+
+  <text x="48" y="58" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="13" font-weight="600" letter-spacing="2" fill="#8892b0">EXECUTION FLOW</text>
+  <text x="48" y="88" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+        font-size="19" fill="#dae2fd">Каждый шаг — отдельный use case; полный авто-прогон — saga Production</text>
+
+  <!-- ===== Row 1 ===== -->
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <!-- 01 -->
+    <rect x="48" y="110" width="352" height="150" rx="14" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="48" y="110" width="352" height="3" rx="1.5" fill="#ddb7ff"/>
+    <text x="72" y="144" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#ddb7ff">01</text>
+    <text x="72" y="178" font-size="24" font-weight="600" fill="#dae2fd">Scenario import</text>
+    <text x="72" y="208" font-size="18" fill="#8892b0">SCENARIO.md &#8594; сцены</text>
+    <text x="376" y="208" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#5a6488">AST</text>
+    <rect x="72" y="222" width="304" height="30" rx="8" fill="#ddb7ff" fill-opacity="0.12"/>
+    <text x="88" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#ddb7ff">Production &#183; Scenario Engine</text>
+
+    <!-- 02 -->
+    <rect x="424" y="110" width="352" height="150" rx="14" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="424" y="110" width="352" height="3" rx="1.5" fill="#4fdbc8"/>
+    <text x="448" y="144" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#4fdbc8">02</text>
+    <text x="448" y="178" font-size="24" font-weight="600" fill="#dae2fd">Voice synthesis</text>
+    <text x="448" y="208" font-size="18" fill="#8892b0">текст &#8594; аудио</text>
+    <text x="752" y="208" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#5a6488">WAV</text>
+    <rect x="448" y="222" width="304" height="30" rx="8" fill="#4fdbc8" fill-opacity="0.12"/>
+    <text x="464" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#4fdbc8">Voice &#183; LocalTts / Cloud</text>
+
+    <!-- 03 -->
+    <rect x="800" y="110" width="352" height="150" rx="14" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="800" y="110" width="352" height="3" rx="1.5" fill="#4fdbc8"/>
+    <text x="824" y="144" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#4fdbc8">03</text>
+    <text x="824" y="178" font-size="24" font-weight="600" fill="#dae2fd">Alignment</text>
+    <text x="824" y="208" font-size="18" fill="#8892b0">речь &#8594; пословные таймкоды</text>
+    <text x="1128" y="208" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#5a6488">timings</text>
+    <rect x="824" y="222" width="304" height="30" rx="8" fill="#4fdbc8" fill-opacity="0.12"/>
+    <text x="840" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#4fdbc8">Voice &#183; FasterWhisper.NET</text>
+  </g>
+
+  <!-- arrows row 1 -->
+  <g stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3">
+    <line x1="400" y1="185" x2="418" y2="185"/>
+    <line x1="776" y1="185" x2="794" y2="185"/>
+  </g>
+  <polygon points="424,185 416,181 416,189" fill="#4a5878"/>
+  <polygon points="800,185 792,181 792,189" fill="#4a5878"/>
+
+  <!-- wrap 03 -> 04 -->
+  <path d="M 976 260 L 976 276 Q 976 284 968 284 L 232 284 Q 224 284 224 292 L 224 300"
+        fill="none" stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3"/>
+  <polygon points="224,306 220,298 228,298" fill="#4a5878"/>
+
+  <!-- ===== Row 2 ===== -->
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <!-- 04 -->
+    <rect x="48" y="308" width="352" height="150" rx="14" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="48" y="308" width="352" height="3" rx="1.5" fill="#c0c1ff"/>
+    <text x="72" y="342" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#c0c1ff">04</text>
+    <text x="72" y="376" font-size="24" font-weight="600" fill="#dae2fd">Scene code</text>
+    <text x="72" y="406" font-size="18" fill="#8892b0">сцена + скилы &#8594; TSX</text>
+    <text x="376" y="406" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#5a6488">TSX</text>
+    <rect x="72" y="420" width="304" height="30" rx="8" fill="#c0c1ff" fill-opacity="0.12"/>
+    <text x="88" y="440" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#c0c1ff">Motion &#183; LLM + Skills</text>
+
+    <!-- 05 -->
+    <rect x="424" y="308" width="352" height="150" rx="14" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="424" y="308" width="352" height="3" rx="1.5" fill="#c0c1ff"/>
+    <text x="448" y="342" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#c0c1ff">05</text>
+    <text x="448" y="376" font-size="24" font-weight="600" fill="#dae2fd">Render</text>
+    <text x="448" y="406" font-size="18" fill="#8892b0">TSX &#8594; видео сцены</text>
+    <text x="752" y="406" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#5a6488">MP4</text>
+    <rect x="448" y="420" width="304" height="30" rx="8" fill="#c0c1ff" fill-opacity="0.12"/>
+    <text x="464" y="440" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#c0c1ff">Motion &#183; Remotion (Node)</text>
+
+    <!-- 06 -->
+    <rect x="800" y="308" width="352" height="150" rx="14" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="800" y="308" width="352" height="3" rx="1.5" fill="#ffb4ab"/>
+    <text x="824" y="342" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#ffb4ab">06</text>
+    <text x="824" y="376" font-size="24" font-weight="600" fill="#dae2fd">Final cut</text>
+    <text x="824" y="406" font-size="18" fill="#8892b0">склейка + мастеринг</text>
+    <text x="1128" y="406" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#5a6488">final MP4</text>
+    <rect x="824" y="420" width="304" height="30" rx="8" fill="#ffb4ab" fill-opacity="0.12"/>
+    <text x="840" y="440" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#ffb4ab">Production &#183; FFmpeg</text>
+  </g>
+
+  <!-- arrows row 2 -->
+  <g stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3">
+    <line x1="400" y1="383" x2="418" y2="383"/>
+    <line x1="776" y1="383" x2="794" y2="383"/>
+  </g>
+  <polygon points="424,383 416,379 416,387" fill="#4a5878"/>
+  <polygon points="800,383 792,379 792,387" fill="#4a5878"/>
+
+  <!-- footer -->
+  <text x="48" y="474" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="13" fill="#5a6488">progress &#8594; WebSocket (AUDIO_GEN_PROGRESS / RENDER_PROGRESS) &#183; артефакты и метаданные &#8594; SQLite + data_storage/</text>
+</svg>

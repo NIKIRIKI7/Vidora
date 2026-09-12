@@ -1,0 +1,216 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="900" viewBox="0 0 1200 900"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Архитектура Vidora: клиент, API, Kernel, bounded contexts, интеграции и рантаймы</title>
+  <desc id="desc">Слоистая карта системы: Electron/React клиент общается по REST и WebSocket с Minimal API; API вызывает bounded contexts (Production, Voice, Motion, Media, Research, Skills, System) поверх общего Kernel; контексты используют интеграции (LLM, Whisper, FFmpeg, Pexels, YouTube) и внешние рантаймы — Python TTS-воркер OmniVoice, Remotion на Node 22 и SQLite-хранилище.</desc>
+
+  <defs>
+    <linearGradient id="top-bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ddb7ff"/>
+      <stop offset="50%" stop-color="#c0c1ff"/>
+      <stop offset="100%" stop-color="#4fdbc8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="900" rx="24" fill="#0b1326"/>
+  <rect x="0" y="0" width="1200" height="3" fill="url(#top-bar)"/>
+
+  <!-- header -->
+  <text x="48" y="58" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="13" font-weight="600" letter-spacing="2" fill="#8892b0">SYSTEM ARCHITECTURE</text>
+  <text x="48" y="88" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+        font-size="20" fill="#dae2fd">Модульный монолит .NET 10 &#183; Python TTS-воркер &#183; Electron/React клиент</text>
+
+  <!-- ===================== CLIENT ===================== -->
+  <rect x="44" y="112" width="1112" height="88" rx="16" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+  <text x="68" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="12" font-weight="600" letter-spacing="1.5" fill="#8892b0">CLIENT</text>
+  <rect x="68" y="150" width="470" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+  <text x="88" y="166" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="600" fill="#dae2fd">Electron + React 19</text>
+  <text x="88" y="182" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#5a6488">widgets &#183; features &#183; entities &#183; shared</text>
+  <rect x="560" y="150" width="250" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+  <text x="582" y="174" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#dae2fd">Zustand store</text>
+  <rect x="826" y="150" width="306" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+  <text x="846" y="174" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#dae2fd">REST + WS /ws/events</text>
+
+  <!-- A -> B -->
+  <line x1="196" y1="204" x2="196" y2="216" stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3"/>
+  <polygon points="196,220 192,212 200,212" fill="#4a5878"/>
+
+  <!-- ===================== API ===================== -->
+  <rect x="44" y="222" width="1112" height="78" rx="16" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+  <text x="68" y="246" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="12" font-weight="600" letter-spacing="1.5" fill="#8892b0">PRESENTATION &#183; Api</text>
+  <rect x="68" y="254" width="360" height="36" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+  <text x="88" y="277" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#dae2fd">Minimal API &#183; /api/v1/*</text>
+  <rect x="444" y="254" width="300" height="36" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+  <text x="464" y="277" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#dae2fd">WebSocket &#183; /ws/events</text>
+  <rect x="760" y="254" width="372" height="36" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+  <text x="780" y="277" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#dae2fd">ExceptionHandlingMiddleware &#8594; ErrorEnvelope</text>
+
+  <!-- B -> C -->
+  <line x1="196" y1="304" x2="196" y2="316" stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3"/>
+  <polygon points="196,320 192,312 200,312" fill="#4a5878"/>
+
+  <!-- ===================== CORE ===================== -->
+  <text x="48" y="338" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="12" font-weight="600" letter-spacing="1.5" fill="#8892b0">CORE &#183; domain / application / infrastructure</text>
+
+  <!-- Kernel -->
+  <rect x="44" y="350" width="250" height="258" rx="16" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+  <rect x="44" y="350" width="250" height="3" rx="1.5" fill="#c0c1ff"/>
+  <text x="68" y="382" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#dae2fd">Kernel</text>
+  <text x="68" y="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#5a6488">общий технический базис</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#8892b0">
+    <text x="68" y="426">Exceptions + ErrorEnvelope</text>
+    <text x="68" y="446">In-process event bus + DLQ</text>
+    <text x="68" y="466">Path sandbox (anti-traversal)</text>
+    <text x="68" y="486">Process supervisor (Job Object)</text>
+    <text x="68" y="506">GPU / VRAM arbiter</text>
+    <text x="68" y="526">WebSocket gateway</text>
+    <text x="68" y="546">JSONL logging (NDJSON)</text>
+    <text x="68" y="566">Ports &#8594; Integrations</text>
+  </g>
+
+  <!-- Bounded contexts -->
+  <text x="326" y="338" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="12" font-weight="600" letter-spacing="1.5" fill="#8892b0">BOUNDED CONTEXTS &#183; 7</text>
+
+  <!-- row 1 -->
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <!-- 01 Production -->
+    <rect x="326" y="350" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="326" y="368" width="3" height="88" rx="1.5" fill="#ddb7ff"/>
+    <text x="344" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#ddb7ff">01</text>
+    <text x="344" y="408" font-size="17" font-weight="600" fill="#dae2fd">Production</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="344" y="432">Project &#183; Scene &#183; Fragment</text>
+      <text x="344" y="449">ProductionPipeline (saga)</text>
+      <text x="344" y="466">Scenario Engine &#183; lint</text>
+    </g>
+    <!-- 02 Voice -->
+    <rect x="537" y="350" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="537" y="368" width="3" height="88" rx="1.5" fill="#4fdbc8"/>
+    <text x="555" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#4fdbc8">02</text>
+    <text x="555" y="408" font-size="17" font-weight="600" fill="#dae2fd">Voice</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="555" y="432">TtsJob &#183; speakers</text>
+      <text x="555" y="449">Alignment &#183; transcribe</text>
+      <text x="555" y="466">DSP &#183; ducking</text>
+    </g>
+    <!-- 03 Motion -->
+    <rect x="748" y="350" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="748" y="368" width="3" height="88" rx="1.5" fill="#c0c1ff"/>
+    <text x="766" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#c0c1ff">03</text>
+    <text x="766" y="408" font-size="17" font-weight="600" fill="#dae2fd">Motion</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="766" y="432">SceneCode &#183; revisions</text>
+      <text x="766" y="449">RenderJob</text>
+      <text x="766" y="466">Remotion runner</text>
+    </g>
+    <!-- 04 Media -->
+    <rect x="959" y="350" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="959" y="368" width="3" height="88" rx="1.5" fill="#ffb4ab"/>
+    <text x="977" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#ffb4ab">04</text>
+    <text x="977" y="408" font-size="17" font-weight="600" fill="#dae2fd">Media</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="977" y="432">MediaAsset &#183; B-roll</text>
+      <text x="977" y="449">FFmpeg normalize</text>
+      <text x="977" y="466">Pexels &#183; music</text>
+    </g>
+  </g>
+
+  <!-- row 2 -->
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <!-- 05 Research -->
+    <rect x="326" y="486" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="326" y="504" width="3" height="88" rx="1.5" fill="#ddb7ff"/>
+    <text x="344" y="518" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#ddb7ff">05</text>
+    <text x="344" y="544" font-size="17" font-weight="600" fill="#dae2fd">Research</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="344" y="568">DeepTrend runs</text>
+      <text x="344" y="585">Candidates &#183; scores</text>
+      <text x="344" y="602">xlsx export &#183; stream</text>
+    </g>
+    <!-- 06 Skills -->
+    <rect x="537" y="486" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="537" y="504" width="3" height="88" rx="1.5" fill="#4fdbc8"/>
+    <text x="555" y="518" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#4fdbc8">06</text>
+    <text x="555" y="544" font-size="17" font-weight="600" fill="#dae2fd">Skills</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="555" y="568">Prompt catalog</text>
+      <text x="555" y="585">Stages &#183; versions</text>
+      <text x="555" y="602">Seed sync</text>
+    </g>
+    <!-- 07 System -->
+    <rect x="748" y="486" width="195" height="124" rx="12" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+    <rect x="748" y="504" width="3" height="88" rx="1.5" fill="#c0c1ff"/>
+    <text x="766" y="518" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#c0c1ff">07</text>
+    <text x="766" y="544" font-size="17" font-weight="600" fill="#dae2fd">System</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="766" y="568">Host &#183; settings</text>
+      <text x="766" y="585">Model catalog</text>
+      <text x="766" y="602">Logs &#183; dead-letters</text>
+    </g>
+    <!-- Clean architecture note -->
+    <rect x="959" y="486" width="195" height="124" rx="12" fill="#131b2c" stroke="#1e2a40" stroke-width="1"/>
+    <text x="977" y="522" font-size="15" font-weight="600" fill="#8892b0">Каждый контекст</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#5a6488">
+      <text x="977" y="548">domain &#183; инварианты</text>
+      <text x="977" y="565">application &#183; use cases</text>
+      <text x="977" y="582">contracts &#183; фасад</text>
+    </g>
+  </g>
+
+  <!-- C -> D -->
+  <line x1="196" y1="616" x2="196" y2="630" stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3"/>
+  <polygon points="196,634 192,626 200,626" fill="#4a5878"/>
+
+  <!-- ===================== INTEGRATIONS ===================== -->
+  <rect x="44" y="636" width="1112" height="84" rx="16" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+  <text x="68" y="660" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="12" font-weight="600" letter-spacing="1.5" fill="#8892b0">INTEGRATIONS &#183; адаптеры портов Kernel</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#dae2fd">
+    <rect x="68" y="670" width="246" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="90" y="694">LLM &#183; LLamaSharp GGUF</text>
+    <rect x="330" y="670" width="250" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="352" y="694">Whisper &#183; FasterWhisper.NET</text>
+    <rect x="596" y="670" width="150" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="618" y="694">FFmpeg</text>
+    <rect x="762" y="670" width="150" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="784" y="694">Pexels</text>
+    <rect x="928" y="670" width="204" height="38" rx="10" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="950" y="694">YouTube &#183; yt-dlp</text>
+  </g>
+
+  <!-- D -> E -->
+  <line x1="196" y1="724" x2="196" y2="730" stroke="#4a5878" stroke-width="1.4" stroke-dasharray="3,3"/>
+  <polygon points="196,734 192,726 200,726" fill="#4a5878"/>
+
+  <!-- ===================== RUNTIMES & STORAGE ===================== -->
+  <rect x="44" y="736" width="1112" height="130" rx="16" fill="#171f33" stroke="#22304a" stroke-width="1"/>
+  <text x="68" y="760" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="12" font-weight="600" letter-spacing="1.5" fill="#8892b0">RUNTIMES &amp; STORAGE</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <rect x="68" y="770" width="340" height="80" rx="12" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="88" y="796" font-size="15" font-weight="600" fill="#dae2fd">Python TTS worker</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="88" y="818">FastAPI + OmniVoice (PyTorch)</text>
+      <text x="88" y="835">VRAM manager &#183; 127.0.0.1:8000</text>
+    </g>
+
+    <rect x="424" y="770" width="340" height="80" rx="12" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="444" y="796" font-size="15" font-weight="600" fill="#dae2fd">Remotion workspace</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="444" y="818">Node 22 &#183; TSX &#8594; MP4</text>
+      <text x="444" y="835">tools/remotion_workspace</text>
+    </g>
+
+    <rect x="780" y="770" width="352" height="80" rx="12" fill="#0b1326" stroke="#2d3449" stroke-width="1"/>
+    <text x="800" y="796" font-size="15" font-weight="600" fill="#dae2fd">Storage</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8892b0">
+      <text x="800" y="818">SQLite per context &#183; data_storage/</text>
+      <text x="800" y="835">projects &#183; ai-models &#183; app_events.jsonl</text>
+    </g>
+  </g>
+</svg>
