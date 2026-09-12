@@ -52,7 +52,7 @@ public sealed class OpenAiSpeechProvider : ITtsEngineProvider
             input = text,
             voice = spec.SpeakerId.ToLowerInvariant(),
             speed = spec.Speed,
-            response_format = "mp3"
+            response_format = "wav"
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/audio/speech");

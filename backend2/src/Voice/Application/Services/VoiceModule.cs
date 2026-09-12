@@ -101,26 +101,36 @@ public sealed class VoiceModule : IVoiceModule
         try
         {
             var workingDir = PrepareDirectory(Path.Combine(_storageConfig.DataStorageDir, "temp", "voice"));
-            var rawFilePath = Path.Combine(workingDir, $"{job.Id.Value}_raw.wav");
-            var masterFilePath = Path.Combine(workingDir, $"{job.Id.Value}_master.wav");
+            var audioFilePath = Path.Combine(workingDir, $"{job.Id.Value}.wav");
 
             job.MarkSynthesizing();
             var provider = _providerRegistry.Resolve(spec.Engine);
-            var synthResult = await provider.SynthesizeAsync(cmd.Text, spec, rawFilePath, ct);
-            job.MarkSynthesized(synthResult.AudioFilePath, synthResult.DurationSeconds, synthResult.FileSizeBytes);
 
-            var alignment = await DetermineAlignmentAsync(spec, synthResult, rawFilePath, cmd.Text, ct);
+            // Очищаем текст от тегов <#X#> и [emotion:], если это не MiniMax
+            var textToSynthesize = spec.Engine == VoiceEngineType.CloudMiniMax
+                ? cmd.Text
+                : VoiceTagSanitizer.NormalizeForSynthesis(cmd.Text);
+
+            // Voice отвечает только за генерацию: чистый синтез без FFmpeg-мастеринга (LUFS, вырезание тишины).
+            var synthResult = await provider.SynthesizeAsync(textToSynthesize, spec, audioFilePath, ct);
+
+            // Честная длительность и размер готового файла (провайдер может вернуть 0.0).
+            double actualDuration = synthResult.DurationSeconds > 0
+                ? synthResult.DurationSeconds
+                : WavAudioDecoder.ProbeWavDuration(synthResult.AudioFilePath);
+            long actualSizeBytes = new FileInfo(synthResult.AudioFilePath).Length;
+            job.MarkSynthesized(synthResult.AudioFilePath, actualDuration, actualSizeBytes);
+
+            // Forced Alignment по уже сгенерированному чистому файлу.
+            var alignment = await DetermineAlignmentAsync(spec, synthResult, synthResult.AudioFilePath, textToSynthesize, ct);
             job.AttachAlignment(alignment);
-
-            var filterSpec = cmd.Filters ?? new AudioFilterSpec();
-            await _audioService.PostProcessVoiceAsync(rawFilePath, masterFilePath, filterSpec, ct);
 
             var mediaAssetId = await _mediaRegistrar.RegisterAudioAsync(
                 title: $"Voice_{spec.SpeakerId}_{DateTime.UtcNow:yyyyMMdd_HHmmss}",
-                filePath: masterFilePath,
+                filePath: synthResult.AudioFilePath,
                 ct: ct);
 
-            job.MarkReady(masterFilePath, mediaAssetId);
+            job.MarkReady(synthResult.AudioFilePath, mediaAssetId);
             await _repository.UpdateAsync(job, ct);
             await _repository.SaveChangesAsync(ct);
 
@@ -224,9 +234,27 @@ public sealed class VoiceModule : IVoiceModule
     {
         _logger.LogInformation("[VoiceModule] Клонирование голоса: '{Name}' через {Engine}", request.Name, request.Engine);
 
+        // Локальный воркер (OmniVoice) не должен сам скачивать Whisper ASR:
+        // если текст эталона не задан, транскрибируем его нативным Whisper (C#)
+        // и передаём в reference_text. Это исключает загрузку openai/whisper-*.
+        var referenceText = request.ReferenceText;
+        if (request.Engine == VoiceEngineType.LocalTts && string.IsNullOrWhiteSpace(referenceText))
+        {
+            _logger.LogInformation("[VoiceModule] Текст эталона не задан — транскрибирую через C# Whisper.");
+            try
+            {
+                referenceText = await TranscribeAudioAsync(referenceAudioPath, ct);
+                _logger.LogInformation("[VoiceModule] Whisper распознал эталон: '{Text}'", referenceText);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "[VoiceModule] Не удалось распознать эталон клонирования через C# Whisper.");
+            }
+        }
+
         var spec = new ClonedVoiceSpec(
             request.Engine, referenceAudioPath, request.Name,
-            request.ReferenceText, request.Language, request.LocalEngineId);
+            referenceText, request.Language, request.LocalEngineId);
 
         var provider = _cloneRegistry.Resolve(request.Engine);
         var result = await provider.CloneVoiceAsync(spec, ct);

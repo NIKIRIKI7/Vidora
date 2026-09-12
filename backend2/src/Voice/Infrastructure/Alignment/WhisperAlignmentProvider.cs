@@ -52,7 +52,7 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
             "[WhisperAlign] Starting word-level alignment (FasterWhisper.NET). Job: [Job_{JobId}], Audio: {Audio}",
             jobId, Path.GetFileName(safeAudio));
 
-        var modelDir = ResolveModelDirectory();
+        var modelDir = await ResolveModelDirectoryAsync(ct);
         if (string.IsNullOrEmpty(modelDir) || !Directory.Exists(modelDir))
         {
             _logger.LogError("[FasterWhisper] Model directory not found at {Path}. Using FallbackProportional.",
@@ -111,27 +111,27 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
         }
     }
 
-    private string? ResolveModelDirectory()
+    private async Task<string?> ResolveModelDirectoryAsync(CancellationToken ct)
     {
-        string modelTarget = _whisperOptions.Model.DirectoryPath;
-
-        var customSetting = _settingRepo.GetByKeyAsync("voice.whisper_model_path").GetAwaiter().GetResult();
-        if (!string.IsNullOrEmpty(customSetting?.Value))
+        // Пользовательская настройка из БД имеет приоритет, но только если путь реально резолвится.
+        var customSetting = await _settingRepo.GetByKeyAsync("voice.whisper_model_path", ct);
+        if (!string.IsNullOrWhiteSpace(customSetting?.Value))
         {
-            modelTarget = customSetting.Value;
+            var customDir = TryResolveDirectory(customSetting.Value);
+            if (customDir != null)
+            {
+                return customDir;
+            }
+
+            _logger.LogWarning(
+                "[FasterWhisper] Настроенный путь модели '{Path}' не найден. Использую путь по умолчанию '{Default}'.",
+                customSetting.Value, _whisperOptions.Model.DirectoryPath);
         }
 
-        var located = ModelPathResolver.Locate(modelTarget, _storageConfig.DataStorageDir);
-        if (!string.IsNullOrEmpty(located))
+        var defaultDir = TryResolveDirectory(_whisperOptions.Model.DirectoryPath);
+        if (defaultDir != null)
         {
-            if (File.Exists(located))
-            {
-                return Path.GetDirectoryName(located);
-            }
-            if (Directory.Exists(located))
-            {
-                return located;
-            }
+            return defaultDir;
         }
 
         var candidates = ModelPathResolver.GetCandidatePaths(
@@ -145,6 +145,22 @@ public sealed class WhisperAlignmentProvider : IForcedAlignmentProvider
         }
 
         return null;
+    }
+
+    private string? TryResolveDirectory(string targetPath)
+    {
+        var located = ModelPathResolver.Locate(targetPath, _storageConfig.DataStorageDir);
+        if (string.IsNullOrEmpty(located))
+        {
+            return null;
+        }
+
+        if (File.Exists(located))
+        {
+            return Path.GetDirectoryName(located);
+        }
+
+        return Directory.Exists(located) ? located : null;
     }
 
     private AlignmentData FallbackProportionalAlignment(string text, string audioPath)

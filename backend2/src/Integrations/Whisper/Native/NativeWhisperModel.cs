@@ -96,20 +96,30 @@ public sealed class NativeWhisperModel : IDisposable
             SuppressBlank = _options.Inference.SuppressBlank
         };
 
+        // VAD обязателен: без него Whisper «ищет» слова в тишине и галлюцинирует дублями.
+        var vadOptions = _options.Inference.EnableVad
+            ? new VadOptions
+            {
+                Enabled = true,
+                Threshold = (float)_options.Inference.VadThreshold,
+                MinSilenceDurationMs = _options.Inference.MinSilenceDurationMs
+            }
+            : null;
+
         var sw = Stopwatch.StartNew();
         IReadOnlyList<WhisperSegment> segments;
 
         try
         {
-            _logger.LogInformation("[FasterWhisper] Calling TranscribeWithInfo (samples={SampleCount}, lang={Lang}, beam={Beam}, temp={Temp})",
-                decoded.Samples.Length, language, fwOptions.BeamSize, fwOptions.SamplingTemperature);
+            _logger.LogInformation("[FasterWhisper] Calling TranscribeWithInfo (samples={SampleCount}, lang={Lang}, beam={Beam}, temp={Temp}, vad={Vad})",
+                decoded.Samples.Length, language, fwOptions.BeamSize, fwOptions.SamplingTemperature, vadOptions?.Enabled ?? false);
 
             var syncResult = _model!.TranscribeWithInfo(
                 decoded.Samples,
                 language: language,
                 task: "transcribe",
                 options: fwOptions,
-                vadOptions: null);
+                vadOptions: vadOptions);
 
             var segList = syncResult.Segments.ToList();
             _logger.LogInformation(

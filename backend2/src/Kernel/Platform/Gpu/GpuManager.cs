@@ -5,16 +5,27 @@ namespace Kernel.Platform.Gpu;
 public sealed class GpuManager : IGpuManager
 {
     private static readonly TimeSpan LockTimeout = TimeSpan.FromMinutes(5);
-    private const string DefaultMutexName = @"Global\Vidora_Vram_Hardware_Lock";
+    private const string DefaultLockFileName = "vidora_gpu_vram.lock";
 
     private readonly SemaphoreSlim _inProcessLock = new(1, 1);
-    private readonly string _mutexName;
+    private readonly string _lockFilePath;
     private readonly ILogger<GpuManager> _logger;
 
     public GpuManager(ILogger<GpuManager> logger, string? customLockIdentifier = null)
     {
         _logger = logger;
-        _mutexName = string.IsNullOrWhiteSpace(customLockIdentifier) ? DefaultMutexName : customLockIdentifier;
+
+        string fileName = string.IsNullOrWhiteSpace(customLockIdentifier)
+            ? DefaultLockFileName
+            : SanitizeForFileName(customLockIdentifier) + ".lock";
+
+        _lockFilePath = Path.Combine(Path.GetTempPath(), fileName);
+    }
+
+    private static string SanitizeForFileName(string name)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        return string.Join("_", name.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries)).Trim();
     }
 
     public async Task<IAsyncDisposable> AcquireGpuLockAsync(string contextName, CancellationToken cancellationToken = default)
@@ -22,44 +33,49 @@ public sealed class GpuManager : IGpuManager
         _logger.LogDebug("[GPU] Ожидание внутрипроцессной блокировки VRAM: {Context}", contextName);
         await _inProcessLock.WaitAsync(cancellationToken);
 
-        Mutex? systemMutex = null;
-        bool hasHandle = false;
+        FileStream? lockFileStream = null;
+        bool acquired = false;
+        var startTime = DateTime.UtcNow;
+
+        _logger.LogDebug("[GPU] Ожидание файловой блокировки VRAM: {Context}", contextName);
 
         try
         {
-            systemMutex = new Mutex(false, _mutexName);
-
-            _logger.LogDebug("[GPU] Ожидание системного мьютекса VRAM: {Context}", contextName);
-
-            var waitTask = Task.Run(() =>
+            while (!acquired)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (DateTime.UtcNow - startTime > LockTimeout)
+                {
+                    throw new TimeoutException($"Превышен таймаут ({LockTimeout.TotalSeconds} сек.) ожидания системной блокировки GPU для {contextName}");
+                }
+
                 try
                 {
-                    return systemMutex.WaitOne(LockTimeout);
+                    // Межпроцессная блокировка через файл без привязки к потокам (thread-affinity free)
+                    lockFileStream = new FileStream(
+                        _lockFilePath,
+                        FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite,
+                        FileShare.None,
+                        4096,
+                        FileOptions.DeleteOnClose);
+
+                    acquired = true;
                 }
-                catch (AbandonedMutexException)
+                catch (IOException)
                 {
-                    return true;
+                    // Файл заблокирован другим процессом, ждем
+                    await Task.Delay(500, cancellationToken);
                 }
-            }, cancellationToken);
-
-            hasHandle = await waitTask;
-
-            if (!hasHandle)
-            {
-                throw new TimeoutException($"Превышен таймаут ({LockTimeout.TotalSeconds} сек.) ожидания системной блокировки GPU для {contextName}");
             }
 
             _logger.LogInformation("[GPU] VRAM успешно заблокирована: {Context}", contextName);
-            return new GpuLockReleaser(_inProcessLock, systemMutex, contextName, _logger);
+            return new GpuLockReleaser(_inProcessLock, lockFileStream!, contextName, _logger);
         }
         catch (Exception ex)
         {
-            if (hasHandle && systemMutex != null)
-            {
-                systemMutex.ReleaseMutex();
-            }
-            systemMutex?.Dispose();
+            lockFileStream?.Dispose();
             _inProcessLock.Release();
 
             if (ex is OperationCanceledException)
@@ -70,6 +86,7 @@ public sealed class GpuManager : IGpuManager
             {
                 _logger.LogError(ex, "[GPU] Сбой захвата блокировки VRAM: {Context}", contextName);
             }
+
             throw;
         }
     }
@@ -88,15 +105,15 @@ public sealed class GpuManager : IGpuManager
     private sealed class GpuLockReleaser : IAsyncDisposable
     {
         private readonly SemaphoreSlim _inProcessLock;
-        private readonly Mutex _systemMutex;
+        private readonly FileStream _lockFileStream;
         private readonly string _contextName;
         private readonly ILogger _logger;
         private bool _disposed;
 
-        public GpuLockReleaser(SemaphoreSlim inProcessLock, Mutex systemMutex, string contextName, ILogger logger)
+        public GpuLockReleaser(SemaphoreSlim inProcessLock, FileStream lockFileStream, string contextName, ILogger logger)
         {
             _inProcessLock = inProcessLock;
-            _systemMutex = systemMutex;
+            _lockFileStream = lockFileStream;
             _contextName = contextName;
             _logger = logger;
         }
@@ -107,12 +124,11 @@ public sealed class GpuManager : IGpuManager
 
             try
             {
-                _systemMutex.ReleaseMutex();
-                _systemMutex.Dispose();
+                _lockFileStream.Dispose();
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[GPU] Предупреждение при освобождении системного мьютекса: {Context}", _contextName);
+                _logger.LogWarning(ex, "[GPU] Предупреждение при освобождении файлового лока: {Context}", _contextName);
             }
             finally
             {

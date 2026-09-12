@@ -42,7 +42,13 @@ public sealed class LocalTtsCloneProvider : IVoiceCloneProvider
             throw new ResourceNotFoundException("ReferenceAudio", safeRefAudio);
         }
 
-        var engineId = spec.LocalEngineId ?? "default";
+        var engineId = spec.LocalEngineId;
+        if (string.IsNullOrWhiteSpace(engineId) || engineId == "default")
+        {
+            var models = await _client.GetAvailableModelsAsync(ct);
+            engineId = models.FirstOrDefault(m => m.Capabilities.Contains("clone", StringComparer.OrdinalIgnoreCase))?.Id ?? "omni_voice_v1";
+        }
+
         var speakerId = $"clone_local_{Guid.NewGuid():N}"[..16];
 
         // Папка для векторов диктора локального воркера (.pt voice clone prompts)

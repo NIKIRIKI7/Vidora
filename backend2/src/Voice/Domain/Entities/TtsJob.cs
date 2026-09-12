@@ -70,7 +70,6 @@ public class TtsJob : BaseEntity<TtsJobId>
     {
         ArgumentNullException.ThrowIfNull(alignment);
         Alignment = alignment;
-        Status = TtsJobStatus.ProcessingAudio;
         UpdatedAt = DateTimeOffset.UtcNow;
         AddDomainEvent(new AlignmentProducedEvent(Id.Value, alignment.Words.Count, alignment.TotalDurationMs));
     }

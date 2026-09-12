@@ -1,5 +1,6 @@
 using Kernel.Platform.FileSystem;
 using Kernel.Platform.Gpu;
+using Integrations.Whisper.Audio;
 using Microsoft.Extensions.Logging;
 using Voice.Domain;
 using Voice.Domain.Ports;
@@ -31,7 +32,13 @@ public sealed class LocalTtsSpeechProvider : ITtsEngineProvider
     public async Task<RawSynthesisResult> SynthesizeAsync(string text, VoiceSpec spec, string destinationPath, CancellationToken ct)
     {
         var safeDest = _pathResolver.ResolveSafePath(destinationPath);
-        var engineId = spec.LocalEngineId ?? "default";
+
+        var engineId = spec.LocalEngineId;
+        if (string.IsNullOrWhiteSpace(engineId) || engineId == "default")
+        {
+            var models = await _client.GetAvailableModelsAsync(ct);
+            engineId = models.FirstOrDefault()?.Id ?? "omni_voice_v1";
+        }
 
         _logger.LogInformation("[LocalTts] Ожидание блокировки VRAM для генерации: {EngineId}", engineId);
 
@@ -59,6 +66,7 @@ public sealed class LocalTtsSpeechProvider : ITtsEngineProvider
             ct: ct);
 
         var fileInfo = new FileInfo(safeDest);
-        return new RawSynthesisResult(safeDest, 0.0, fileInfo.Length);
+        double actualDuration = WavAudioDecoder.ProbeWavDuration(safeDest);
+        return new RawSynthesisResult(safeDest, actualDuration, fileInfo.Length);
     }
 }
