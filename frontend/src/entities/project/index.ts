@@ -1,3 +1,5 @@
 export * from './model/types'
 export * from './model/store'
+export * from './model/useScenarioEngineStore'
+export * from './lib/astAdapter'
 export * from './lib/parseMarkdown'

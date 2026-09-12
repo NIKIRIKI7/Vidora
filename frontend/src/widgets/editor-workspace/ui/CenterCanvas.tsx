@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import type { ProjectSettings, Scene, VideoFormat, BackgroundMusicSettings } from '@entities/project'
+import { useScenarioEngineStore } from '@entities/project'
 import { Button, Spinner, ProgressBar } from '@shared/ui'
 import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API } from '@widgets/editor-workspace/lib/helpers'
@@ -25,7 +26,6 @@ interface Props {
   pipelineStep: string
   renderProgress: number
   onCancelAll: () => void
-  onUpdateMarkdown: (md: string) => void
   onCaptureFrame: () => void
   onUpdateFragmentBounds: (fragId: string, edge: 'start' | 'end', newTime: number, ripple?: boolean) => void
   onSplitFragment?: (fragId: string, splitTime: number) => void
@@ -44,7 +44,7 @@ export const CenterCanvas = ({
   centerView, previewFormat, onChangeView, onPreviewFormatChange,
   playingTargetId, renderedVideos, audioLoaded, activeScene, project, videoRef, audioRef, onUpdateCode,
   onCodeHistory, isRendering, isAutoPipelineRunning, pipelineStep, renderProgress, onCancelAll,
-  onUpdateMarkdown, onCaptureFrame, onUpdateFragmentBounds, showTimeline,
+  onCaptureFrame, onUpdateFragmentBounds, showTimeline,
   onSplitFragment, onDeleteFragment, onDuplicateFragment, onSelectFragment, selectedFragmentId,
   backgroundMusic, onUpdateBackgroundMusic, onOpenMusicSettings, onOpenBRollModal,
 }: Props) => {
@@ -52,8 +52,11 @@ export const CenterCanvas = ({
   const hasRenderedVideo = Boolean(playingTargetId && renderedVideos[playingTargetId])
   const shouldRenderAudio = Boolean(audioLoaded && !hasRenderedVideo)
 
-  const [localMd, setLocalMd] = useState(project.rawMarkdown)
-  const lastProjectMdRef = useRef(project.rawMarkdown)
+  // Тонкий клиент: Markdown-редактор связан со Шлюзом (AST-синк на бэкенде), а не с локальным парсером.
+  const engineRawMarkdown = useScenarioEngineStore(s => s.rawMarkdown)
+  const engineIsSyncing = useScenarioEngineStore(s => s.isSyncing)
+  const engineUpdateMarkdown = useScenarioEngineStore(s => s.updateMarkdown)
+
   const currentFormat = previewFormat || project.format
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('app:split-ratio')) || 50)
 
@@ -65,24 +68,6 @@ export const CenterCanvas = ({
       body: JSON.stringify({ project_id: project.name, scene_id: activeScene.id, tsx_code: activeScene.remotionCode, prompt: 'Ручная правка' }),
     }).catch(() => {})
   }
-
-  // Прямая синхронизация при изменении проекта извне без Promise.resolve()
-  useEffect(() => {
-    if (project.rawMarkdown !== lastProjectMdRef.current) {
-      lastProjectMdRef.current = project.rawMarkdown
-      setLocalMd(project.rawMarkdown)
-    }
-  }, [project.rawMarkdown])
-
-  // Дебаунс сохранения ручных правок в Raw Script
-  useEffect(() => {
-    if (localMd === project.rawMarkdown) return
-    const t = setTimeout(() => {
-      lastProjectMdRef.current = localMd
-      onUpdateMarkdown(localMd)
-    }, 600)
-    return () => clearTimeout(t)
-  }, [localMd, project.rawMarkdown, onUpdateMarkdown])
 
   useEffect(() => {
     const video = videoRef.current
@@ -229,8 +214,18 @@ export const CenterCanvas = ({
             {renderPlayer(true)}
           </div>
         ) : centerView === 'markdown' ? (
-          <div className="p-6 w-full h-full flex justify-center overflow-y-auto custom-scrollbar">
-            <textarea className="w-full h-full max-w-5xl p-6 font-mono text-sm leading-relaxed bg-surface-container-lowest/60 text-on-surface border border-white/10 rounded-xl resize-none outline-none focus:border-primary/50 custom-scrollbar" value={localMd} onChange={e => setLocalMd(e.target.value)} spellCheck={false} />
+          <div className="relative w-full h-full p-6 flex justify-center overflow-y-auto custom-scrollbar">
+            {engineIsSyncing && (
+              <div className="absolute top-3 right-6 z-10 text-[10px] text-secondary font-mono flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-3 py-1 animate-pulse">
+                <Spinner className="w-3 h-3" /> Синхронизация AST…
+              </div>
+            )}
+            <textarea
+              className="w-full h-full max-w-5xl p-6 font-mono text-sm leading-relaxed bg-surface-container-lowest/60 text-on-surface border border-white/10 rounded-xl resize-none outline-none focus:border-primary/50 custom-scrollbar"
+              value={engineRawMarkdown}
+              onChange={e => engineUpdateMarkdown(e.target.value)}
+              spellCheck={false}
+            />
           </div>
         ) : (
           <div className="p-6 w-full h-full flex justify-center overflow-y-auto custom-scrollbar">

@@ -1,8 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { ProjectSettings, Resolution, VideoFormat, BackgroundMusicSettings, MusicTrackItem } from '@entities/project'
-import { useSettingsStore, useNotificationStore } from '@entities/project'
+import {
+  useSettingsStore, useNotificationStore, astToProjectDelta, useScenarioEngineStore,
+} from '@entities/project'
 import { Button, Modal, FieldGroup, Switch, Input, Select, Slider } from '@shared/ui'
 import { THEME_PRESETS, DEFAULT_BACKGROUND_MUSIC, type ThemePreset } from '@shared/config'
+import { createProductionProject } from '@shared/api'
 import { useEditorWorkspace } from '@widgets/editor-workspace/model/useEditorWorkspace'
 import { CenterCanvas } from './CenterCanvas'
 import { EditorHeader } from './EditorHeader'
@@ -37,6 +40,66 @@ export const EditorWorkspace = ({
   onOpenGlobalSettings,
 }: Props) => {
   const model = useEditorWorkspace({ project, onUpdateProject })
+
+  // --- Scenario Engine (тонкий клиент): Markdown -> AST через backend Gateway ---
+  const projectRef = useRef(project)
+  const modelRef = useRef(model)
+  useEffect(() => { projectRef.current = project })
+  useEffect(() => { modelRef.current = model })
+
+  const applyEnginePayload = useCallback(
+    (payload: { backendId: string; markdown: string; ast: import('@shared/api').ScenarioAstDocument }) => {
+      const current = projectRef.current
+      const delta = astToProjectDelta(payload.ast, current.scenes)
+      const nextColors = delta.montage?.colors
+        ? { ...current.montage.colors, ...delta.montage.colors }
+        : current.montage.colors
+      onUpdateProject({
+        ...current,
+        backendProjectId: payload.backendId || current.backendProjectId,
+        rawMarkdown: payload.markdown,
+        metadata: delta.metadata ? { ...current.metadata, ...delta.metadata } : current.metadata,
+        montage: {
+          ...current.montage,
+          ...(delta.montage?.fps ? { fps: delta.montage.fps } : {}),
+          colors: nextColors,
+        },
+        scenes: delta.scenes.length > 0 ? delta.scenes : current.scenes,
+      })
+    },
+    [onUpdateProject]
+  )
+
+  const ensureBackendProject = useCallback(async () => {
+    const p = projectRef.current
+    if (p.backendProjectId) return p.backendProjectId
+    return await createProductionProject(p.metadata?.title || p.name)
+  }, [])
+
+  const engineBridge = {
+    ensureBackend: ensureBackendProject,
+    onApplied: applyEnginePayload,
+    // Offline / бэкенд недоступен: оставляем старый локальный путь (сырой текст переживает перезагрузку)
+    onFailed: (markdown: string) => modelRef.current?.handleUpdateMarkdown(markdown),
+  }
+  const engineBridgeRef = useRef(engineBridge)
+  useEffect(() => { engineBridgeRef.current = engineBridge })
+
+  // Инициализация движка при открытии/смене проекта (backend-проект создаётся лениво)
+  useEffect(() => {
+    const p = projectRef.current
+    const st = useScenarioEngineStore.getState()
+    st.init(p.backendProjectId ?? null, p.rawMarkdown, engineBridgeRef.current)
+  }, [project.name])
+
+  // Внешние правки markdown (операции над сценами и т.п.) уезжают в Шлюз
+  useEffect(() => {
+    const st = useScenarioEngineStore.getState()
+    if (!st.isTyping && st.rawMarkdown !== project.rawMarkdown) {
+      st.setRawMarkdownFromExternal(project.rawMarkdown)
+    }
+  }, [project.rawMarkdown])
+
   const [settingsTab, setSettingsTab] = useState<'project' | 'ui'>('project')
   const showNotification = useNotificationStore(s => s.showNotification)
   const [isMusicSettingsOpen, setIsMusicSettingsOpen] = useState(false)
@@ -170,7 +233,6 @@ export const EditorWorkspace = ({
             pipelineStep={model.pipelineStep}
             renderProgress={model.renderProgress}
             onCancelAll={model.handleCancelAll}
-            onUpdateMarkdown={model.handleUpdateMarkdown}
             onCaptureFrame={model.handleCaptureFrame}
             onUpdateFragmentBounds={model.handleUpdateFragmentBounds}
             onSplitFragment={model.handleSplitFragment}
@@ -186,12 +248,13 @@ export const EditorWorkspace = ({
           />
 
           {uiPreferences.showInspector && (
-            <div className="relative shrink-0 h-full" style={{ width: rightWidth }}>
+            <div className="relative shrink-0 h-full flex flex-col" style={{ width: rightWidth }}>
               <div
                 className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary z-30 transition-colors -translate-x-1/2"
                 onMouseDown={startRightDrag}
               />
-              <PipelineInspector
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <PipelineInspector
                 project={project}
                 activeScene={model.activeScene}
                 voiceModel={model.voiceModel}
@@ -238,6 +301,7 @@ export const EditorWorkspace = ({
                 onOpenMusicSettings={() => setIsMusicSettingsOpen(true)}
                 onOpenMusicLibrary={() => setIsMusicLibraryOpen(true)}
               />
+              </div>
             </div>
           )}
         </div>

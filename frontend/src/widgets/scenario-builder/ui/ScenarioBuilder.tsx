@@ -1,18 +1,25 @@
 import { useState, useRef, useMemo } from 'react'
 import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
-import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2 } from 'lucide-react'
+import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2, ShieldAlert, AlertTriangle, Info, Check } from 'lucide-react'
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution, type IdeaFormat, type VideoResult } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { API, formatTimecode } from '@shared/lib'
 import { useSettingsStore, useProjectStore, useNotificationStore, getActivePrompt } from '@entities/project'
 import { useModelCatalog } from '@entities/project/model/useModelCatalog'
 import { useSkillsStore } from '@features/settings'
+import { scenarioEngineApi, type IssueSeverity, type ScenarioIssue } from '@shared/api'
 
 interface Props {
   idea?: IdeaFormat
   videos?: VideoResult[]
   onBack: () => void
   onCreate: (project: ProjectSettings) => void
+}
+
+const SeverityConfig: Record<IssueSeverity, { icon: typeof Info; color: string; bg: string }> = {
+  Error: { icon: ShieldAlert, color: 'text-error', bg: 'bg-error/10 border-error/30' },
+  Warning: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  Info: { icon: Info, color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
 }
 
 export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
@@ -36,6 +43,11 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   // Настройки ИИ генератора
   const [isGenerating, setIsGenerating] = useState(false)
   const [genDuration, setGenDuration] = useState('3')
+
+  // --- Состояния Режиссёрского линтера (Правый блок, stateless /lint-draft) ---
+  const [showLinter, setShowLinter] = useState(false)
+  const [isLinting, setIsLinting] = useState(false)
+  const [linterIssues, setLinterIssues] = useState<ScenarioIssue[]>([])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const markdownRef = useRef<HTMLTextAreaElement>(null)
@@ -78,7 +90,9 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
       try {
         await navigator.clipboard.writeText(text);
         return true;
-      } catch {}
+      } catch {
+        // API недоступен — пробуем фолбэк через textarea ниже
+      }
     }
     try {
       const textArea = document.createElement("textarea");
@@ -163,6 +177,20 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
       showNotification('Ошибка скачивания субтитров', 'error')
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  // --- Запуск Линтера (stateless: /engine/lint-draft, черновик не сохраняется в БД) ---
+  const handleRunLinter = async () => {
+    if (!showLinter) setShowLinter(true)
+    setIsLinting(true)
+    try {
+      const data = await scenarioEngineApi.lintDraft(markdown)
+      setLinterIssues(data.issues || [])
+    } catch {
+      showNotification('Не удалось запустить проверку', 'error')
+    } finally {
+      setIsLinting(false)
     }
   }
 
@@ -352,31 +380,87 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         </div>
       </div>
 
-      {/* Правая часть - Редактор (Markdown) */}
+      {/* Правая часть: Редактор (Markdown) + Режиссёрский линтер */}
       <div className="flex-1 flex flex-col bg-surface-container-lowest/60 relative">
-        <div className="flex-1 p-6 flex flex-col items-center overflow-hidden gap-4">
-          <div className="w-full max-w-5xl bg-primary/5 border border-primary/20 px-4 py-2.5 rounded-xl flex items-center justify-between shadow-sm shrink-0">
+        <div className="px-6 pt-4 pb-2 shrink-0 flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <VoiceTagToolbar
+              onInsertTag={insertTag}
+              onToggleCaps={toggleCaps}
+              hasSelection={hasSelection}
+              className="shrink-0 bg-surface-container/50 border-white/10 shadow-sm"
+            />
+            <Button
+              onClick={handleRunLinter}
+              disabled={isLinting}
+              className={`shrink-0 text-xs py-1.5 px-4 transition-all border ${showLinter ? 'bg-primary/20 text-primary border-primary/40' : 'bg-transparent text-on-surface-variant border-white/10 hover:text-white hover:bg-white/5'}`}
+            >
+              {isLinting ? <Spinner className="w-3.5 h-3.5 mr-2" /> : <Sparkles size={14} className="mr-2" />}
+              Проверить сценарий (Линтер)
+            </Button>
+          </div>
+
+          <div className="w-full bg-primary/5 border border-primary/20 px-4 py-2.5 rounded-xl flex items-center justify-between shadow-sm">
             <div className="text-[11px] font-mono text-primary/80 leading-relaxed flex items-center gap-2">
               <Mic size={16} className="shrink-0" />
               <span><span className="font-bold">Шпаргалка (OmniVoice/MiniMax):</span> Эмоция: <code className="bg-black/40 px-1.5 py-0.5 rounded text-white">[emotion: happy]</code> • Паузы: <code className="bg-black/40 px-1.5 py-0.5 rounded text-white">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/40 px-1.5 py-0.5 rounded text-white">(sighs)</code></span>
             </div>
           </div>
+        </div>
 
-          <VoiceTagToolbar
-            onInsertTag={insertTag}
-            onToggleCaps={toggleCaps}
-            hasSelection={hasSelection}
-            className="w-full max-w-5xl shrink-0 bg-surface-container/50 border-white/10 shadow-sm"
-          />
-
+        <div className="flex-1 flex overflow-hidden p-6 pt-3 gap-4 min-h-0">
           <textarea
             ref={markdownRef}
-            className="w-full h-full max-w-5xl bg-surface-container/40 border border-white/10 rounded-2xl p-8 font-mono text-sm leading-relaxed text-on-surface resize-none outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 custom-scrollbar shadow-2xl transition-all"
+            className="flex-1 bg-surface-container/40 border border-white/10 rounded-2xl p-8 font-mono text-sm leading-relaxed text-on-surface resize-none outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 custom-scrollbar shadow-2xl transition-all"
             value={markdown}
             onChange={e => setMarkdown(e.target.value)}
             spellCheck={false}
             placeholder="Напишите ваш сценарий в Markdown..."
           />
+
+          {/* Боковая панель линтера (выезжает по кнопке) */}
+          {showLinter && (
+            <div className="w-[340px] shrink-0 bg-surface-container border border-white/10 rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-300 shadow-2xl">
+              <div className="p-4 bg-surface-container-low border-b border-white/5 flex items-center justify-between">
+                <h3 className="font-bold text-white text-xs tracking-wide uppercase flex items-center gap-2">
+                  <Sparkles className="text-secondary" size={14} /> Режиссёрский линтер
+                </h3>
+                <button onClick={() => setShowLinter(false)} className="text-on-surface-variant hover:text-white text-sm leading-none px-1 py-0.5 cursor-pointer" title="Закрыть">
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-3">
+                {isLinting ? (
+                  <div className="flex flex-col items-center justify-center mt-10 text-on-surface-variant/50 text-xs gap-3">
+                    <Spinner className="w-6 h-6 text-primary" />
+                    Анализ драматургии и структуры...
+                  </div>
+                ) : linterIssues.length === 0 ? (
+                  <div className="text-center text-on-surface-variant/50 mt-10 text-xs">
+                    <Check size={24} className="mx-auto mb-2 opacity-50 text-success" />
+                    Сценарий чист. Нарушений динамики и структуры не найдено.
+                  </div>
+                ) : (
+                  linterIssues.map((issue, idx) => {
+                    const config = SeverityConfig[issue.severity] || SeverityConfig.Info
+                    const Icon = config.icon
+                    return (
+                      <div key={`${issue.code}-${idx}`} className={`p-3 rounded-xl border flex flex-col gap-2 ${config.bg}`}>
+                        <div className="flex items-start gap-2">
+                          <Icon size={14} className={`mt-0.5 shrink-0 ${config.color}`} />
+                          <span className="text-xs text-white leading-tight font-medium">{issue.message}</span>
+                        </div>
+                        {issue.code && (
+                          <span className="text-[10px] font-mono uppercase tracking-wide text-on-surface-variant/70">{issue.code}</span>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

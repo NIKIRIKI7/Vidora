@@ -299,6 +299,7 @@ export interface ProjectSettings {
   promptOverrides?: Partial<PromptTemplates>
   audioMode: AudioGenerationMode
   activeGlobalVoiceId?: string
+  backendProjectId?: string
   audioProcessing: AudioProcessingSettings
   backgroundMusic?: BackgroundMusicSettings
   renderQuality?: RenderQuality
