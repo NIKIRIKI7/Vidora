@@ -1,24 +1,33 @@
 # --- API-каркас воркера ---
-fastapi>=0.100.0
-uvicorn[standard]>=0.23.0
-pydantic>=2.0.0
+fastapi>=0.141.1
+uvicorn[standard]>=0.52.4
+pydantic>=2.13.5
 
 # --- ML-ядро (общее) ---
-numpy>=1.24.0
-soundfile>=0.12.0
+numpy>=2.5.3
+soundfile>=0.14.0
 
-# --- OmniVoice GGUF (основной режим, CrispASR / ggml) ---
-# Веса: cstr/omnivoice-GGUF (omnivoice-q8_0.gguf + omnivoice-tokenizer-f16.gguf)
-# кладутся в <TTS_MODELS_DIR>/OmniVoice-GGUF (см. adapters/omni_voice_adapter.py).
-# CPU-колесо:
-#   pip install crispasr
-# CUDA-колесо (Windows/Linux, NVIDIA):
-#   pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/cuda/
-crispasr>=0.8.32
-
-# --- OmniVoice PyTorch (legacy-режим, опционально) ---
-# Нужен только если GGUF-файлы не найдены. Модель: k2-fsa/OmniVoice.
-# pip install torch torchaudio omnivoice
+# --- OmniVoice (k2-fsa) на PyTorch — основной режим ---
+# Веса: репозиторий k2-fsa/OmniVoice, кладутся в <TTS_MODELS_DIR>/OmniVoice
+# (см. README.md и adapters/omni_voice_adapter.py).
 #
-# Для int8-квантования дополнительно (опционально):
-# pip install bitsandbytes accelerate
+# ВАЖНО (Windows + NVIDIA): torch и torchaudio должны быть одной версии.
+# CUDA-колёса берутся с индекса cu128; на нём 2.11 — последняя версия
+# torchaudio, поэтому ставим ровно 2.11.x:
+#
+#   pip install torch==2.11.0+cu128 torchaudio==2.11.0+cu128 ^
+#       --index-url https://download.pytorch.org/whl/cu128
+#
+# (установка более нового torch без соответствующего torchaudio ломает
+#  libtorchaudio.pyd). Начиная с torch 2.6 в torch.load по умолчанию
+# включён weights_only=True — адаптер учитывает это при загрузке .pt.
+torch>=2.11,<2.12
+torchaudio>=2.11,<2.12
+omnivoice>=0.2.1
+accelerate>=1.15.0
+huggingface_hub>=1.31.0
+
+# --- int8-квантование (опционально) ---
+# Нужно только при OMNIVOICE_QUANTIZE=int8 (мало VRAM):
+#   pip install bitsandbytes
+# bitsandbytes

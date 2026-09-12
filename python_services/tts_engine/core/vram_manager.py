@@ -10,7 +10,7 @@ logger = logging.getLogger("tts_engine.vram")
 
 
 def _empty_torch_cache() -> None:
-    """Опциональная очистка CUDA-кэша. GGUF-режим (CrispASR) не требует PyTorch."""
+    """Опциональная очистка CUDA-кэша (torch может быть недоступен)."""
     try:
         import torch
 

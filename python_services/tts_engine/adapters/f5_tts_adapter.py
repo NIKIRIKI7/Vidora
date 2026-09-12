@@ -17,7 +17,7 @@ from .base_engine import BaseVoiceEngine
 
 
 def _torch():
-    """torch импортируется лениво: GGUF-режим (CrispASR) не требует PyTorch."""
+    """torch импортируется лениво, чтобы не тянуть CUDA при импорте модуля."""
     import torch
 
     return torch
