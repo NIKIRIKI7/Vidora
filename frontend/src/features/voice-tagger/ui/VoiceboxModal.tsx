@@ -1,6 +1,6 @@
 import type React from 'react'
 import type { ProjectSettings } from '@entities/project'
-import { Button, FieldGroup, Input, Modal } from '@shared/ui'
+import { Button, FieldGroup, IconButton, Input, Modal } from '@shared/ui'
 import { Trash2, Upload } from 'lucide-react'
 
 interface Props {
@@ -96,9 +96,13 @@ export const VoiceboxModal = ({
                 <span className="text-xs font-semibold text-on-surface">{v.name}</span>
                 <span className="text-xxs text-on-surface-variant/60">{v.tags?.join(', ')}</span>
               </div>
-              <button className="text-error hover:text-error/80 p-1" onClick={() => onDeleteCustomVoice(v.id)}>
-                <Trash2 size={16} />
-              </button>
+              <IconButton
+                icon={Trash2}
+                size="sm"
+                accent="error"
+                onClick={() => onDeleteCustomVoice(v.id)}
+                className="text-error hover:text-error/80 p-1"
+              />
             </div>
           ))}
         </div>

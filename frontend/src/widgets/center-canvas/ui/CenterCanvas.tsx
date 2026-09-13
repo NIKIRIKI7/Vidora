@@ -2,7 +2,7 @@ import { fetchClient, apiErrorMessage } from '@shared/api'
 import React, { useEffect, useState, useCallback } from 'react'
 import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
 import { useScenarioEngineStore } from '@entities/project'
-import { Button, Spinner, ProgressBar, TextArea } from '@shared/ui'
+import { Button, IconButton, SegmentedControl, Spinner, ProgressBar, TextArea } from '@shared/ui'
 import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API } from '@entities/project'
 import { CodeHistorySelector } from './CodeHistorySelector'
@@ -113,9 +113,14 @@ export const CenterCanvas = ({
     return (
       <div className={`bg-surface-container-lowest rounded-xl border border-outline-variant/40 shadow-2xl relative flex shrink-0 items-center justify-center overflow-hidden m-auto ${sizeClasses}`}>
         <div className="absolute top-4 right-4 z-20 flex gap-2">
-          <button onClick={onCaptureFrame} className="bg-surface-container-lowest/50 hover:bg-primary/50 backdrop-blur border border-outline-variant/80 p-2 rounded-lg text-on-surface transition-colors" title="Снять скриншот для превью (Thumbnail)">
-            <Camera size={18} />
-          </button>
+          <IconButton
+            icon={Camera}
+            size="md"
+            accent="neutral"
+            onClick={onCaptureFrame}
+            title="Снять скриншот для превью (Thumbnail)"
+            className="bg-surface-container-lowest/50 hover:bg-primary/50 backdrop-blur border border-outline-variant/80"
+          />
         </div>
 
         {renderedVideos[playingTargetId || ''] ? (
@@ -161,18 +166,26 @@ export const CenterCanvas = ({
   return (
     <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
       <div className="h-12 border-b border-outline-variant/20 flex items-center px-4 justify-between bg-surface-container-lowest/50 shrink-0">
-        <div className="flex gap-2">
-          <button onClick={() => onChangeView('player')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'player' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>🎬 Видео</button>
-          <button onClick={() => onChangeView('code')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'code' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>💻 Код TSX</button>
-          <button onClick={() => onChangeView('split')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'split' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>🌓 Сплит-экран</button>
-          <button onClick={() => onChangeView('markdown')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'markdown' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>📝 Raw Script</button>
-        </div>
+        <SegmentedControl
+          options={[
+            { value: 'player', label: '🎬 Видео' },
+            { value: 'code', label: '💻 Код TSX' },
+            { value: 'split', label: '🌓 Сплит-экран' },
+            { value: 'markdown', label: '📝 Raw Script' },
+          ]}
+          value={centerView}
+          onChange={onChangeView}
+        />
         {(centerView === 'player' || centerView === 'split') && (
           <div className="flex gap-4 items-center">
-            <div className="flex gap-1 bg-surface-container-lowest border border-outline-variant/20 p-1 rounded-lg">
-              <button onClick={() => onPreviewFormatChange('16:9')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '16:9' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>🖥️ 16:9</button>
-              <button onClick={() => onPreviewFormatChange('9:16')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '9:16' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>📱 9:16</button>
-            </div>
+            <SegmentedControl
+              options={[
+                { value: '16:9', label: '🖥️ 16:9' },
+                { value: '9:16', label: '📱 9:16' },
+              ]}
+              value={currentFormat}
+              onChange={onPreviewFormatChange}
+            />
             {centerView === 'split' && <Button variant="ghost" className="text-xs py-1" onClick={() => setSplitRatio(50)}>50/50</Button>}
           </div>
         )}

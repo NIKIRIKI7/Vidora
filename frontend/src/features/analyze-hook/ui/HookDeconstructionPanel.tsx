@@ -3,7 +3,7 @@ import { Sparkles, Brain, AlertTriangle, ArrowRight, Check, Zap } from 'lucide-r
 import type { HookAnalysisData, StolenHook } from '@shared/api'
 import { analyzeHook } from '@shared/api'
 import { WORDS_PER_SECOND } from '@shared/config'
-import { TextArea } from '@shared/ui'
+import { TextArea, Button } from '@shared/ui'
 
 interface HookDeconstructionPanelProps {
   initialTranscript?: string
@@ -59,14 +59,15 @@ export const HookDeconstructionPanel = ({
           placeholder="Вставьте первые 2-4 предложения видеоролика..."
           className="w-full p-2.5 text-xs bg-surface-container-lowest border border-outline-variant rounded-xl text-on-surface placeholder-white/30 focus:outline-none focus:border-primary"
         />
-        <button
+        <Button
+          variant="primary"
+          icon={Sparkles}
           onClick={handleRunAnalysis}
           disabled={isAnalyzing || !transcript.trim()}
-          className="self-end px-4 py-1.5 bg-gradient-to-r from-primary-container to-secondary text-on-primary font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-1.5"
+          className="self-end px-4 py-1.5 text-xs font-bold"
         >
-          <Sparkles className="w-3.5 h-3.5" />
           {isAnalyzing ? 'Деконструкция через LLM...' : 'Анализ и генерация 3 хуков'}
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -109,9 +110,10 @@ export const HookDeconstructionPanel = ({
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-warning font-bold text-xs">Угол {idx + 1}: {h.angle}</span>
-                    <button
+                    <Button
+                      variant="secondary"
                       onClick={() => handleApply(h, idx)}
-                      className="px-2.5 py-1 bg-secondary/20 hover:bg-secondary text-secondary hover:text-on-secondary font-semibold rounded-md transition-all flex items-center gap-1 text-2xs"
+                      className="px-2.5 py-1 text-2xs font-semibold"
                     >
                       {appliedIndex === idx ? (
                         <>
@@ -122,7 +124,7 @@ export const HookDeconstructionPanel = ({
                           Вставить в сценарий <ArrowRight className="w-3 h-3" />
                         </>
                       )}
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="p-2 rounded bg-surface-container-lowest/40 border-l-2 border-error">

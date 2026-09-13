@@ -21,7 +21,7 @@ export const DashboardView: React.FC<Props> = ({
   onOpenAudio,
   onOpenSettings,
 }) => {
-  const { fetchDashboardData } = useDashboardStore()
+  const fetchDashboardData = useDashboardStore((s) => s.fetchDashboardData)
 
   useEffect(() => {
     fetchDashboardData()

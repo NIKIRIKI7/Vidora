@@ -193,7 +193,10 @@ public sealed class SystemModule : ISystemModule
                     File.Delete(file);
                     deletedFiles++;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "[System] Не удалось удалить временный файл {File}", file);
+                }
             }
 
             sw.Stop();
@@ -259,7 +262,10 @@ public sealed class SystemModule : ISystemModule
                     root.GetProperty("message").GetString() ?? "",
                     root.TryGetProperty("exception", out var ex) && ex.ValueKind != JsonValueKind.Null ? ex.GetRawText() : null));
             }
-            catch { }
+            catch (Exception logEx)
+            {
+                _logger.LogTrace(logEx, "[System] Пропущена нечитаемая строка лога");
+            }
         }
 
         return entries;

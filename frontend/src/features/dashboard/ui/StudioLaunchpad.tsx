@@ -9,6 +9,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Button } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
 export type StudioModuleId = 'trend_agent' | 'script_lab' | 'voice_lab' | 'settings'
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
-  const { openModal } = useDashboardStore()
+  const openModal = useDashboardStore((s) => s.openModal)
 
   const MODULES: {
     id: StudioModuleId
@@ -91,23 +92,25 @@ export const StudioLaunchpad: React.FC<Props> = ({ onNavigate }) => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <button
+            <Button
+              variant="primary"
               onClick={() => openModal('new_project', '16:9')}
-              className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-secondary hover:bg-secondary text-on-surface font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-secondary/20 transition-all active:scale-95 group"
+              className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-bold text-xs shadow-lg shadow-secondary/20 group"
             >
               <Monitor size={15} />
               <span>16:9 YouTube проект</span>
               <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform opacity-80" />
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="outline"
               onClick={() => openModal('new_project', '9:16')}
-              className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest/80 border border-outline-variant text-on-surface font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 group"
+              className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-surface-container-high border-outline-variant font-bold text-xs shadow-sm group"
             >
               <Smartphone size={15} className="text-error" />
               <span>9:16 Shorts ролик</span>
               <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform text-on-surface-variant" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>

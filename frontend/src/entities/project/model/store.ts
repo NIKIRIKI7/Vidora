@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage, type PersistOptions } from 'zustand/middleware'
+import { persist, createJSONStorage, type PersistOptions, type PersistStorage, type StorageValue } from 'zustand/middleware'
 import type { ProjectSettings, ApiKeys, GlobalPromptSettings, PromptCategory, TaskType } from './types'
 
 // ponytail: откладываем запись в localStorage — ввод текста сценария не дёргает main thread на каждый кейстроук.
@@ -25,6 +25,61 @@ const createDebouncedStorage = (delay = 400) => {
       pendingValue = null
       localStorage.removeItem(name)
     }
+  }
+}
+
+// ponytail: история редактирования живёт только в памяти (не персистится) и ограничена
+// HISTORY_LIMIT. До этого в localStorage писались до 50 полных снапшотов проекта вместе
+// с remotionCode — это и раздувало хранилище, и заставляло JSON.stringify обрабатывать
+// дерево в разы большего размера на каждом апдейте.
+const HISTORY_LIMIT = 30
+
+// ponytail: JSON.stringify дерева проектов вынесен в requestIdleCallback, чтобы сериализация
+// не блокировала main thread на вводе текста/скролле. Запись по-прежнему раз в ~idle-цикл.
+const createIdleStorage = <T>(): PersistStorage<T> => {
+  let idleId: number | undefined
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  let pending: { name: string; value: StorageValue<T> } | null = null
+
+  const flush = () => {
+    if (!pending) return
+    const { name, value } = pending
+    pending = null
+    try {
+      localStorage.setItem(name, JSON.stringify(value))
+    } catch (err) {
+      console.error('vidora-projects: persist failed', err)
+    }
+  }
+
+  const schedule = () => {
+    if (typeof requestIdleCallback === 'function') {
+      if (idleId !== undefined) cancelIdleCallback(idleId)
+      idleId = requestIdleCallback(flush, { timeout: 1500 })
+    } else {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(flush, 400)
+    }
+  }
+
+  return {
+    getItem: (name) => {
+      const raw = localStorage.getItem(name)
+      if (!raw) return null
+      try {
+        return JSON.parse(raw) as StorageValue<T>
+      } catch {
+        return null
+      }
+    },
+    setItem: (name, value) => {
+      pending = { name, value }
+      schedule()
+    },
+    removeItem: (name) => {
+      pending = null
+      localStorage.removeItem(name)
+    },
   }
 }
 
@@ -60,7 +115,7 @@ export const useProjectStore = create<ProjectStore>()(
         const hist = state.history[active] || { past: [], future: [] }
         return {
           projects: state.projects.map(proj => proj.name === p.name ? p : proj),
-          history: { ...state.history, [active]: { past: [...hist.past, current].slice(-50), future: [] } }
+          history: { ...state.history, [active]: { past: [...hist.past, current].slice(-HISTORY_LIMIT), future: [] } }
         }
       }),
       deleteProject: (name) => set((state) => {
@@ -99,13 +154,21 @@ export const useProjectStore = create<ProjectStore>()(
     }),
     {
       name: 'vidora-projects',
-      storage: createJSONStorage(() => createDebouncedStorage(500)),
+      storage: createIdleStorage<Pick<ProjectStore, 'projects' | 'activeProjectId'>>(),
       partialize: (state) => ({
         projects: state.projects,
         activeProjectId: state.activeProjectId,
-        history: state.history,
       }),
-    } satisfies PersistOptions<ProjectStore, Pick<ProjectStore, 'projects' | 'activeProjectId' | 'history'>>
+      // История намеренно не восстанавливается из localStorage (см. HISTORY_LIMIT выше).
+      merge: (persisted, current) => {
+        const persistedState = (persisted ?? {}) as Partial<ProjectStore>
+        return {
+          ...current,
+          projects: persistedState.projects ?? current.projects,
+          activeProjectId: persistedState.activeProjectId ?? current.activeProjectId,
+        }
+      },
+    } satisfies PersistOptions<ProjectStore, Pick<ProjectStore, 'projects' | 'activeProjectId'>>
   )
 )
 

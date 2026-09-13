@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using Kernel.Contracts;
 using Kernel.Ports;
 using Microsoft.AspNetCore.Builder;
@@ -215,8 +216,10 @@ public static class YouTubeAgentEndpoints
             ISkillsCatalog skillsCatalog,
             ILlmClient llm,
             IYouTubeVideoInspector inspector,
+            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
+            var logger = loggerFactory.CreateLogger("YouTube.AnalyzeHook");
             var targetVideoId = !string.IsNullOrWhiteSpace(request.VideoId)
                 ? request.VideoId
                 : (!string.IsNullOrWhiteSpace(request.VideoUrl) ? request.VideoUrl : null);
@@ -234,13 +237,19 @@ public static class YouTubeAgentEndpoints
                         effectiveTranscript = scrapedSubtitles;
                     }
                 }
-                catch { }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogDebug(ex, "[YouTube] Не удалось получить транскрипт для {VideoId}", targetVideoId);
+                }
 
                 try
                 {
                     rawHeatmap = await inspector.GetHeatmapAsync(targetVideoId, ct);
                 }
-                catch { }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogDebug(ex, "[YouTube] Не удалось получить heatmap для {VideoId}", targetVideoId);
+                }
             }
 
             if (string.IsNullOrWhiteSpace(effectiveTranscript))

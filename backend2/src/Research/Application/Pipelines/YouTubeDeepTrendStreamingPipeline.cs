@@ -601,10 +601,12 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         // 5. Фильтр подписчиков
         if (realSubs > 0)
         {
+            // Нехватку подписчиков прощаем только виральным видео
             if (minSubs > 0 && realSubs < minSubs && !isAbsoluteViral) return (false, null);
-            if (maxSubs > 0 && realSubs > maxSubs && !isAbsoluteViral) return (false, null);
+            // Верхний лимит сабов прощать нельзя: крупные каналы с огромным базовым VPH иначе забьют выдачу
+            if (maxSubs > 0 && realSubs > maxSubs) return (false, null);
         }
-        else if (c.ViewCount > maxSubs * 5 && maxSubs > 0 && !isAbsoluteViral)
+        else if (c.ViewCount > maxSubs * 5 && maxSubs > 0)
         {
             return (false, null);
         }

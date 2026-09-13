@@ -5,8 +5,7 @@
 <p align="center">
   <a href="#архитектура"><img src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square" alt=".NET 10"></a>
   <a href="#python-tts-воркер"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
-  <a href="#фронтенд-electron--react"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" alt="React 19"></a>
-  <a href="#фронтенд-electron--react"><img src="https://img.shields.io/badge/Electron-43-47848F?style=flat-square" alt="Electron"></a>
+  <a href="#фронтенд-react--vite"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" alt="React 19"></a>
   <a href="#архитектура"><img src="https://img.shields.io/badge/Remotion-Node%2022-00C4B4?style=flat-square" alt="Remotion"></a>
   <a href="#архитектура"><img src="https://img.shields.io/badge/DDD-modular%20monolith-ddb7ff?style=flat-square" alt="DDD modular monolith"></a>
   <br>
@@ -63,14 +62,14 @@ Vidora — это **программируемый конвейер видео**
 Три независимых процесса, связанные по HTTP и WebSocket:
 
 <p align="center">
-  <img src="./assets/readme/architecture.svg" width="100%" alt="Карта системы Vidora: Electron/React клиент, Minimal API, Kernel, семь bounded contexts, интеграции, Python TTS-воркер, Remotion и SQLite-хранилище">
+  <img src="./assets/readme/architecture.svg" width="100%" alt="Карта системы Vidora: React/Vite клиент, Minimal API, Kernel, семь bounded contexts, интеграции, Python TTS-воркер, Remotion и SQLite-хранилище">
 </p>
 
 | Процесс | Технология | Порт | Роль |
 |---------|-----------|------|------|
 | `backend2/` | ASP.NET Core, .NET 10 | `5116` | Оркестратор: REST API, WebSocket, доменная логика |
 | `python_services/tts_engine/` | FastAPI + PyTorch | `8000` | Локальный ML-воркер: синтез и клонирование голоса |
-| `frontend/` | Electron + Vite | `5173` (dev) | Десктоп-редактор: React-рендерер |
+| `frontend/` | React + Vite | `5173` (dev) | Веб-редактор: React-рендерер |
 
 ### Бэкенд: модульный монолит (.NET 10)
 
@@ -136,9 +135,9 @@ Integrations   адаптеры портов: LLM, FFmpeg, Pexels, YouTube, Whis
 
 > Транскрипция и выравнивание живут **не в Python**, а в C# (`FasterWhisper.NET`). Воркер не скачивает Whisper: `reference_text` для клонирования обязан передать бэкенд. Подробности — в [`python_services/tts_engine/README.md`](./python_services/tts_engine/README.md).
 
-### Фронтенд: Electron + React
+### Фронтенд: React + Vite
 
-Десктоп-клиент построен по **Feature-Sliced Design**: строгие слои с однонаправленными зависимостями (сверху вниз).
+Клиент построен по **Feature-Sliced Design**: строгие слои с однонаправленными зависимостями (сверху вниз).
 
 | Слой | Назначение | Примеры |
 |------|-----------|---------|
@@ -280,7 +279,6 @@ pnpm dev:all
 # По отдельности
 pnpm backend:dev     # dotnet run backend2 (профиль http)
 pnpm dev             # Vite на :5173
-pnpm electron:dev    # окно Electron
 
 # Python TTS-воркер — в отдельном терминале
 cd ../python_services/tts_engine && python main.py   # :8000
@@ -325,7 +323,7 @@ Vidora/
 │   ├── tools/                     # node22, cuda12, remotion_workspace, yt-dlp
 │   └── data_storage/              # SQLite per context, projects, ai-models, NDJSON-лог
 ├── python_services/tts_engine/    # FastAPI + OmniVoice (GPU), независимый venv
-├── frontend/                      # Electron + React 19 (FSD) + Vite
+├── frontend/                      # React 19 (FSD) + Vite
 │   └── src/                       # app, pages, widgets, features, entities, shared
 ├── assets/readme/                 # SVG-визуализации README
 └── docs/                          # SCENARIO_RULES, YOUTUBE_SEARCH, design
@@ -338,7 +336,6 @@ Vidora/
 | **Бэкенд** | .NET 10, ASP.NET Core Minimal API, EF Core + SQLite, `FasterWhisper.NET.Gpu`, `LLamaSharp` (GGUF) |
 | **TTS-воркер** | Python 3.11+, FastAPI, Uvicorn, OmniVoice (PyTorch), soundfile |
 | **Фронтенд** | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Zustand 5 |
-| **Десктоп** | Electron 43, electron-builder |
 | **Медиа** | Remotion (Node 22), FFmpeg |
 | **Исследование** | yt-dlp, InnerTube, экспорт `.xlsx` |
 | **Архитектура** | DDD / Clean Architecture, Feature-Sliced Design |
@@ -354,8 +351,6 @@ Vidora/
 | `pnpm build` | TypeScript + Vite production-сборка |
 | `pnpm lint` | ESLint |
 | `pnpm lint:fsd` | Steiger — проверка границ FSD |
-| `pnpm electron:dev` | Electron в dev-режиме |
-| `pnpm electron:build` | Сборка десктоп-приложения |
 | `pnpm backend:dev` | Бэкенд `backend2` через `dotnet run` (:5116) |
 | `pnpm backend:migrate` | Применение миграций SQLite |
 | `pnpm dev:all` | Бэкенд + фронтенд одновременно |

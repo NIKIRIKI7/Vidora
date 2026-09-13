@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { X, Flame, MessageSquare, Sparkles, ExternalLink, Users, Eye, Zap } from 'lucide-react'
+import { Tabs, IconButton } from '@shared/ui'
 import { useVideoInspectorStore } from '@features/inspect-video'
 import { RetentionHeatmapChart } from '@shared/ui/retention-chart'
 import { DetailedCommentsFeed } from '@features/mine-comments'
@@ -11,7 +12,14 @@ interface VideoDeepDiveDrawerProps {
 }
 
 export const VideoDeepDiveDrawer = ({ onApplyHookToScenario }: VideoDeepDiveDrawerProps): ReactNode => {
-  const { isOpen, activeTab, candidate, deepDive, isLoading, error, closeInspector, setActiveTab } = useVideoInspectorStore()
+  const isOpen = useVideoInspectorStore((s) => s.isOpen)
+  const activeTab = useVideoInspectorStore((s) => s.activeTab)
+  const candidate = useVideoInspectorStore((s) => s.candidate)
+  const deepDive = useVideoInspectorStore((s) => s.deepDive)
+  const isLoading = useVideoInspectorStore((s) => s.isLoading)
+  const error = useVideoInspectorStore((s) => s.error)
+  const closeInspector = useVideoInspectorStore((s) => s.closeInspector)
+  const setActiveTab = useVideoInspectorStore((s) => s.setActiveTab)
 
   if (!isOpen || !candidate) return null
 
@@ -42,12 +50,13 @@ export const VideoDeepDiveDrawer = ({ onApplyHookToScenario }: VideoDeepDiveDraw
               >
                 <ExternalLink className="w-4 h-4" />
               </a>
-              <button
+              <IconButton
+                icon={X}
+                size="sm"
+                accent="neutral"
                 onClick={closeInspector}
-                className="p-1.5 rounded-lg bg-on-surface/5 hover:bg-on-surface/10 text-on-surface/60 hover:text-on-surface transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+                className="bg-on-surface/5 hover:bg-on-surface/10 text-on-surface/60 hover:text-on-surface"
+              />
             </div>
           </div>
 
@@ -72,41 +81,17 @@ export const VideoDeepDiveDrawer = ({ onApplyHookToScenario }: VideoDeepDiveDraw
             )}
           </div>
 
-          <div className="flex gap-1.5 mt-1 border-b border-outline-variant/30 pb-1">
-            <button
-              onClick={() => setActiveTab('retention')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'retention'
-                  ? 'bg-primary text-on-primary shadow-md shadow-primary/20'
-                  : 'text-on-surface/60 hover:text-on-surface hover:bg-on-surface/5'
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5" />
-              Удержание (Heatmap)
-            </button>
-            <button
-              onClick={() => setActiveTab('comments')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'comments'
-                  ? 'bg-primary text-on-primary shadow-md shadow-primary/20'
-                  : 'text-on-surface/60 hover:text-on-surface hover:bg-on-surface/5'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              Боли (Комментарии)
-            </button>
-            <button
-              onClick={() => setActiveTab('hook')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'hook'
-                  ? 'bg-primary text-on-primary shadow-md shadow-primary/20'
-                  : 'text-on-surface/60 hover:text-on-surface hover:bg-on-surface/5'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Анатомия хука
-            </button>
-          </div>
+          <Tabs
+            variant="pill"
+            value={activeTab}
+            onChange={(id) => setActiveTab(id as 'retention' | 'comments' | 'hook')}
+            items={[
+              { id: 'retention', label: 'Удержание (Heatmap)', icon: Flame },
+              { id: 'comments', label: 'Боли (Комментарии)', icon: MessageSquare },
+              { id: 'hook', label: 'Анатомия хука', icon: Sparkles },
+            ]}
+            className="mt-1 border-b border-outline-variant/30 pb-1"
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">

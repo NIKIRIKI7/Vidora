@@ -108,13 +108,16 @@ public static partial class InnerTubeParsers
         if (string.IsNullOrWhiteSpace(duration)) return 0;
 
         var parts = duration.Split(':');
-        try
-        {
-            if (parts.Length == 3) return int.Parse(parts[0]) * 3600 + int.Parse(parts[1]) * 60 + int.Parse(parts[2]);
-            if (parts.Length == 2) return int.Parse(parts[0]) * 60 + int.Parse(parts[1]);
-            if (parts.Length == 1 && int.TryParse(parts[0], out var s)) return s;
-        }
-        catch { }
+        if (parts.Length == 3 &&
+            int.TryParse(parts[0], out var h) &&
+            int.TryParse(parts[1], out var m) &&
+            int.TryParse(parts[2], out var s3))
+            return h * 3600 + m * 60 + s3;
+        if (parts.Length == 2 &&
+            int.TryParse(parts[0], out var m2) &&
+            int.TryParse(parts[1], out var s2))
+            return m2 * 60 + s2;
+        if (parts.Length == 1 && int.TryParse(parts[0], out var s)) return s;
 
         return 0;
     }

@@ -7,9 +7,10 @@ import {
   XCircle,
   Database,
   RefreshCw,
+  Loader2,
   Info,
 } from 'lucide-react'
-import { SearchInput } from '@shared/ui'
+import { SearchInput, Button, IconButton, Tabs } from '@shared/ui'
 import type { SkillCreate, SkillItem, SkillStage, SkillUpdate } from '@entities/skill'
 import { skillsApi } from '@entities/skill'
 import { useSkillsStore } from '@entities/skill'
@@ -91,22 +92,25 @@ export const SkillsSettingsView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
-          <button
+          <IconButton
+            icon={loading ? Loader2 : RefreshCw}
+            size="md"
+            accent="neutral"
             onClick={() => fetchSkills(true)}
-            className="p-2.5 rounded-xl border border-outline-variant bg-surface-container-low/80 hover:bg-surface-container-high text-on-surface transition"
             title="Обновить список"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
+            className="border border-outline-variant bg-surface-container-low/80 hover:bg-surface-container-high"
+          />
+          <Button
+            variant="primary"
+            icon={Plus}
             onClick={() => {
               setEditingSkill(null)
               setIsModalOpen(true)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary text-on-surface rounded-xl font-medium text-xs sm:text-sm transition shadow-lg shadow-primary/25 shrink-0"
+            className="px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg shadow-primary/25 shrink-0"
           >
-            <Plus className="w-4 h-4" /> Добавить скил
-          </button>
+            Добавить скил
+          </Button>
         </div>
       </div>
 
@@ -114,35 +118,26 @@ export const SkillsSettingsView: React.FC = () => {
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-surface-container-low/50 p-2.5 sm:p-3 rounded-2xl border border-outline-variant/60">
 
         {/* Скроллируемые табы БЕЗ уродливого нативного скроллбара */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            onClick={() => setSelectedStage('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap shrink-0 ${
-              selectedStage === 'all'
-                ? 'bg-surface-container-high text-outline shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/60'
-            }`}
-          >
-            Все ({skills.length})
-          </button>
-          {Object.entries(STAGE_CONFIG).map(([key, config]) => {
-            const count = skills.filter((s) => s.stage === key).length
-            if (count === 0 && selectedStage !== key) return null
-            return (
-              <button
-                key={key}
-                onClick={() => setSelectedStage(key as SkillStage)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                  selectedStage === key
-                    ? 'bg-primary text-on-surface shadow-md shadow-primary/20'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/60'
-                }`}
-              >
-                <span>{config.label}</span>
-                <span className="text-xxs opacity-70">({count})</span>
-              </button>
-            )
-          })}
+        <div className="overflow-x-auto pb-1 lg:pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <Tabs
+            variant="pill"
+            value={selectedStage}
+            onChange={(id) => setSelectedStage(id as SkillStage | 'all')}
+            items={[
+              {
+                id: 'all',
+                label: 'Все',
+                badge: <span className="text-xxs opacity-70">({skills.length})</span>,
+              },
+              ...Object.entries(STAGE_CONFIG)
+                .filter(([key]) => skills.filter((s) => s.stage === key).length > 0 || selectedStage === key)
+                .map(([key, config]) => ({
+                  id: key,
+                  label: config.label,
+                  badge: <span className="text-xxs opacity-70">({skills.filter((s) => s.stage === key).length})</span>,
+                })),
+            ]}
+          />
         </div>
 
         {/* Search Input — с фиксированной минимальной шириной и без сжатия */}
@@ -216,43 +211,35 @@ export const SkillsSettingsView: React.FC = () => {
 
                 {/* Правая колонка действий */}
                 <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                  <button
+                  <Button
+                    variant={skill.is_active ? 'secondary' : 'ghost'}
+                    icon={skill.is_active ? CheckCircle2 : XCircle}
                     onClick={() => handleToggleActive(skill)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
-                      skill.is_active
-                        ? 'bg-success/10 text-success border border-success/30 hover:bg-success/20'
-                        : 'bg-surface-container-high/60 text-outline border border-outline-variant/30 hover:bg-surface-container-high hover:text-on-surface'
-                    }`}
+                    className="px-3 py-1.5 rounded-xl text-xs"
                   >
-                    {skill.is_active ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Включен
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-3.5 h-3.5" /> Выключен
-                      </>
-                    )}
-                  </button>
+                    {skill.is_active ? 'Включен' : 'Выключен'}
+                  </Button>
 
-                  <button
+                  <IconButton
+                    icon={Edit3}
+                    size="md"
+                    accent="neutral"
                     onClick={() => {
                       setEditingSkill(skill)
                       setIsModalOpen(true)
                     }}
-                    className="p-2 rounded-xl bg-surface-container-high/70 hover:bg-surface-container-highest text-on-surface border border-outline-variant/30 transition"
                     title="Редактировать"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
+                    className="bg-surface-container-high/70 hover:bg-surface-container-highest border border-outline-variant/30"
+                  />
 
-                  <button
+                  <IconButton
+                    icon={Trash2}
+                    size="md"
+                    accent="error"
                     onClick={() => handleDelete(skill.id, skill.name)}
-                    className="p-2 rounded-xl bg-surface-container-high/70 hover:bg-error/20 hover:text-error text-on-surface-variant border border-outline-variant/30 transition"
                     title="Удалить"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    className="bg-surface-container-high/70 border border-outline-variant/30"
+                  />
                 </div>
               </div>
             )

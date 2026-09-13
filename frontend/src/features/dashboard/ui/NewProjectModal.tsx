@@ -5,7 +5,10 @@ import { Button, Input, Select, OptionCard } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
 export const NewProjectModal: React.FC = () => {
-  const { activeModal, selectedFormatForNew, closeModal, createProject } = useDashboardStore()
+  const activeModal = useDashboardStore((s) => s.activeModal)
+  const selectedFormatForNew = useDashboardStore((s) => s.selectedFormatForNew)
+  const closeModal = useDashboardStore((s) => s.closeModal)
+  const createProject = useDashboardStore((s) => s.createProject)
 
   const [name, setName] = useState('')
   const [format, setFormat] = useState<'16:9' | '9:16'>(selectedFormatForNew || '16:9')

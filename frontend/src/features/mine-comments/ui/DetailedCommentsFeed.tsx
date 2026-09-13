@@ -1,8 +1,9 @@
 import { useState, useMemo, type ReactNode } from 'react'
-import { ThumbsUp, Copy, Check, Search, Filter } from 'lucide-react'
+import { ThumbsUp, Copy, Check } from 'lucide-react'
 import type { DetailedComment } from '@shared/api'
 import { FrictionBadge, detectFrictionCategory } from '@shared/ui/friction-badge'
 import type { FrictionCategory } from '@shared/ui/friction-badge'
+import { SearchInput, SegmentedControl, IconButton, EmptyState, VirtualList } from '@shared/ui'
 
 interface DetailedCommentsFeedProps {
   comments: DetailedComment[]
@@ -29,9 +30,10 @@ export const DetailedCommentsFeed = ({
   }, [comments])
 
   const filtered = useMemo(() => {
+    const q = searchQuery.toLowerCase()
     return categorizedComments.filter((c) => {
       const matchType = filterType === 'all' || c.category === filterType
-      const matchText = !searchQuery || c.text.toLowerCase().includes(searchQuery.toLowerCase()) || c.authorName.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchText = !q || c.text.toLowerCase().includes(q) || c.authorName.toLowerCase().includes(q)
       return matchType && matchText
     })
   }, [categorizedComments, filterType, searchQuery])
@@ -44,57 +46,44 @@ export const DetailedCommentsFeed = ({
     onUseAsInsight?.(formatted)
   }
 
-  const filterButtons: { key: FilterType; label: string; count?: number }[] = [
-    { key: 'all', label: `Все (${comments.length})` },
-    { key: 'problem', label: 'Ошибки' },
-    { key: 'question', label: 'Вопросы' },
-    { key: 'debate', label: 'Споры' },
-    { key: 'mechanism', label: 'Почему' },
+  const filterOptions = [
+    { value: 'all' as const, label: `Все (${comments.length})` },
+    { value: 'problem' as const, label: 'Ошибки' },
+    { value: 'question' as const, label: 'Вопросы' },
+    { value: 'debate' as const, label: 'Споры' },
+    { value: 'mechanism' as const, label: 'Почему' },
   ]
 
   return (
     <div className="flex flex-col h-full space-y-3">
       <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
-        <div className="relative flex-1">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-on-surface/40" />
-          <input
-            type="text"
-            placeholder="Поиск по комментариям..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant rounded-lg text-on-surface placeholder-white/40 focus:outline-none focus:border-primary/50"
-          />
-        </div>
-
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 text-xs">
-          <Filter className="w-3 h-3 text-on-surface/40 mr-1 hidden sm:inline" />
-          {filterButtons.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setFilterType(key)}
-              className={`px-2.5 py-1 rounded-md text-2xs transition-all whitespace-nowrap ${
-                filterType === key
-                  ? 'bg-primary text-on-primary font-bold shadow-lg shadow-primary/20'
-                  : 'bg-surface-container text-on-surface/70 hover:bg-on-surface/10 border border-outline-variant/30'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <SearchInput
+          className="flex-1"
+          placeholder="Поиск по комментариям..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onClear={() => setSearchQuery('')}
+        />
+        <div className="overflow-x-auto">
+          <SegmentedControl value={filterType} onChange={setFilterType} options={filterOptions} />
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[var(--layout-list)]">
-        {filtered.length === 0 ? (
-          <div className="text-center py-10 text-xs text-on-surface/40 bg-on-surface/[0.02] rounded-xl border border-outline-variant/30">
-            Комментариев по выбранным критериям не найдено
-          </div>
-        ) : (
-          filtered.map((c) => (
-            <div
-              key={c.commentId}
-              className="p-3 bg-surface-container/60 hover:bg-surface-container border border-outline-variant/30 hover:border-primary/30 rounded-xl transition-all flex flex-col gap-2 group"
-            >
+      {filtered.length === 0 ? (
+        <EmptyState
+          title="Комментариев не найдено"
+          description="Попробуйте изменить фильтр или поисковый запрос."
+          className="flex-1 bg-on-surface/[0.02] rounded-xl border border-outline-variant/30"
+        />
+      ) : (
+        <VirtualList
+          items={filtered}
+          estimateSize={110}
+          gap={10}
+          className="flex-1 max-h-[var(--layout-list)]"
+          getKey={(c) => c.commentId}
+          renderItem={(c) => (
+            <div className="p-3 bg-surface-container/60 hover:bg-surface-container border border-outline-variant/30 hover:border-primary/30 rounded-xl transition-all flex flex-col gap-2 group">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-xs text-on-surface">{c.authorName}</span>
@@ -106,21 +95,21 @@ export const DetailedCommentsFeed = ({
                     <ThumbsUp className="w-3 h-3" />
                     {c.likeCount}
                   </span>
-                  <button
+                  <IconButton
+                    icon={copiedId === c.commentId ? Check : Copy}
+                    size="sm"
+                    accent={copiedId === c.commentId ? 'success' : 'neutral'}
                     onClick={() => handleCopy(c)}
-                    className="p-1 text-on-surface/50 hover:text-on-surface hover:bg-on-surface/10 rounded transition-colors"
                     title="Скопировать как цитату зрителя в сценарий"
-                  >
-                    {copiedId === c.commentId ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
+                  />
                 </div>
               </div>
 
               <p className="text-xs text-on-surface leading-relaxed whitespace-pre-line">{c.text}</p>
             </div>
-          ))
-        )}
-      </div>
+          )}
+        />
+      )}
     </div>
   )
 }

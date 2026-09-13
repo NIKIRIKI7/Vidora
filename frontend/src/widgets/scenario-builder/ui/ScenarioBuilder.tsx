@@ -1,7 +1,7 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef, useMemo } from 'react'
-import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter, TextArea, GradientButton, PageHeader, Alert, EmptyState } from '@shared/ui'
-import { Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2, ShieldAlert, AlertTriangle, Info, Check } from 'lucide-react'
+import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter, TextArea, GradientButton, PageHeader, Alert, EmptyState, SegmentedControl, IconButton } from '@shared/ui'
+import { Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2, ShieldAlert, AlertTriangle, Info, Check, X } from 'lucide-react'
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution, type IdeaFormat, type VideoResult } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { formatTimecode } from '@shared/lib'
@@ -24,7 +24,14 @@ const SeverityConfig: Record<IssueSeverity, { icon: typeof Info; color: string; 
 }
 
 export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
-  const { apiKeys, cloudEngines, localEngines, cloudProvider, taskModes, setTaskMode, setCloudEngine, setLocalEngine } = useSettingsStore()
+  const apiKeys = useSettingsStore((s) => s.apiKeys)
+  const cloudEngines = useSettingsStore((s) => s.cloudEngines)
+  const localEngines = useSettingsStore((s) => s.localEngines)
+  const cloudProvider = useSettingsStore((s) => s.cloudProvider)
+  const taskModes = useSettingsStore((s) => s.taskModes)
+  const setTaskMode = useSettingsStore((s) => s.setTaskMode)
+  const setCloudEngine = useSettingsStore((s) => s.setCloudEngine)
+  const setLocalEngine = useSettingsStore((s) => s.setLocalEngine)
   const showNotification = useNotificationStore(s => s.showNotification)
   const { localModels, cloudModels } = useModelCatalog('ScenarioDrafting')
 
@@ -251,12 +258,17 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
             <FieldGroup label="Цветовая тема (Автоматически)">
               <div className="flex gap-3 overflow-x-auto py-2 px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {THEME_PRESETS.map((tpl: ThemePreset) => (
-                  <button key={tpl.name} onClick={() => setTheme(tpl)} className="flex flex-col items-center gap-1.5 shrink-0 group">
+                  <Button
+                    key={tpl.name}
+                    variant="ghost"
+                    onClick={() => setTheme(tpl)}
+                    className="flex-col items-center gap-1.5 shrink-0 p-0 group"
+                  >
                     <div className={`w-10 h-10 rounded-full border-2 flex overflow-hidden shadow-sm transition-all ${theme.name === tpl.name ? 'border-primary scale-110 shadow-primary/20' : 'border-transparent group-hover:border-outline-variant/100'}`}>
                       <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
                       <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
                     </div>
-                  </button>
+                  </Button>
                 ))}
               </div>
             </FieldGroup>
@@ -288,10 +300,15 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
               </label>
 
               <div className="bg-surface-container-lowest/40 border border-primary/20 rounded-xl p-1.5 flex flex-col gap-2">
-                <div className="flex bg-surface-container-lowest/60 rounded-lg p-0.5">
-                  <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>Облако</button>
-                  <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-on-surface'}`}>Локально</button>
-                </div>
+                <SegmentedControl
+                  fill
+                  options={[
+                    { value: 'cloud', label: 'Облако', accent: 'primary' },
+                    { value: 'local', label: 'Локально', accent: 'success' },
+                  ]}
+                  value={taskModes.scenario}
+                  onChange={(mode) => setTaskMode('scenario', mode)}
+                />
 
                 {taskModes.scenario === 'cloud' ? (
                   <>
@@ -409,9 +426,13 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
                 <h3 className="font-bold text-on-surface text-xs tracking-wide uppercase flex items-center gap-2">
                   <Sparkles className="text-secondary" size={14} /> Режиссёрский линтер
                 </h3>
-                <button onClick={() => setShowLinter(false)} className="text-on-surface-variant hover:text-on-surface text-sm leading-none px-1 py-0.5 cursor-pointer" title="Закрыть">
-                  ✕
-                </button>
+                <IconButton
+                  icon={X}
+                  size="sm"
+                  accent="neutral"
+                  onClick={() => setShowLinter(false)}
+                  title="Закрыть"
+                />
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-3">

@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react'
-import { EditorPage } from '@pages/editor'
-import { YoutubeIdeasView } from '@widgets/youtube-ideas'
-import { ScenarioBuilder } from '@widgets/scenario-builder'
-import { GlobalSettingsView } from '@widgets/global-settings'
-import { AudioHubView } from '@widgets/audio-hub'
-import { DashboardView } from '@widgets/dashboard'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useProjectStore, useNotificationStore, type IdeaFormat, type VideoResult } from '@entities/project'
 import { useSkillsStore } from '@features/settings'
-import { Spinner } from '@shared/ui'
+import { Spinner, Button } from '@shared/ui'
 import { $api } from '@shared/api'
 import { CircleCheckBig, TriangleAlert, Info, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 
-type ViewState = 'hub' | 'ideas' | 'scenario' | 'settings' | 'audio-hub'
+const EditorPage = lazy(() => import('@pages/editor').then(m => ({ default: m.EditorPage })))
+const YoutubeIdeasView = lazy(() => import('@widgets/youtube-ideas').then(m => ({ default: m.YoutubeIdeasView })))
+const ScenarioBuilder = lazy(() => import('@widgets/scenario-builder').then(m => ({ default: m.ScenarioBuilder })))
+const GlobalSettingsView = lazy(() => import('@widgets/global-settings').then(m => ({ default: m.GlobalSettingsView })))
+const AudioHubView = lazy(() => import('@widgets/audio-hub').then(m => ({ default: m.AudioHubView })))
+const DashboardView = lazy(() => import('@widgets/dashboard').then(m => ({ default: m.DashboardView })))
 
 const NotificationToast = ({ notification }: { notification: { message: string; type: 'success' | 'error' | 'info'; details?: string } }) => {
   const [showDetails, setShowDetails] = useState(false)
@@ -39,21 +39,27 @@ const NotificationToast = ({ notification }: { notification: { message: string; 
         {notification.details && (
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={showDetails ? ChevronUp : ChevronDown}
                 onClick={() => setShowDetails(v => !v)}
-                className="px-2 py-1 rounded bg-surface-container-lowest/20 hover:bg-surface-container-lowest/40 text-2xs font-mono flex items-center gap-1 transition-colors"
+                className="px-2 py-1 rounded bg-surface-container-lowest/20 hover:bg-surface-container-lowest/40 text-2xs font-mono"
               >
-                {showDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Подробнее
-              </button>
-              <button
+                Подробнее
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={copied ? Check : Copy}
                 onClick={copy}
-                className="px-2 py-1 rounded bg-surface-container-lowest/20 hover:bg-surface-container-lowest/40 text-2xs font-mono flex items-center gap-1 transition-colors"
+                className="px-2 py-1 rounded bg-surface-container-lowest/20 hover:bg-surface-container-lowest/40 text-2xs font-mono"
               >
-                {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Скопировано' : 'Копировать'}
-              </button>
+                {copied ? 'Скопировано' : 'Копировать'}
+              </Button>
             </div>
             {showDetails && (
-              <pre className="p-2.5 rounded-lg bg-surface-container-lowest/70 text-error font-mono text-2xs leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap custom-scrollbar">
+              <pre className="p-2.5 rounded-lg bg-surface-container-lowest/80 text-error font-mono text-2xs leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap custom-scrollbar">
                 {notification.details}
               </pre>
             )}
@@ -64,11 +70,27 @@ const NotificationToast = ({ notification }: { notification: { message: string; 
   )
 }
 
-export const App = () => {
-  const [view, setView] = useState<ViewState>('hub')
+const BootScreen = () => (
+  <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-[200]">
+    <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent opacity-50" />
+    <div className="z-10 flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-500">
+      <h1 className="text-4xl font-bold text-primary tracking-tight shadow-primary/20 drop-shadow-2xl">Vidora</h1>
+      <Spinner className="text-4xl" />
+      <span className="font-mono text-xs text-on-surface-variant animate-pulse">Запуск AI-движка...</span>
+    </div>
+  </div>
+)
 
-  const [selectedIdea, setSelectedIdea] = useState<IdeaFormat | null>(null)
-  const [selectedVideos, setSelectedVideos] = useState<VideoResult[]>([])
+const RouteFallback = () => (
+  <div className="fixed inset-0 bg-background flex items-center justify-center z-[200]">
+    <Spinner className="text-4xl" />
+  </div>
+)
+
+export const App = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const projects = useProjectStore(s => s.projects)
   const activeProjectId = useProjectStore(s => s.activeProjectId)
@@ -93,17 +115,10 @@ export const App = () => {
   )
 
   if (isBooting || !health) {
-    return (
-      <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-[200]">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent opacity-50" />
-        <div className="z-10 flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-500">
-          <h1 className="text-4xl font-bold text-primary tracking-tight shadow-primary/20 drop-shadow-2xl">Vidora</h1>
-          <Spinner className="text-4xl" />
-          <span className="font-mono text-xs text-on-surface-variant animate-pulse">Запуск AI-движка...</span>
-        </div>
-      </div>
-    )
+    return <BootScreen />
   }
+
+  const scenarioState = (location.state ?? {}) as { idea?: IdeaFormat; videos?: VideoResult[] }
 
   return (
     <>
@@ -111,68 +126,87 @@ export const App = () => {
         <NotificationToast key={notification.timestamp} notification={notification} />
       )}
 
-      {activeProject ? (
-        <EditorPage
-          key={activeProject.name}
-          project={activeProject}
-          projects={projects}
-          onSwitchProject={setActiveProject}
-          onNewProject={() => {
-            setActiveProject(null)
-            setView('hub')
-          }}
-          onBack={() => {
-            setActiveProject(null)
-            setView('hub')
-          }}
-          onUpdateProject={updateProject}
-          onDeleteProject={deleteProject}
-          onOpenGlobalSettings={() => setView('settings')}
-        />
-      ) : view === 'ideas' ? (
-        <YoutubeIdeasView
-          onBack={() => setView('hub')}
-          onSelectIdea={(idea, videos) => {
-            setSelectedIdea(idea)
-            setSelectedVideos(videos)
-            setView('scenario')
-          }}
-        />
-      ) : view === 'scenario' ? (
-        <ScenarioBuilder
-          idea={selectedIdea ?? undefined}
-          videos={selectedVideos}
-          onBack={() => setView(selectedIdea ? 'ideas' : 'hub')}
-          onCreate={(p) => {
-            addProject(p)
-            setActiveProject(p.name)
-          }}
-        />
-      ) : view === 'audio-hub' ? (
-        <AudioHubView onBack={() => setView('hub')} />
-      ) : (
-        <DashboardView
-          onOpenTrends={() => setView('ideas')}
-          onOpenScript={() => {
-            setSelectedIdea(null)
-            setSelectedVideos([])
-            setView('scenario')
-          }}
-          onOpenAudio={() => setView('audio-hub')}
-          onOpenSettings={() => setView('settings')}
-        />
-      )}
-
-      {view === 'settings' && (
-        <div className="fixed inset-0 z-[150] bg-background">
-          <GlobalSettingsView
-            onBack={() => setView('hub')}
-            onGoToAudio={() => {
-              setActiveProject(null)
-              setView('audio-hub')
-            }}
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <DashboardView
+                onOpenTrends={() => navigate('/ideas')}
+                onOpenScript={() => navigate('/scenario', { state: {} })}
+                onOpenAudio={() => navigate('/audio')}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
+            }
           />
-        </div>
+          <Route
+            path="/ideas"
+            element={
+              <YoutubeIdeasView
+                onBack={() => navigate('/')}
+                onSelectIdea={(idea, videos) => navigate('/scenario', { state: { idea, videos } })}
+              />
+            }
+          />
+          <Route
+            path="/scenario"
+            element={
+              <ScenarioBuilder
+                idea={scenarioState.idea}
+                videos={scenarioState.videos ?? []}
+                onBack={() => navigate(scenarioState.idea ? '/ideas' : '/')}
+                onCreate={(p) => {
+                  addProject(p)
+                  setActiveProject(p.name)
+                  navigate('/editor')
+                }}
+              />
+            }
+          />
+          <Route path="/audio" element={<AudioHubView onBack={() => navigate('/')} />} />
+          <Route
+            path="/editor"
+            element={
+              activeProject ? (
+                <EditorPage
+                  key={activeProject.name}
+                  project={activeProject}
+                  projects={projects}
+                  onSwitchProject={setActiveProject}
+                  onNewProject={() => {
+                    setActiveProject(null)
+                    navigate('/')
+                  }}
+                  onBack={() => {
+                    setActiveProject(null)
+                    navigate('/')
+                  }}
+                  onUpdateProject={updateProject}
+                  onDeleteProject={deleteProject}
+                  onOpenGlobalSettings={() => setSettingsOpen(true)}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <div className="fixed inset-0 z-[150] bg-background">
+            <GlobalSettingsView
+              onBack={() => setSettingsOpen(false)}
+              onGoToAudio={() => {
+                setSettingsOpen(false)
+                setActiveProject(null)
+                navigate('/audio')
+              }}
+            />
+          </div>
+        </Suspense>
       )}
     </>
   )

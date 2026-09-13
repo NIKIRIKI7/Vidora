@@ -1,6 +1,7 @@
 import React from 'react'
 import { Cpu, Settings, Sparkles } from 'lucide-react'
 import { $api } from '@shared/api'
+import { IconButton } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export const DashboardHeader: React.FC<Props> = ({ onOpenSettings }) => {
-  const { setCurrentView } = useDashboardStore()
+  const setCurrentView = useDashboardStore((s) => s.setCurrentView)
 
   // Данные о железе берём напрямую из бэкенда (реактивно + кэш React Query).
   const { data: hardware, isLoading } = $api.useQuery('get', '/api/v1/system/hardware', {})
@@ -45,13 +46,14 @@ export const DashboardHeader: React.FC<Props> = ({ onOpenSettings }) => {
           <span className="font-mono text-on-surface-variant text-2xs">{vramDisplay}</span>
         </div>
 
-        <button
+        <IconButton
+          icon={Settings}
+          size="md"
+          accent="neutral"
           onClick={onOpenSettings}
-          className="p-2 rounded-xl bg-surface-container-low/80 hover:bg-surface-container-high border border-outline-variant text-on-surface-variant hover:text-on-surface transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
           title="Глобальные настройки (AI, API, Промпты)"
-        >
-          <Settings size={15} />
-        </button>
+          className="bg-surface-container-low/80 hover:bg-surface-container-high border border-outline-variant shadow-sm"
+        />
       </div>
     </header>
   )

@@ -212,7 +212,6 @@ python main.py          # http://127.0.0.1:8000
 cd frontend
 pnpm dev                # Vite, :5173
 pnpm dev:all            # backend2 (:5116) + Vite (:5173)
-pnpm electron:dev       # окно Electron
 ```
 
 Переменные окружения: скопируйте `.env.example` в `frontend/.env` (Vite читает env из каталога `frontend`). Единственная используемая переменная — `VITE_API_URL` (по умолчанию `http://localhost:5116`).

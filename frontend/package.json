@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "author": "Vidora",
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,8 +11,6 @@
     "lint:fsd": "steiger ./src",
     "api:generate": "openapi-typescript http://localhost:5116/swagger/v1/swagger.json -o ./src/shared/api/schema.d.ts",
     "preview": "vite preview",
-    "electron:dev": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "electron:build": "pnpm build && node electron/build.cjs",
     "backend:dev": "cd ../backend2 && dotnet run --launch-profile http",
     "backend:migrate": "cd ../backend2 && dotnet run -- --migrate",
     "backend:dev:py": "cd ../backend && .venv\\Scripts\\uvicorn app.main:app --host 127.0.0.1 --port 8355 --reload",
@@ -27,10 +24,10 @@
     "openapi-react-query": "^0.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@electron/packager": "^20.0.3",
     "@eslint/js": "^10.0.1",
     "@feature-sliced/steiger-plugin": "^0.7.0",
     "@tailwindcss/vite": "^4.3.3",
@@ -39,9 +36,6 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
-    "cross-env": "^7.0.3",
-    "electron": "^43.1.1",
-    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",

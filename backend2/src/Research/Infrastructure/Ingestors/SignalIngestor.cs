@@ -341,7 +341,10 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 }
             }
         }
-        catch { }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[SignalIngestor] GitHub сбор сигналов не удался");
+        }
         return list;
     }
 
@@ -417,7 +420,10 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 }
             }
         }
-        catch { }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[SignalIngestor] DuckDuckGo сбор сигналов не удался");
+        }
         return list;
     }
 
@@ -445,7 +451,10 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 });
             }
         }
-        catch { }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[SignalIngestor] Habr RSS сбор сигналов не удался");
+        }
         return list;
     }
 
@@ -474,7 +483,10 @@ public sealed partial class SignalIngestor : ISignalIngestor
                 });
             }
         }
-        catch { }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[SignalIngestor] Habr search сбор сигналов не удался");
+        }
         return list;
     }
 

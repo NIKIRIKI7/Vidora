@@ -1,5 +1,16 @@
 import type { VisualArchetype } from '@shared/config'
 import { VISUAL_ARCHETYPES } from '@shared/config'
+import { Button, OptionCard } from '@shared/ui'
+
+type ArchetypeAccent = 'primary' | 'secondary' | 'success' | 'warning' | 'error'
+
+const ARCHETYPE_ACCENT: Record<VisualArchetype, ArchetypeAccent> = {
+  PULL: 'secondary',
+  EXPLODE: 'warning',
+  CASCADE: 'primary',
+  FLOW: 'success',
+  PULSE: 'error',
+}
 
 interface ArchetypeSelectorProps {
   currentArchetype?: VisualArchetype | null
@@ -21,40 +32,31 @@ export const ArchetypeSelector = ({ currentArchetype, onSelect, compact = false 
 
         if (compact) {
           return (
-            <button
+            <Button
               key={key}
-              type="button"
+              variant={isSelected ? 'secondary' : 'ghost'}
+              size="sm"
+              icon={Icon}
               onClick={() => onSelect(key)}
               title={`${item.label} — ${item.shortDesc}`}
-              className={`p-1.5 rounded-lg border text-xs transition-all flex items-center gap-1 shrink-0 ${
-                isSelected
-                  ? `${item.color} shadow-sm font-bold scale-105`
-                  : 'border-outline-variant/40 bg-surface-container-lowest/20 text-on-surface-variant hover:text-on-surface hover:border-outline-variant/100'
-              }`}
+              className="p-1.5 rounded-lg shrink-0"
             >
-              <Icon size={13} />
               <span className="text-xxs uppercase font-mono">{item.id}</span>
-            </button>
+            </Button>
           )
         }
 
         return (
-          <button
+          <OptionCard
             key={key}
-            type="button"
+            icon={Icon}
+            title={item.label}
+            subtitle={item.shortDesc}
+            isActive={isSelected}
+            accent={ARCHETYPE_ACCENT[key]}
             onClick={() => onSelect(key)}
-            className={`flex-1 min-w-[var(--layout-chip)] p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${item.bgHover} ${
-              isSelected
-                ? `${item.color} shadow-md ring-1 ring-current`
-                : 'border-outline-variant/40 bg-surface-container-lowest/60 text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <div className="flex items-center gap-1.5">
-              <Icon size={14} />
-              <span className="text-xs font-bold">{item.label}</span>
-            </div>
-            <span className="text-xxs opacity-70 leading-tight line-clamp-2">{item.shortDesc}</span>
-          </button>
+            className={`flex-1 min-w-[var(--layout-chip)] ${item.bgHover}`}
+          />
         )
       })}
     </div>

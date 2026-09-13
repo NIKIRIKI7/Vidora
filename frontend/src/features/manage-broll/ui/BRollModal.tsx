@@ -1,6 +1,6 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef } from 'react'
-import { Modal, Button, FieldGroup, Select, Spinner, Input } from '@shared/ui'
+import { Modal, Button, FieldGroup, Select, Spinner, Input, SegmentedControl, Tabs } from '@shared/ui'
 import { Search, Sparkles, Check, MonitorPlay } from 'lucide-react'
 import type { ProjectSettings, Scene, BRollAudioMode } from '@entities/project'
 import { getProjectPath } from '@entities/project'
@@ -166,41 +166,28 @@ export const BRollModal = ({
             </span>
             <span className="text-2xs text-on-surface-variant">FFmpeg нормализация с постоянным FPS</span>
           </div>
-          <div className="flex bg-surface-container-lowest border border-outline-variant/40 p-0.5 rounded-lg">
-            <button
-              type="button"
-              onClick={() => setFitMode('cover')}
-              className={`text-xs px-3 py-1 rounded transition-all font-medium ${fitMode === 'cover' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Cover (Без полос)
-            </button>
-            <button
-              type="button"
-              onClick={() => setFitMode('blur_pad')}
-              className={`text-xs px-3 py-1 rounded transition-all font-medium ${fitMode === 'blur_pad' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Blur Pad (Размытые поля)
-            </button>
-          </div>
+          <SegmentedControl
+            options={[
+              { value: 'cover', label: 'Cover (Без полос)' },
+              { value: 'blur_pad', label: 'Blur Pad (Размытые поля)' },
+            ]}
+            value={fitMode}
+            onChange={setFitMode}
+          />
         </div>
 
         {/* Источник файла */}
-        <div className="flex border-b border-outline-variant/40">
-          <button
-            type="button"
-            onClick={() => setSourceTab('upload')}
-            className={`flex-1 py-2 text-xs font-bold border-b-2 transition-colors ${sourceTab === 'upload' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
-          >
-            Локальный файл
-          </button>
-          <button
-            type="button"
-            onClick={() => setSourceTab('pexels')}
-            className={`flex-1 py-2 text-xs font-bold border-b-2 transition-colors ${sourceTab === 'pexels' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
-          >
-            Поиск на Pexels
-          </button>
-        </div>
+        <Tabs
+          fill
+          variant="underline"
+          value={sourceTab}
+          onChange={(id) => setSourceTab(id as 'upload' | 'pexels')}
+          items={[
+            { id: 'upload', label: 'Локальный файл' },
+            { id: 'pexels', label: 'Поиск на Pexels' },
+          ]}
+          className="border-b border-outline-variant/40"
+        />
 
         {sourceTab === 'upload' ? (
           <div className="flex flex-col gap-3 py-2">

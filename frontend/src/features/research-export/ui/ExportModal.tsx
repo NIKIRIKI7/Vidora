@@ -11,7 +11,7 @@ import {
   Flame,
   CheckCircle2,
 } from 'lucide-react'
-import { Modal, Spinner } from '@shared/ui'
+import { Modal, Button, OptionCard, Spinner } from '@shared/ui'
 import type { ExportDataset, ExportFormatId, ExportOptions, ExportScope } from '../model/types'
 import { ExportStrategyRegistry } from '../model/strategies'
 
@@ -98,24 +98,20 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
             ].map((s) => {
               const active = scope === s.id
               return (
-                <button
+                <OptionCard
                   key={s.id}
-                  type="button"
+                  title={s.label}
+                  subtitle={s.sub}
+                  isActive={active}
+                  accent="primary"
+                  showIcon={false}
                   onClick={() => {
                     setScope(s.id as ExportScope)
                     if (s.id === 'all' && selectedFormat === 'clipboard_tsv') {
                       setSelectedFormat('excel')
                     }
                   }}
-                  className={`p-2.5 rounded-xl border text-left flex flex-col gap-0.5 transition-all ${
-                    active
-                      ? 'bg-primary/20 border-primary text-on-surface shadow-md'
-                      : 'bg-surface-container-low border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-outline-variant'
-                  }`}
-                >
-                  <span className="text-xs font-bold leading-tight">{s.label}</span>
-                  <span className="text-xxs font-mono opacity-70">{s.sub}</span>
-                </button>
+                />
               )
             })}
           </div>
@@ -130,34 +126,26 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
               const isSelected = selectedFormat === strat.id
               const disabled = !strat.supportsScope(scope)
               return (
-                <button
-                  key={strat.id}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => setSelectedFormat(strat.id)}
-                  className={`p-3 rounded-xl border text-left flex items-start gap-3 transition-all ${
-                    disabled
-                      ? 'opacity-30 cursor-not-allowed border-outline-variant'
-                      : isSelected
-                      ? 'bg-surface-container-low border-primary shadow-md ring-1 ring-primary/50'
-                      : 'bg-surface-container-low/60 border-outline-variant hover:border-outline-variant text-on-surface'
-                  }`}
-                >
-                  <div className="p-2 rounded-xl bg-surface-container-lowest border border-outline-variant shrink-0">
-                    {renderIcon(strat.iconName, 20)}
-                  </div>
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-on-surface whitespace-normal">{strat.title}</span>
+                <div key={strat.id} className={disabled ? 'opacity-30 pointer-events-none' : ''}>
+                  <OptionCard
+                    title={strat.title}
+                    subtitle={strat.description}
+                    isActive={isSelected}
+                    accent="primary"
+                    showIcon={false}
+                    onClick={() => setSelectedFormat(strat.id)}
+                    className="h-full w-full items-start"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-surface-container-lowest border border-outline-variant shrink-0">
+                        {renderIcon(strat.iconName, 20)}
+                      </div>
                       <span className="text-3xs font-mono px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant shrink-0">
                         {strat.badge}
                       </span>
                     </div>
-                    <span className="text-2xs text-on-surface-variant mt-1 leading-relaxed">
-                      {strat.description}
-                    </span>
-                  </div>
-                </button>
+                  </OptionCard>
+                </div>
               )
             })}
           </div>
@@ -183,19 +171,19 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
             К выгрузке: {onlyRockets ? rocketVideosCount : dataset.videos.length} видео
           </span>
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={onClose}
               disabled={isExporting}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition"
+              className="px-4 py-2 rounded-xl text-xs font-semibold"
             >
               Отмена
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleExecuteExport}
               disabled={isExporting || (scope === 'videos' && dataset.videos.length === 0)}
-              className="px-5 py-2 bg-primary hover:bg-primary disabled:opacity-50 text-on-surface rounded-xl text-xs font-bold shadow-lg shadow-primary/20 transition active:scale-95 flex items-center gap-2"
+              className="px-5 py-2 rounded-xl text-xs font-bold"
             >
               {isExporting ? (
                 <>
@@ -214,7 +202,7 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
                   <Download size={15} /> Скачать {activeStrategy.extension.toUpperCase()}
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

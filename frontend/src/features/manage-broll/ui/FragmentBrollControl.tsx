@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Video, Upload, Sparkles, Trash2, ExternalLink } from 'lucide-react'
-import { Dropdown, DropdownItem } from '@shared/ui'
+import { Dropdown, DropdownItem, IconButton } from '@shared/ui'
 
 interface FragmentBrollControlProps {
   brollFilename?: string | null
@@ -41,17 +41,14 @@ export const FragmentBrollControl = ({
       <Dropdown
         align="left"
         trigger={
-          <button
-            type="button"
-            className={`text-2xs p-1 rounded transition-colors flex items-center gap-1 border ${
-              hasBroll
-                ? 'text-secondary border-secondary/40 bg-secondary/10 hover:bg-secondary/20'
-                : 'text-on-surface-variant border-transparent hover:text-secondary hover:bg-on-surface/5'
-            }`}
+          <IconButton
+            icon={Video}
+            size="xs"
+            accent="secondary"
+            active={hasBroll}
+            className={`text-2xs p-1 border ${hasBroll ? 'border-secondary/40' : 'border-transparent'}`}
             title={hasBroll ? `B-Roll: ${brollFilename}` : 'Медиа / B-Roll'}
-          >
-            <Video size={13} />
-          </button>
+          />
         }
       >
         <DropdownItem onClick={onOpenStockModal}>

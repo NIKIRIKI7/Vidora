@@ -1,6 +1,6 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect, useRef } from 'react'
-import { Modal, Button, Spinner } from '@shared/ui'
+import { Modal, Button, IconButton, Spinner } from '@shared/ui'
 import { Play, Square, Upload, Sparkles, Check } from 'lucide-react'
 import type { ProjectSettings, MusicCategory, MusicTrackItem } from '@entities/project'
 import { API } from '@shared/lib'
@@ -95,9 +95,13 @@ export const MusicLibraryModal = ({ isOpen, onClose, project, activeTrackId, onS
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <button type="button" onClick={() => togglePlay(t.path)} className="p-1.5 rounded-full bg-on-surface/5 hover:bg-on-surface/20 text-on-surface shrink-0">
-          {playingTrackPath === t.path ? <Square size={13} /> : <Play size={13} className="fill-current" />}
-        </button>
+        <IconButton
+          icon={playingTrackPath === t.path ? Square : Play}
+          size="xs"
+          accent="neutral"
+          onClick={() => togglePlay(t.path)}
+          className="rounded-full bg-on-surface/5 hover:bg-on-surface/20 text-on-surface shrink-0"
+        />
         <div className="flex flex-col min-w-0">
           <span className="text-xs font-medium truncate">{t.name}</span>
           {t.duration > 0 && (

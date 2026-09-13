@@ -1,5 +1,6 @@
 import React from 'react'
 import { Eye, Users, Flame, Zap, BarChart2 } from 'lucide-react'
+import { Button } from '@shared/ui'
 import { useVideoInspectorStore } from '../model/useVideoInspectorStore'
 import type { VideoCandidateMeta } from '@shared/api'
 
@@ -56,13 +57,14 @@ export const VideoCandidateCard: React.FC<VideoCandidateCardProps> = ({ video })
           )}
         </div>
 
-        <button
+        <Button
+          variant="primary"
+          icon={BarChart2}
           onClick={() => openInspector(video)}
-          className="w-full mt-1 py-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-on-primary font-bold text-xs rounded-lg border border-primary/30 transition-all flex items-center justify-center gap-1.5"
+          className="w-full mt-1 py-1.5 text-xs font-bold"
         >
-          <BarChart2 className="w-3.5 h-3.5" />
           Разбор удержания & Хуков
-        </button>
+        </Button>
       </div>
     </div>
   )

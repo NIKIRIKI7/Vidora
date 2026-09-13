@@ -1,6 +1,6 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState } from 'react'
-import { Modal, Button, FieldGroup, Slider, Switch, Spinner } from '@shared/ui'
+import { Modal, Button, OptionCard, FieldGroup, Slider, Switch, Spinner } from '@shared/ui'
 import { Play, Sliders, AudioLines, Zap, Check } from 'lucide-react'
 import type { ProjectSettings, BackgroundMusicSettings } from '@entities/project'
 import { DUCKING_PRESETS, DEFAULT_BACKGROUND_MUSIC, type DuckingPresetKey } from '@shared/config'
@@ -109,17 +109,15 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
               const p = DUCKING_PRESETS[key]
               const isSelected = !isProMode && settings.preset === key
               return (
-                <button
+                <OptionCard
                   key={key}
-                  type="button"
+                  title={p.name.split(' ')[0]}
+                  subtitle={p.description}
+                  isActive={isSelected}
+                  accent="primary"
+                  showIcon={false}
                   onClick={() => { setIsProMode(false); applyPreset(key) }}
-                  className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                    isSelected ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-container-lowest border-outline-variant/20 hover:border-outline-variant/80 text-on-surface'
-                  }`}
-                >
-                  <span className="text-xs font-bold leading-tight">{p.name.split(' ')[0]}</span>
-                  <span className="text-xxs text-on-surface-variant line-clamp-2">{p.description}</span>
-                </button>
+                />
               )
             })}
           </div>
@@ -139,16 +137,17 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-outline-variant/20">
-          <button
-            type="button"
+          <Button
+            variant="link"
+            icon={Sliders}
             onClick={() => {
               setIsProMode(!isProMode)
               if (!isProMode) setSettings((prev) => ({ ...prev, preset: 'custom' }))
             }}
-            className="text-xs text-secondary hover:underline flex items-center gap-1 font-mono"
+            className="font-mono"
           >
-            <Sliders size={14} /> {isProMode ? 'Скрыть детальные регуляторы' : 'Тонкая настройка (Pro Mode)...'}
-          </button>
+            {isProMode ? 'Скрыть детальные регуляторы' : 'Тонкая настройка (Pro Mode)...'}
+          </Button>
         </div>
 
         {isProMode && (

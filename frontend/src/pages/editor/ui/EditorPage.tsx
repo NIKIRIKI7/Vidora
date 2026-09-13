@@ -3,7 +3,7 @@ import type { ProjectSettings, Resolution, VideoFormat, BackgroundMusicSettings,
 import {
   useSettingsStore, useNotificationStore, astToProjectDelta, useScenarioEngineStore,
 } from '@entities/project'
-import { Button, Modal, FieldGroup, Switch, Input, Select, Slider, TextArea } from '@shared/ui'
+import { Button, Modal, Tabs, OptionCard, FieldGroup, Switch, Input, Select, Slider, TextArea } from '@shared/ui'
 import { THEME_PRESETS, DEFAULT_BACKGROUND_MUSIC, type ThemePreset } from '@shared/config'
 import { createProductionProject } from '@shared/api'
 import { useEditorWorkspace } from '@pages/editor/model/useEditorWorkspace'
@@ -349,10 +349,17 @@ export const EditorPage = ({
       />
 
       <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки Проекта">
-        <div className="flex flex-wrap gap-1 mb-5 p-1 bg-surface-container-lowest/50 rounded-lg border border-outline-variant/20">
-          <button onClick={() => setSettingsTab('project')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'project' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-on-surface/5'}`}>Проект</button>
-          <button onClick={() => setSettingsTab('ui')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'ui' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-on-surface/5'}`}>Интерфейс</button>
-        </div>
+        <Tabs
+          fill
+          variant="pill"
+          value={settingsTab}
+          onChange={(id) => setSettingsTab(id as 'project' | 'ui')}
+          items={[
+            { id: 'project', label: 'Проект' },
+            { id: 'ui', label: 'Интерфейс' },
+          ]}
+          className="mb-5 p-1 bg-surface-container-lowest/50 rounded-lg border border-outline-variant/20"
+        />
 
         <div className="flex flex-col gap-4 pb-2">
           {settingsTab === 'ui' ? (
@@ -450,18 +457,18 @@ export const EditorPage = ({
               <FieldGroup label="Цветовая тема (Пресеты)">
                 <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
                   {THEME_PRESETS.map((tpl: ThemePreset) => (
-                    <button
+                    <OptionCard
                       key={tpl.name}
+                      title={tpl.name.split(' ')[0]}
                       onClick={() => onUpdateProject({ ...project, montage: { ...project.montage, colors: tpl.colors } })}
-                      className="flex flex-col items-center gap-1 shrink-0 group"
-                      title={tpl.name}
+                      showIcon={false}
+                      className="items-center shrink-0 group"
                     >
                       <div className="w-8 h-8 rounded-full border-2 border-transparent group-hover:border-outline-variant/100 flex overflow-hidden">
                         <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
                         <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
                       </div>
-                      <span className="text-xxs text-on-surface-variant group-hover:text-on-surface">{tpl.name.split(' ')[0]}</span>
-                    </button>
+                    </OptionCard>
                   ))}
                 </div>
               </FieldGroup>

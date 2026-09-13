@@ -7,6 +7,9 @@ import { Plus, GripVertical, Copy, ClipboardPaste, Download, Upload, Trash2, Sea
 import { API, getProjectPath, isAudioDirty } from '@entities/project'
 import { isCodeDirty } from '@features/editor-utils'
 import { SceneStatusBadges } from '@features/inspect-pacing'
+import type { components } from '@shared/api'
+
+type StockVideo = components['schemas']['MediaContext.Contracts.StockVideoDto']
 
 interface Props {
   project: ProjectSettings
@@ -34,10 +37,11 @@ export const SceneSidebar = React.memo(({
 }: Props) => {
   const [tab, setTab] = useState<'script' | 'stock'>('script')
   const [stockQuery, setStockQuery] = useState('')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [stockResults, setStockResults] = useState<any[]>([])
+  const [stockResults, setStockResults] = useState<StockVideo[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const { visualPacingThreshold, audioSilenceThreshold, audioWpmMin } = useSettingsStore()
+  const visualPacingThreshold = useSettingsStore((s) => s.visualPacingThreshold)
+  const audioSilenceThreshold = useSettingsStore((s) => s.audioSilenceThreshold)
+  const audioWpmMin = useSettingsStore((s) => s.audioWpmMin)
 
   const handleSearchStock = async () => {
     if (!stockQuery) return
@@ -130,7 +134,14 @@ export const SceneSidebar = React.memo(({
                   <div className="flex items-center justify-between gap-2">
                     <Input className="text-xs font-semibold bg-transparent border-transparent text-primary focus:border-primary/50 px-1 py-0 flex-1 min-w-0 rounded-none" value={scene.title} onChange={e => onUpdateTitle(scene.id, e.target.value, scene.timecode)} />
                     <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                      <button className={`text-2xs p-1 rounded transition-colors ${isIgnored ? 'text-error font-medium' : 'text-on-surface-variant/40 hover:text-on-surface'}`} onClick={e => { e.stopPropagation(); onToggleIgnoreTsx(scene.id) }} title={isIgnored ? 'TSX игнорируется (черный экран)' : 'Нажмите, чтобы игнорировать TSX'}>{isIgnored ? '⬛ Игнор' : '⬛'}</button>
+                      <Button
+                        variant={isIgnored ? 'danger' : 'ghost'}
+                        onClick={e => { e.stopPropagation(); onToggleIgnoreTsx(scene.id) }}
+                        title={isIgnored ? 'TSX игнорируется (черный экран)' : 'Нажмите, чтобы игнорировать TSX'}
+                        className="text-2xs p-1 rounded"
+                      >
+                        {isIgnored ? '⬛ Игнор' : '⬛'}
+                      </Button>
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
                         <IconButton icon={Copy} accent="primary" onClick={e => { e.stopPropagation(); onExportScene(scene.id) }} title="Экспорт сцены (Markdown)" />
                         <IconButton icon={ClipboardPaste} accent="primary" onClick={e => { e.stopPropagation(); onReplaceScene(scene.id) }} title="Заменить сцену из буфера (Markdown)" />
@@ -199,8 +210,8 @@ export const SceneSidebar = React.memo(({
             <div className="grid grid-cols-2 gap-2 mt-2">
               {stockResults.map(video => (
                 <div key={video.id} className="relative group rounded-lg overflow-hidden border border-outline-variant/40 aspect-[9/16] bg-surface-container-lowest">
-                  <video src={video.video_files[0]?.link} loop muted onMouseOver={e => e.currentTarget.play()} onMouseOut={e => e.currentTarget.pause()} className="w-full h-full object-cover" />
-                  <IconButton icon={Download} size="md" accent="neutral" onClick={() => handleDownloadStock(video.video_files[0]?.link, `stock_${video.id}.mp4`)} className="absolute bottom-2 right-2 bg-primary text-surface-container-lowest rounded-full opacity-0 group-hover:opacity-100" title="Скачать футаж" />
+                  <video src={video.download_url || video.url || ''} loop muted onMouseOver={e => e.currentTarget.play()} onMouseOut={e => e.currentTarget.pause()} className="w-full h-full object-cover" />
+                  <IconButton icon={Download} size="md" accent="neutral" onClick={() => handleDownloadStock(video.download_url || video.url || '', `stock_${video.id}.mp4`)} className="absolute bottom-2 right-2 bg-primary text-surface-container-lowest rounded-full opacity-0 group-hover:opacity-100" title="Скачать футаж" />
                 </div>
               ))}
             </div>

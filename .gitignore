@@ -106,6 +106,9 @@ backend2/ai-models/
 # OpenCode local skill state (personal tooling, not project source)
 .skills.json
 
+# Serena MCP local project state (cache, memories, local overrides)
+.serena/
+
 # Backend runtime data (SQLite, generated audio/render artifacts)
 backend2/data_storage/
 backend2/logs/

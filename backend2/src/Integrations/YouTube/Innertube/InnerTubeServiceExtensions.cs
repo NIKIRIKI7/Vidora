@@ -5,6 +5,7 @@ using Integrations.YouTube.Innertube.Resolving;
 using Integrations.YouTube.Innertube.Transport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Polly;
 
 namespace Integrations.YouTube.Innertube;
 
@@ -85,6 +86,15 @@ public static class InnerTubeServiceExtensions
         {
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        })
+        .AddStandardResilienceHandler(options =>
+        {
+            options.Retry.MaxRetryAttempts = 2;
+            options.Retry.BackoffType = DelayBackoffType.Exponential;
+            options.Retry.UseJitter = true;
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
         });
 
         services.AddSingleton<IInnerTubeClient, InnerTubeClient>();

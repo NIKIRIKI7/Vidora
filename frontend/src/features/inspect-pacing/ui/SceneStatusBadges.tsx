@@ -1,4 +1,5 @@
 import type { MouseEvent } from 'react'
+import { Button } from '@shared/ui'
 
 interface SceneStatusBadgesProps {
   audioDirty: boolean
@@ -131,22 +132,24 @@ export const SceneStatusBadges = ({
       )}
 
       {isVisualBoring && onCopyFixPacingPrompt && (
-        <button
+        <Button
+          variant="outline"
           onClick={stop(onCopyFixPacingPrompt)}
-          className="text-xxs px-1.5 py-0.5 rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border-primary/40 text-primary bg-primary/10 hover:bg-primary/20"
           title="Скопировать промпт для ИИ, чтобы добавить динамики"
         >
           ✨ ИИ
-        </button>
+        </Button>
       )}
       {isAudioBoring && onFixAudioPacing && (
-        <button
+        <Button
+          variant="outline"
           onClick={stop(onFixAudioPacing)}
-          className="text-xxs px-1.5 py-0.5 rounded border border-secondary/40 text-secondary bg-secondary/10 hover:bg-secondary/20 transition-colors flex items-center gap-1 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border-secondary/40 text-secondary bg-secondary/10 hover:bg-secondary/20"
           title="Автоматически вырезать тишину и пересинхронизировать тайминги"
         >
           ✂️ Исправить
-        </button>
+        </Button>
       )}
     </div>
   )

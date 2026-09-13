@@ -8,7 +8,8 @@ import { useModelCatalog } from '@entities/project'
 import { SkillsSettingsView } from '@features/settings'
 
 const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, categoryKey: keyof GlobalPromptSettings, rows: number }) => {
-  const { globalPrompts, setGlobalPrompts } = useSettingsStore()
+  const globalPrompts = useSettingsStore((s) => s.globalPrompts)
+  const setGlobalPrompts = useSettingsStore((s) => s.setGlobalPrompts)
   const category = globalPrompts[categoryKey]
   const activeVersion = category.versions.find(v => v.id === category.activeId) || category.versions[0]
 
@@ -52,15 +53,25 @@ const PromptVersionEditor = ({ label, categoryKey, rows }: { label: string, cate
 }
 
 export const GlobalSettingsView = ({ onBack, onGoToAudio }: { onBack: () => void; onGoToAudio?: () => void }) => {
-  const {
-    taskModes, setTaskMode, cloudProvider, setCloudProvider, apiKeys, setApiKey,
-    cloudEngines, setCloudEngine, localEngines, setLocalEngine,
-    resetGlobalPrompts,
-    visualPacingThreshold, setVisualPacingThreshold,
-    audioSilenceThreshold, setAudioSilenceThreshold,
-    audioWpmMin, setAudioWpmMin,
-    whisperModel, setWhisperModel,
-  } = useSettingsStore()
+  const taskModes = useSettingsStore((s) => s.taskModes)
+  const setTaskMode = useSettingsStore((s) => s.setTaskMode)
+  const cloudProvider = useSettingsStore((s) => s.cloudProvider)
+  const setCloudProvider = useSettingsStore((s) => s.setCloudProvider)
+  const apiKeys = useSettingsStore((s) => s.apiKeys)
+  const setApiKey = useSettingsStore((s) => s.setApiKey)
+  const cloudEngines = useSettingsStore((s) => s.cloudEngines)
+  const setCloudEngine = useSettingsStore((s) => s.setCloudEngine)
+  const localEngines = useSettingsStore((s) => s.localEngines)
+  const setLocalEngine = useSettingsStore((s) => s.setLocalEngine)
+  const resetGlobalPrompts = useSettingsStore((s) => s.resetGlobalPrompts)
+  const visualPacingThreshold = useSettingsStore((s) => s.visualPacingThreshold)
+  const setVisualPacingThreshold = useSettingsStore((s) => s.setVisualPacingThreshold)
+  const audioSilenceThreshold = useSettingsStore((s) => s.audioSilenceThreshold)
+  const setAudioSilenceThreshold = useSettingsStore((s) => s.setAudioSilenceThreshold)
+  const audioWpmMin = useSettingsStore((s) => s.audioWpmMin)
+  const setAudioWpmMin = useSettingsStore((s) => s.setAudioWpmMin)
+  const whisperModel = useSettingsStore((s) => s.whisperModel)
+  const setWhisperModel = useSettingsStore((s) => s.setWhisperModel)
 
   const showNotification = useNotificationStore(s => s.showNotification)
 

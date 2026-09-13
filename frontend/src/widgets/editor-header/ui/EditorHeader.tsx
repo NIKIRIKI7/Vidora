@@ -1,5 +1,5 @@
 import type { ProjectSettings } from '@entities/project'
-import { GradientButton, Dropdown, DropdownItem, PageHeader } from '@shared/ui'
+import { GradientButton, Button, Dropdown, DropdownItem, PageHeader } from '@shared/ui'
 import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap, Terminal, Clapperboard } from 'lucide-react'
 
 interface Props {
@@ -43,11 +43,11 @@ export const EditorHeader = ({
       <div className="flex items-center gap-2">
         <Dropdown
           trigger={
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-on-surface/5 font-medium text-sm">
+            <Button variant="ghost" className="px-3 py-1.5 rounded-lg text-sm">
               <Folder size={18} className="text-secondary" />
               {project.name}
               <ChevronDown size={18} className="text-on-surface-variant" />
-            </button>
+            </Button>
           }
         >
           {projects.map(p => (
@@ -70,10 +70,10 @@ export const EditorHeader = ({
         {/* Меню Вид */}
         <Dropdown
           trigger={
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-on-surface/5 font-medium text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            <Button variant="ghost" className="px-3 py-1.5 rounded-lg text-sm">
               <LayoutGrid size={18} className="text-on-surface-variant" />
               Вид
-            </button>
+            </Button>
           }
         >
           <DropdownItem onClick={() => onToggleUi('showSceneSidebar')}>
@@ -99,14 +99,15 @@ export const EditorHeader = ({
     }
     rightContent={
       <>
-        <button
+        <Button
+          variant="ghost"
           onClick={onOpenLogs}
           title="Журнал логов"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-on-surface/5 font-medium text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+          className="px-3 py-1.5 rounded-lg text-sm"
         >
           <Terminal size={18} />
           <span className="hidden xl:inline">Журнал</span>
-        </button>
+        </Button>
         <GradientButton
           disabled={isAutoPipelineRunning || isRendering}
           onClick={onFullAutoPipeline}

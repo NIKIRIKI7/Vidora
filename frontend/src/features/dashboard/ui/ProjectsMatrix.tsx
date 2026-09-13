@@ -8,7 +8,7 @@ import {
   Trash2,
   Volume2,
 } from 'lucide-react'
-import { SearchInput } from '@shared/ui'
+import { SearchInput, Button, IconButton, SegmentedControl } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
 const timeAgo = (iso: string) => {
@@ -19,17 +19,15 @@ const timeAgo = (iso: string) => {
 }
 
 export const ProjectsMatrix: React.FC = () => {
-  const {
-    projects,
-    searchQuery,
-    formatFilter,
-    setSearchQuery,
-    setFormatFilter,
-    openModal,
-    openProject,
-    deleteProject,
-    duplicateProject,
-  } = useDashboardStore()
+  const projects = useDashboardStore((s) => s.projects)
+  const searchQuery = useDashboardStore((s) => s.searchQuery)
+  const formatFilter = useDashboardStore((s) => s.formatFilter)
+  const setSearchQuery = useDashboardStore((s) => s.setSearchQuery)
+  const setFormatFilter = useDashboardStore((s) => s.setFormatFilter)
+  const openModal = useDashboardStore((s) => s.openModal)
+  const openProject = useDashboardStore((s) => s.openProject)
+  const deleteProject = useDashboardStore((s) => s.deleteProject)
+  const duplicateProject = useDashboardStore((s) => s.duplicateProject)
 
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
 
@@ -56,21 +54,15 @@ export const ProjectsMatrix: React.FC = () => {
             </span>
           </div>
 
-          <div className="bg-surface-container-low p-1 rounded-xl flex items-center gap-1 border border-outline-variant">
-            {(['all', '16:9', '9:16'] as const).map((fmt) => (
-              <button
-                key={fmt}
-                onClick={() => setFormatFilter(fmt)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  formatFilter === fmt
-                    ? 'bg-secondary text-on-surface shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                {fmt === 'all' ? 'Все' : fmt}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            options={[
+              { value: 'all', label: 'Все' },
+              { value: '16:9', label: '16:9' },
+              { value: '9:16', label: '9:16' },
+            ]}
+            value={formatFilter}
+            onChange={setFormatFilter}
+          />
         </div>
 
         <div className="w-full sm:w-64">
@@ -148,42 +140,49 @@ export const ProjectsMatrix: React.FC = () => {
                 </div>
 
                 <div className="relative">
-                  <button
+                  <IconButton
+                    icon={MoreVertical}
+                    size="sm"
+                    accent="neutral"
                     onClick={() => setActiveMenuId(isMenuOpen ? null : proj.id)}
-                    className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors"
-                  >
-                    <MoreVertical size={15} />
-                  </button>
+                    className="hover:bg-surface-container-high"
+                  />
 
                   {isMenuOpen && (
                     <div className="absolute right-0 bottom-8 z-30 w-36 rounded-2xl bg-surface-container-lowest border border-outline-variant p-1.5 shadow-2xl space-y-0.5 text-xs font-semibold">
-                      <button
+                      <Button
+                        variant="ghost"
+                        icon={FolderOpen}
                         onClick={() => {
                           setActiveMenuId(null)
                           openProject(proj.id)
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-surface-container-low text-on-surface hover:text-on-surface flex items-center gap-2 text-left"
+                        className="w-full justify-start px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                       >
-                        <FolderOpen size={13} /> <span>Открыть</span>
-                      </button>
-                      <button
+                        Открыть
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        icon={Layers}
                         onClick={() => {
                           setActiveMenuId(null)
                           duplicateProject(proj.id)
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-surface-container-low text-on-surface hover:text-on-surface flex items-center gap-2 text-left"
+                        className="w-full justify-start px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                       >
-                        <Layers size={13} /> <span>Дублировать</span>
-                      </button>
-                      <button
+                        Дублировать
+                      </Button>
+                      <Button
+                        variant="danger"
+                        icon={Trash2}
                         onClick={() => {
                           setActiveMenuId(null)
                           deleteProject(proj.id)
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-error/20 text-error flex items-center gap-2 text-left"
+                        className="w-full justify-start px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                       >
-                        <Trash2 size={13} /> <span>Удалить</span>
-                      </button>
+                        Удалить
+                      </Button>
                     </div>
                   )}
                 </div>

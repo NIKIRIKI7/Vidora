@@ -93,7 +93,11 @@ export const Timeline = ({
   const lastTickRef = useRef(0)
 
   const computedFragments = useMemo(() => computeFragments(dragFragments ?? fragments), [dragFragments, fragments])
-  const duration = Math.max(10, ...computedFragments.map((f) => f.computedEnd), currentTime + 2)
+  // Длительность контента мемоизирована отдельно от плейхеда: `currentTime` меняется каждый
+  // кадр, и раньше он тянул за собой пересоздание rAF-эффекта. Теперь эффект переподписывается
+  // только при смене самого контента.
+  const contentDuration = useMemo(() => Math.max(10, ...computedFragments.map((f) => f.computedEnd)), [computedFragments])
+  const duration = Math.max(contentDuration, currentTime + 2)
   const hasAnyAudio = useMemo(() => fragments.some((f) => Boolean(f.audioFileName || f.lastAudioHash)), [fragments])
 
   useEffect(() => {
@@ -119,7 +123,7 @@ export const Timeline = ({
           lastTickRef.current = now
           setCurrentTime(prev => {
             const next = prev + deltaSec
-            if (next >= duration) { setIsPlaying(false); return 0 }
+            if (next >= contentDuration) { setIsPlaying(false); return 0 }
             return next
           })
         } else {
@@ -130,7 +134,7 @@ export const Timeline = ({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [videoRef, audioRef, isScrubbing, isPlaying, duration])
+  }, [videoRef, audioRef, isScrubbing, isPlaying, contentDuration])
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current
@@ -276,18 +280,18 @@ export const Timeline = ({
     return `${m}:${s.toString().padStart(2, '0')}.${ms}`
   }
 
-  const renderTicks = () => {
-    const ticks = []
+  const ticks = useMemo(() => {
     const step = zoom < 50 ? 5 : zoom < 80 ? 2 : 1
-    for (let i = 0; i <= Math.ceil(duration); i += step) {
-      ticks.push(
+    const result = []
+    for (let i = 0; i <= Math.ceil(contentDuration); i += step) {
+      result.push(
         <div key={i} className="absolute top-0 bottom-0 border-l border-outline-variant/80 pointer-events-none" style={{ left: i * zoom }}>
           <span className="absolute top-1 left-1.5 text-3xs font-mono text-on-surface-variant select-none opacity-60">{i}s</span>
         </div>
       )
     }
-    return ticks
-  }
+    return result
+  }, [contentDuration, zoom])
 
   return (
     <div className="w-full h-full flex flex-col bg-surface-container/90 backdrop-blur-xl select-none border-t border-outline-variant/40">
@@ -399,7 +403,7 @@ export const Timeline = ({
             onMouseLeave={() => setHoveredTime(null)}
           >
             <div className="h-7 border-b border-outline-variant/40 relative bg-on-surface/5 hover:bg-on-surface/10 transition-colors cursor-pointer" onMouseDown={handleScrubStart}>
-              {renderTicks()}
+              {ticks}
             </div>
             {['text', 'broll', 'audio'].map((track) => (
               <div key={track} className="h-12 border-b border-outline-variant/20 relative" onMouseDown={activeTool === 'select' ? handleScrubStart : undefined}>
