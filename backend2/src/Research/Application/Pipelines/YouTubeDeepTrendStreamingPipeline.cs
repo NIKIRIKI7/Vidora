@@ -134,6 +134,35 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
+                // Интеграция конкурентов в поисковые запросы
+                bool isCompetitorMode = options.SearchMode?.Equals("competitors", StringComparison.OrdinalIgnoreCase) == true;
+
+                if (options.CompetitorChannels != null && options.CompetitorChannels.Count > 0)
+                {
+                    var compQueries = options.CompetitorChannels
+                        .Where(c => !string.IsNullOrWhiteSpace(c))
+                        .Select(c => c.Trim())
+                        .ToList();
+
+                    if (compQueries.Count > 0)
+                    {
+                        // Ставим каналы конкурентов в самый приоритет (в начало списка запросов)
+                        searchQueries.InsertRange(0, compQueries);
+
+                        if (isCompetitorMode)
+                        {
+                            // Если выбран режим "Конкуренты", отсекаем большую часть "широких" запросов,
+                            // чтобы не тратить лимиты и сосредоточиться на конкурентах.
+                            searchQueries = searchQueries.Take(compQueries.Count + 3).ToList();
+                            await EmitLog(EmitAsync, $"🎯 Режим 'Конкуренты'. Сканируем каналы: {string.Join(", ", compQueries)}", "info");
+                        }
+                        else
+                        {
+                            await EmitLog(EmitAsync, $"🎯 В поиск добавлены каналы конкурентов: {string.Join(", ", compQueries.Take(3))}...", "info");
+                        }
+                    }
+                }
+
                 await EmitLog(EmitAsync, $"Сформировано {searchQueries.Count} запросов (включая прямой '{effectiveQuery}'): {string.Join(" • ", searchQueries.Take(6))}...");
                 await EmitAsync(JsonSerializer.Serialize(new { type = "queries_executed", queries = searchQueries }));
 
@@ -474,10 +503,11 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         ConcurrentDictionary<string, long> channelSubsCache,
         CancellationToken ct)
     {
-        // 1. Свежесть
+        // 1. Свежесть (окно расширено на 25%: "1 месяц назад" при daysBack=30 не отбрасываем)
         if (daysBack > 0)
         {
-            if (c.PublishedAt > DateTimeOffset.MinValue && c.PublishedAt < cutoffDate) return (false, null);
+            var relaxedCutoff = cutoffDate.AddDays(-Math.Max(3, daysBack * 0.25));
+            if (c.PublishedAt > DateTimeOffset.MinValue && c.PublishedAt < relaxedCutoff) return (false, null);
             if (c.PublishedAt == DateTimeOffset.MinValue && daysBack <= 7) return (false, null);
         }
 
@@ -486,7 +516,7 @@ public sealed class YouTubeDeepTrendStreamingPipeline
         if (videoType == "short" && !isShort) return (false, null);
         if (videoType == "long" && isShort) return (false, null);
 
-        // 3. Подгрузка реального числа подписчиков
+        // 3. Подгрузка реального числа подписчиков (неудачи тоже кэшируем, чтобы не долбить YouTube и не ловить rate limit)
         long realSubs = c.SubscriberCount;
         if (realSubs <= 0 && !string.IsNullOrWhiteSpace(c.ChannelId))
         {
@@ -499,52 +529,54 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                 try
                 {
                     var subscriberCount = await _ytIngestor.GetChannelSubscribersAsync(c.ChannelId, ct);
-                    if (subscriberCount > 0)
-                    {
-                        realSubs = subscriberCount;
-                        channelSubsCache[c.ChannelId] = subscriberCount;
-                    }
+                    realSubs = subscriberCount;
+                    channelSubsCache[c.ChannelId] = subscriberCount;
                 }
                 catch
                 {
+                    channelSubsCache[c.ChannelId] = 0;
                 }
             }
         }
 
-        // 4. СТРОГИЙ ФИЛЬТР ПОДПИСЧИКОВ (без обходов)
+        // 4. Оценка динамики ДО жёстких лимитов — нужна для обхода фильтров у безусловных хитов
+        var momentum = _momentumEngine.CalculateMomentum(c.ViewCount, c.PublishedAt, realSubs > 0 ? realSubs : 1000);
+        var ageHours = Math.Max(0.5, (DateTimeOffset.UtcNow - c.PublishedAt).TotalHours);
+
+        // Байпас: если видео реально летит (VPH >= 40 или MScore >= 120), прощаем нехватку подписчиков/Ratio
+        bool isAbsoluteViral = momentum.ViewsPerHour >= 40.0 || momentum.MScore >= 120;
+
+        // 5. Фильтр подписчиков
         if (realSubs > 0)
         {
-            if (minSubs > 0 && realSubs < minSubs) return (false, null);
-            if (maxSubs > 0 && realSubs > maxSubs) return (false, null);
+            if (minSubs > 0 && realSubs < minSubs && !isAbsoluteViral) return (false, null);
+            if (maxSubs > 0 && realSubs > maxSubs && !isAbsoluteViral) return (false, null);
         }
-        else if (c.ViewCount > maxSubs * 5 && maxSubs > 0)
+        else if (c.ViewCount > maxSubs * 5 && maxSubs > 0 && !isAbsoluteViral)
         {
             return (false, null);
         }
 
-        // 5. СТРОГИЙ ФИЛЬТР RATIO (Просмотры / Подписчики >= minRatio)
-        double ratio = realSubs > 0 
-            ? Math.Round((double)c.ViewCount / realSubs, 2) 
+        // 6. Фильтр Ratio (Просмотры / Подписчики)
+        double ratio = realSubs > 0
+            ? Math.Round((double)c.ViewCount / realSubs, 2)
             : 0.0;
 
-        if (realSubs > 0 && ratio < minRatio)
+        if (realSubs > 0 && ratio < minRatio && !isAbsoluteViral)
         {
             return (false, null);
         }
 
-        // 6. Минимальный порог просмотров
+        // 7. Минимальный порог просмотров
         if (c.ViewCount < 300) return (false, null);
+        if (momentum.ViewsPerHour < 5 && ageHours > 48 && c.ViewCount < 3000 && !isAbsoluteViral) return (false, null);
 
-        var momentum = _momentumEngine.CalculateMomentum(c.ViewCount, c.PublishedAt, realSubs);
-        var ageHours = Math.Max(0.5, (DateTimeOffset.UtcNow - c.PublishedAt).TotalHours);
-        if (momentum.ViewsPerHour < 5 && ageHours > 48 && c.ViewCount < 3000) return (false, null);
-
-        // 7. Фильтр языка
-        if (lang.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(c.Title, @"[\u0400-\u04FF]")) 
+        // 8. Фильтр языка
+        if (lang.StartsWith("en", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(c.Title, @"[\u0400-\u04FF]"))
             return (false, null);
 
-        var thumbUrl = !string.IsNullOrWhiteSpace(c.ThumbnailUrl) 
-            ? c.ThumbnailUrl 
+        var thumbUrl = !string.IsNullOrWhiteSpace(c.ThumbnailUrl)
+            ? c.ThumbnailUrl
             : $"https://i.ytimg.com/vi/{c.VideoId}/hqdefault.jpg";
 
         var item = new Dictionary<string, object>

@@ -60,30 +60,128 @@ public static class YouTubeAgentEndpoints
                 await context.Response.WriteAsync(line, ct);
                 await context.Response.Body.FlushAsync(ct);
             }
-        }).Produces<string>(StatusCodes.Status200OK, "application/x-ndjson");
+        }).Accepts<StreamAgentRequest>("application/json").Produces<string>(StatusCodes.Status200OK, "application/x-ndjson");
 
         // 2. Competitor suggestions
         group.MapPost("/agent/suggest-competitors", async (
             SuggestCompetitorsRequest request,
             ILlmClient llm,
+            IYouTubeSearchIngestor ingestor,
             CancellationToken ct) =>
         {
-            var prompt = $"List 6 popular YouTube channels in niche: '{request.Niche}'. Output strictly JSON array of channel names, e.g. [\"Fireship\", \"Theo - t3.gg\"].";
-            var spec = new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: 0.3f, JsonMode: true);
+            if (string.IsNullOrWhiteSpace(request.Niche))
+            {
+                return Results.BadRequest(new { status = "error", error = "Niche required" });
+            }
+
+            var lang = string.IsNullOrWhiteSpace(request.Language) ? "ru" : request.Language!;
+            var niche = request.Niche.Trim();
+
+            // 1) DATA-DRIVEN (основной путь): ищем реальные видео в нише и собираем каналы,
+            // которые там действительно публикуют контент. Это надёжнее маленькой LLM.
             try
             {
-                var channels = await llm.GenerateJsonAsync<List<string>>(spec, ct);
-                if (channels == null || channels.Count == 0)
+                var queryVariants = new[]
                 {
-                    return Results.Problem("Не удалось сгенерировать список конкурентов");
+                    niche,
+                    $"{niche} обзор",
+                    $"{niche} топ",
+                    $"{niche} канал"
+                };
+
+                var candidates = new List<RawVideoSearchResult>();
+                foreach (var q in queryVariants)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    try
+                    {
+                        var found = await ingestor.SearchTopicCandidatesAsync(q, maxResults: 25, daysBack: 0, lang: lang, ct: ct);
+                        candidates.AddRange(found);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // одна из формулировок может не дать результатов — не критично
+                    }
+                    if (candidates.Count >= 80) break;
                 }
+
+                var dataDrivenChannels = candidates
+                    .Where(c => !string.IsNullOrWhiteSpace(c.ChannelTitle))
+                    .GroupBy(c => c.ChannelTitle.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new
+                    {
+                        Name = g.Key,
+                        VideoCount = g.Count(),
+                        TotalViews = g.Sum(v => (double)v.ViewCount)
+                    })
+                    .OrderByDescending(g => g.VideoCount)
+                    .ThenByDescending(g => g.TotalViews)
+                    .Select(g => g.Name)
+                    .Take(8)
+                    .ToList();
+
+                if (dataDrivenChannels.Count >= 3)
+                {
+                    return Results.Ok(new { status = "ok", channels = dataDrivenChannels });
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // игнорируем и падаем в LLM-fallback
+            }
+
+            // 2) LLM-FALLBACK: универсальный промпт без хардкода IT-каналов.
+            var prompt = $$"""
+            Ты — эксперт по анализу YouTube. Перечисли 6-8 самых популярных, активных и авторитетных YouTube-каналов в нише: "{{niche}}".
+            Если ниша указана общими словами, подбери самых известных представителей этой тематики.
+            ВЕРНИ СТРОГО JSON-МАССИВ СТРОК (только точные названия каналов, без ссылок и описаний).
+            Пример формата:
+            ["Канал 1", "Канал 2", "Канал 3"]
+            """;
+
+            var spec = new LlmPromptSpec([new LlmPromptMessage("user", prompt)], Temperature: 0.4f, JsonMode: true);
+            try
+            {
+                var doc = await llm.GenerateJsonAsync<JsonElement>(spec, ct);
+                var channels = new List<string>();
+
+                // Гибкий парсинг: обрабатываем как прямой массив [...], так и обертку {"channels": [...]}
+                if (doc.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in doc.EnumerateArray())
+                    {
+                        var val = item.GetString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(val)) channels.Add(val);
+                    }
+                }
+                else if (doc.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in doc.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var item in prop.Value.EnumerateArray())
+                            {
+                                var val = item.GetString()?.Trim();
+                                if (!string.IsNullOrWhiteSpace(val)) channels.Add(val);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (channels.Count == 0)
+                {
+                    return Results.Ok(new { status = "error", channels = Array.Empty<string>() });
+                }
+
                 return Results.Ok(new { status = "ok", channels });
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 return Results.Problem(ex.Message);
             }
-        }).Produces<SuggestCompetitorsResponse>();
+        }).Accepts<SuggestCompetitorsRequest>("application/json").Produces<SuggestCompetitorsResponse>();
 
         // 3. Channel analysis
         group.MapPost("/agent/analyze-channel", async (
@@ -109,7 +207,7 @@ public static class YouTubeAgentEndpoints
             {
                 return Results.Problem(ex.Message);
             }
-        }).Produces<AnalyzeChannelResponse>();
+        }).Accepts<AnalyzeChannelRequest>("application/json").Produces<AnalyzeChannelResponse>();
 
         // 4. Hook analysis
         group.MapPost("/agent/analyze-hook", async (
@@ -211,7 +309,7 @@ public static class YouTubeAgentEndpoints
                     },
                     statusCode: StatusCodes.Status502BadGateway);
             }
-        }).Produces<AnalyzeHookResponse>();
+        }).Accepts<AnalyzeHookRequest>("application/json").Produces<AnalyzeHookResponse>();
 
         // 5. Script drafting
         group.MapPost("/agent/draft-script", async (
@@ -247,7 +345,7 @@ public static class YouTubeAgentEndpoints
             {
                 return Results.Problem("Ошибка при генерации сценария: " + ex.Message);
             }
-        }).Produces<DraftScriptResponse>();
+        }).Accepts<DraftScriptRequest>("application/json").Produces<DraftScriptResponse>();
 
         // 6. More videos
         group.MapPost("/more-videos", async (
@@ -286,7 +384,7 @@ public static class YouTubeAgentEndpoints
                     };
                 }).ToList();
             return Results.Ok(new { status = "ok", results });
-        }).Produces<MoreVideosResponse>();
+        }).Accepts<MoreVideosRequest>("application/json").Produces<MoreVideosResponse>();
 
         // 7. Download metadata
         group.MapPost("/download-meta", async (
@@ -305,7 +403,7 @@ public static class YouTubeAgentEndpoints
                     transcript_full = string.IsNullOrWhiteSpace(meta.Description) ? meta.Title : meta.Description
                 }
             });
-        }).Produces<DownloadMetaResponse>();
+        }).Accepts<DownloadMetaRequest>("application/json").Produces<DownloadMetaResponse>();
 
         // -------------------------------------------------------------
         // YouTube Video Deep-Dive & Retention Inspector
