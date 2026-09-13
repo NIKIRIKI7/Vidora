@@ -412,45 +412,10 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
         try
         {
-            var root = await _transport.SendBrowseAsync(channelId, lang, region, ct, "6gQJRkVleHBsb3Jl");
+            // Параметры вкладки "Видео" канала.
+            var root = await _transport.SendBrowseAsync(channelId, lang, region, ct, "EgZ2aWRlb3PyBgQKAjoA");
             var uploads = new List<InnerTubeChannelUpload>();
-
-            if (root.TryGetProperty("contents", out var contents) &&
-                contents.TryGetProperty("twoColumnBrowseResultsRenderer", out var twoCol) &&
-                twoCol.TryGetProperty("tabs", out var tabs) && tabs.GetArrayLength() > 0)
-            {
-                foreach (var tab in tabs.EnumerateArray())
-                {
-                    if (tab.TryGetProperty("tabRenderer", out var tabR) &&
-                        tabR.TryGetProperty("content", out var tabContent) &&
-                        tabContent.TryGetProperty("sectionListRenderer", out var slr) &&
-                        slr.TryGetProperty("contents", out var secArr))
-                    {
-                        foreach (var sec in secArr.EnumerateArray())
-                        {
-                            if (sec.TryGetProperty("itemSectionRenderer", out var isr) &&
-                                isr.TryGetProperty("contents", out var isrContents))
-                            {
-                                foreach (var item in isrContents.EnumerateArray())
-                                {
-                                    if (item.TryGetProperty("gridRenderer", out var grid) &&
-                                        grid.TryGetProperty("items", out var gridItems))
-                                    {
-                                        ExtractChannelUploads(gridItems, uploads, maxUploads);
-                                    }
-                                    else if (item.TryGetProperty("richGridRenderer", out var rgr) &&
-                                             rgr.TryGetProperty("contents", out var rgrContents))
-                                    {
-                                        ExtractChannelUploads(rgrContents, uploads, maxUploads);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (uploads.Count >= maxUploads) break;
-                }
-            }
-
+            CollectChannelUploads(root, uploads, maxUploads);
             return uploads.Take(maxUploads).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -460,27 +425,143 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         }
     }
 
-    private void ExtractChannelUploads(JsonElement items, List<InnerTubeChannelUpload> uploads, int maxUploads)
+    private void CollectChannelUploads(JsonElement element, List<InnerTubeChannelUpload> uploads, int maxUploads)
     {
-        foreach (var item in items.EnumerateArray())
-        {
-            if (uploads.Count >= maxUploads) break;
+        if (uploads.Count >= maxUploads) return;
 
-            if (item.TryGetProperty("gridVideoRenderer", out var gvr))
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("lockupViewModel", out var lockup))
+            {
+                var upload = ParseLockupVideo(lockup);
+                if (upload != null) uploads.Add(upload);
+                return;
+            }
+
+            if (element.TryGetProperty("gridVideoRenderer", out var gvr))
             {
                 var upload = ParseGridVideoRenderer(gvr);
                 if (upload != null) uploads.Add(upload);
+                return;
             }
-            else if (item.TryGetProperty("richItemRenderer", out var rir) &&
-                     rir.TryGetProperty("content", out var content))
+
+            if (element.TryGetProperty("richItemRenderer", out var rir) &&
+                rir.TryGetProperty("content", out var content))
             {
-                if (content.TryGetProperty("videoRenderer", out var vr))
+                CollectChannelUploads(content, uploads, maxUploads);
+                return;
+            }
+
+            if (element.TryGetProperty("videoRenderer", out var vr))
+            {
+                var upload = ParseVideoRendererToUpload(vr);
+                if (upload != null) uploads.Add(upload);
+                return;
+            }
+
+            foreach (var prop in element.EnumerateObject())
+            {
+                if (uploads.Count >= maxUploads) return;
+                if (prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                    CollectChannelUploads(prop.Value, uploads, maxUploads);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                if (uploads.Count >= maxUploads) return;
+                CollectChannelUploads(item, uploads, maxUploads);
+            }
+        }
+    }
+
+    private InnerTubeChannelUpload? ParseLockupVideo(JsonElement lockup)
+    {
+        if (!lockup.TryGetProperty("contentId", out var idEl)) return null;
+        var videoId = idEl.GetString();
+        if (string.IsNullOrEmpty(videoId)) return null;
+
+        var title = "";
+        var viewCount = 0;
+        var publishedText = "";
+
+        if (lockup.TryGetProperty("metadata", out var metadata) &&
+            metadata.TryGetProperty("lockupMetadataViewModel", out var lockupMeta))
+        {
+            if (lockupMeta.TryGetProperty("title", out var titleEl) &&
+                titleEl.TryGetProperty("content", out var titleContent))
+            {
+                title = titleContent.GetString() ?? "";
+            }
+
+            if (lockupMeta.TryGetProperty("metadata", out var metaInner) &&
+                metaInner.TryGetProperty("contentMetadataViewModel", out var contentMeta) &&
+                contentMeta.TryGetProperty("metadataRows", out var rows) &&
+                rows.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var row in rows.EnumerateArray())
                 {
-                    var upload = ParseVideoRendererToUpload(vr);
-                    if (upload != null) uploads.Add(upload);
+                    if (!row.TryGetProperty("metadataParts", out var parts) || parts.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    var texts = new List<string>();
+                    foreach (var part in parts.EnumerateArray())
+                    {
+                        if (part.TryGetProperty("text", out var textEl) &&
+                            textEl.TryGetProperty("content", out var contentEl))
+                        {
+                            texts.Add(contentEl.GetString() ?? "");
+                        }
+                    }
+
+                    // Строка с просмотрами/датой содержит 2 части: [views, published].
+                    // У автора обычно одна часть — её пропускаем.
+                    if (viewCount == 0 && texts.Count >= 2)
+                    {
+                        viewCount = (int)InnerTubeParsers.ParseCount(texts[0]);
+                        if (string.IsNullOrEmpty(publishedText)) publishedText = texts[1];
+                    }
                 }
             }
         }
+
+        var thumbnail = $"https://i.ytimg.com/vi/{videoId}/hqdefault.jpg";
+        var duration = 0;
+
+        if (lockup.TryGetProperty("contentImage", out var contentImage) &&
+            contentImage.TryGetProperty("thumbnailViewModel", out var thumbVm))
+        {
+            if (thumbVm.TryGetProperty("image", out var image) &&
+                image.TryGetProperty("sources", out var sources) &&
+                sources.ValueKind == JsonValueKind.Array && sources.GetArrayLength() > 0 &&
+                sources[0].TryGetProperty("url", out var urlEl))
+            {
+                thumbnail = urlEl.GetString() ?? thumbnail;
+            }
+
+            if (thumbVm.TryGetProperty("overlays", out var overlays) && overlays.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var overlay in overlays.EnumerateArray())
+                {
+                    if (overlay.TryGetProperty("thumbnailBottomOverlayViewModel", out var bottom) &&
+                        bottom.TryGetProperty("badges", out var badges) && badges.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var badge in badges.EnumerateArray())
+                        {
+                            if (badge.TryGetProperty("thumbnailBadgeViewModel", out var badgeVm) &&
+                                badgeVm.TryGetProperty("text", out var badgeText))
+                            {
+                                var parsed = InnerTubeParsers.ParseDurationToSeconds(badgeText.GetString() ?? "");
+                                if (parsed > 0) duration = parsed;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return new InnerTubeChannelUpload(videoId, title, thumbnail, viewCount, publishedText, duration);
     }
 
     private InnerTubeChannelUpload? ParseGridVideoRenderer(JsonElement gvr)
