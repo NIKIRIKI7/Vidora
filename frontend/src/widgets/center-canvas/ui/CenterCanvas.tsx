@@ -2,7 +2,7 @@ import { fetchClient, apiErrorMessage } from '@shared/api'
 import React, { useEffect, useState, useCallback } from 'react'
 import type { ProjectSettings, Scene, VideoFormat } from '@entities/project'
 import { useScenarioEngineStore } from '@entities/project'
-import { Button, Spinner, ProgressBar } from '@shared/ui'
+import { Button, Spinner, ProgressBar, TextArea } from '@shared/ui'
 import { Camera, Clapperboard, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API } from '@entities/project'
 import { CodeHistorySelector } from './CodeHistorySelector'
@@ -106,14 +106,14 @@ export const CenterCanvas = ({
     let sizeClasses = 'w-full h-full'
     if (fullSize) {
       sizeClasses = currentFormat === '9:16' 
-        ? 'h-full max-h-[720px] aspect-[9/16]' 
+        ? 'h-full max-h-[var(--layout-code)] aspect-[9/16]' 
         : 'w-full max-w-4xl max-h-full aspect-video'
     }
 
     return (
-      <div className={`bg-black rounded-xl border border-white/10 shadow-2xl relative flex shrink-0 items-center justify-center overflow-hidden m-auto ${sizeClasses}`}>
+      <div className={`bg-surface-container-lowest rounded-xl border border-outline-variant/40 shadow-2xl relative flex shrink-0 items-center justify-center overflow-hidden m-auto ${sizeClasses}`}>
         <div className="absolute top-4 right-4 z-20 flex gap-2">
-          <button onClick={onCaptureFrame} className="bg-black/50 hover:bg-primary/50 backdrop-blur border border-white/20 p-2 rounded-lg text-white transition-colors" title="Снять скриншот для превью (Thumbnail)">
+          <button onClick={onCaptureFrame} className="bg-surface-container-lowest/50 hover:bg-primary/50 backdrop-blur border border-outline-variant/80 p-2 rounded-lg text-on-surface transition-colors" title="Снять скриншот для превью (Thumbnail)">
             <Camera size={18} />
           </button>
         </div>
@@ -135,13 +135,13 @@ export const CenterCanvas = ({
   const renderCode = () => (
     <div className="w-full h-full flex flex-col gap-2">
       {activeScene?.ignoreTsx ? (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-black border border-white/10 rounded-xl text-on-surface-variant/60 font-mono text-sm gap-2">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-surface-container-lowest border border-outline-variant/40 rounded-xl text-on-surface-variant/60 font-mono text-sm gap-2">
           <Ban size={36} className="text-error" />
           <span>Игнорировать TSX включено</span>
         </div>
       ) : (
         <>
-          <div className="flex justify-between items-center bg-surface-container-lowest border border-white/10 rounded-lg p-2 shrink-0">
+          <div className="flex justify-between items-center bg-surface-container-lowest border border-outline-variant/40 rounded-lg p-2 shrink-0">
             <span className="text-xs text-on-surface-variant ml-2">Версия: {(activeScene?.historyIndex ?? 0) + 1} / {Math.max(1, (activeScene?.remotionCodeHistory?.length || 0))}</span>
             <div className="flex items-center gap-1">
               {activeScene && <CodeHistorySelector projectId={project.name} sceneId={activeScene.id} onRestoreCode={onUpdateCode} />}
@@ -149,8 +149,8 @@ export const CenterCanvas = ({
               <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => onCodeHistory(1)} disabled={(activeScene?.historyIndex ?? 0) >= (activeScene?.remotionCodeHistory?.length || 1) - 1}>След <ChevronRight size={16} /></Button>
             </div>
           </div>
-          <textarea
-            className="w-full h-full font-mono text-xs bg-surface-container-lowest/60 border border-white/10 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
+          <TextArea
+            className="w-full h-full font-mono text-xs bg-surface-container-lowest/60 border border-outline-variant/40 p-4 rounded-xl text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
             value={activeScene?.remotionCode || ''} onChange={e => onUpdateCode(e.target.value)} onBlur={saveCodeRevision} spellCheck={false}
           />
         </>
@@ -160,18 +160,18 @@ export const CenterCanvas = ({
 
   return (
     <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
-      <div className="h-12 border-b border-white/5 flex items-center px-4 justify-between bg-surface-container-lowest/50 shrink-0">
+      <div className="h-12 border-b border-outline-variant/20 flex items-center px-4 justify-between bg-surface-container-lowest/50 shrink-0">
         <div className="flex gap-2">
-          <button onClick={() => onChangeView('player')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'player' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>🎬 Видео</button>
-          <button onClick={() => onChangeView('code')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'code' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>💻 Код TSX</button>
-          <button onClick={() => onChangeView('split')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'split' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>🌓 Сплит-экран</button>
-          <button onClick={() => onChangeView('markdown')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'markdown' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>📝 Raw Script</button>
+          <button onClick={() => onChangeView('player')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'player' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>🎬 Видео</button>
+          <button onClick={() => onChangeView('code')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'code' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>💻 Код TSX</button>
+          <button onClick={() => onChangeView('split')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'split' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>🌓 Сплит-экран</button>
+          <button onClick={() => onChangeView('markdown')} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${centerView === 'markdown' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>📝 Raw Script</button>
         </div>
         {(centerView === 'player' || centerView === 'split') && (
           <div className="flex gap-4 items-center">
-            <div className="flex gap-1 bg-surface-container-lowest border border-white/5 p-1 rounded-lg">
-              <button onClick={() => onPreviewFormatChange('16:9')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '16:9' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}>🖥️ 16:9</button>
-              <button onClick={() => onPreviewFormatChange('9:16')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '9:16' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}>📱 9:16</button>
+            <div className="flex gap-1 bg-surface-container-lowest border border-outline-variant/20 p-1 rounded-lg">
+              <button onClick={() => onPreviewFormatChange('16:9')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '16:9' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>🖥️ 16:9</button>
+              <button onClick={() => onPreviewFormatChange('9:16')} className={`px-3 py-1 text-xs rounded transition-colors ${currentFormat === '9:16' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>📱 9:16</button>
             </div>
             {centerView === 'split' && <Button variant="ghost" className="text-xs py-1" onClick={() => setSplitRatio(50)}>50/50</Button>}
           </div>
@@ -180,11 +180,11 @@ export const CenterCanvas = ({
 
       <div className="flex-1 flex flex-col justify-center items-center overflow-hidden">
         {isBusy ? (
-          <div className="w-full max-w-4xl aspect-video bg-black rounded-xl border border-white/10 shadow-2xl flex flex-col items-center justify-center gap-6 p-8 relative overflow-hidden m-6">
+          <div className="w-full max-w-4xl aspect-video bg-surface-container-lowest rounded-xl border border-outline-variant/40 shadow-2xl flex flex-col items-center justify-center gap-6 p-8 relative overflow-hidden m-6">
             <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent opacity-50"></div>
             <Spinner className="text-6xl" />
             <div className="text-center z-10 flex flex-col items-center">
-              <h2 className="text-2xl font-semibold text-white mb-2">{isAutoPipelineRunning ? pipelineStep || 'Сборка проекта...' : 'Рендеринг проекта...'}</h2>
+              <h2 className="text-2xl font-semibold text-on-surface mb-2">{isAutoPipelineRunning ? pipelineStep || 'Сборка проекта...' : 'Рендеринг проекта...'}</h2>
               <p className="text-on-surface-variant text-sm mb-6">Пожалуйста, подождите. ИИ может исправлять ошибки в фоне.</p>
               {isRendering && <ProgressBar progress={renderProgress} className="w-64 mb-6" />}
               <Button variant="dashed" className="border-error/50 text-error hover:bg-error/10" onClick={onCancelAll}>Отменить процесс</Button>
@@ -207,12 +207,12 @@ export const CenterCanvas = ({
         ) : centerView === 'markdown' ? (
           <div className="relative w-full h-full p-6 flex justify-center overflow-y-auto custom-scrollbar">
             {engineIsSyncing && (
-              <div className="absolute top-3 right-6 z-10 text-[10px] text-secondary font-mono flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-3 py-1 animate-pulse">
+              <div className="absolute top-3 right-6 z-10 text-xxs text-secondary font-mono flex items-center gap-1.5 bg-surface-container-lowest/40 border border-outline-variant/40 rounded-full px-3 py-1 animate-pulse">
                 <Spinner className="w-3 h-3" /> Синхронизация AST…
               </div>
             )}
-            <textarea
-              className="w-full h-full max-w-5xl p-6 font-mono text-sm leading-relaxed bg-surface-container-lowest/60 text-on-surface border border-white/10 rounded-xl resize-none outline-none focus:border-primary/50 custom-scrollbar"
+            <TextArea
+              className="w-full h-full max-w-5xl p-6 font-mono text-sm leading-relaxed bg-surface-container-lowest/60 text-on-surface border border-outline-variant/40 rounded-xl resize-none outline-none focus:border-primary/50 custom-scrollbar"
               value={engineRawMarkdown}
               onChange={e => engineUpdateMarkdown(e.target.value)}
               spellCheck={false}
@@ -226,7 +226,7 @@ export const CenterCanvas = ({
       </div>
 
       {showTimeline && !isBusy && (centerView === 'player' || centerView === 'split') && timeline && (
-        <div className="w-full h-[220px] shrink-0 border-t border-white/10 bg-background z-20">
+        <div className="w-full h-[var(--layout-card)] shrink-0 border-t border-outline-variant/40 bg-background z-20">
           {timeline}
         </div>
       )}

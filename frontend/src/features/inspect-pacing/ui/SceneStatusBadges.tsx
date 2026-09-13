@@ -51,21 +51,21 @@ export const SceneStatusBadges = ({
       {/* 1. Технический статус озвучки */}
       {audioDirty ? (
         <span
-          className="text-[10px] px-1.5 py-0.5 rounded border border-warning/40 text-warning bg-warning/10 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border border-warning/40 text-warning bg-warning/10 font-medium"
           title="Текст изменился — озвучку нужно перегенерировать"
         >
           ⚠️ Озвучка устарела
         </span>
       ) : hasAudio ? (
         <span
-          className="text-[10px] px-1.5 py-0.5 rounded border border-secondary/40 text-secondary bg-secondary/10 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border border-secondary/40 text-secondary bg-secondary/10 font-medium"
           title="Озвучка сгенерирована и совпадает с текущим текстом"
         >
           🎙️ Озвучено
         </span>
       ) : (
         <span
-          className="text-[10px] px-1.5 py-0.5 rounded border border-white/10 text-on-surface-variant/40 bg-white/5 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border border-outline-variant/40 text-on-surface-variant/40 bg-on-surface/5 font-medium"
           title="Аудио ещё не сгенерировано"
         >
           ⏳ Без аудио
@@ -74,10 +74,10 @@ export const SceneStatusBadges = ({
 
       {/* 2. Тайминги и синхронизация */}
       <span
-        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+        className={`text-xxs px-1.5 py-0.5 rounded border font-medium ${
           hasSync
             ? 'border-primary/40 text-primary bg-primary/10'
-            : 'border-white/10 text-on-surface-variant/40 bg-white/5'
+            : 'border-outline-variant/40 text-on-surface-variant/40 bg-on-surface/5'
         }`}
       >
         ⏱️ {hasSync ? 'Выровнено' : 'Оценка'}
@@ -85,19 +85,19 @@ export const SceneStatusBadges = ({
 
       {/* 3. Технический статус TSX */}
       {isIgnored ? (
-        <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/20 text-on-surface-variant bg-black font-medium" title="Чёрный экран при рендере">
+        <span className="text-xxs px-1.5 py-0.5 rounded border border-outline-variant/80 text-on-surface-variant bg-surface-container-lowest font-medium" title="Чёрный экран при рендере">
           ⬛ Чёрный экран
         </span>
       ) : codeDirty ? (
-        <span className="text-[10px] px-1.5 py-0.5 rounded border border-warning/40 text-warning bg-warning/10 font-medium" title="Код устарел">
+        <span className="text-xxs px-1.5 py-0.5 rounded border border-warning/40 text-warning bg-warning/10 font-medium" title="Код устарел">
           ⚠️ Код устарел
         </span>
       ) : (
         <span
-          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+          className={`text-xxs px-1.5 py-0.5 rounded border font-medium ${
             hasCode
-              ? 'border-accent/40 text-accent bg-accent/10'
-              : 'border-white/10 text-on-surface-variant/40 bg-white/5'
+              ? 'border-secondary/40 text-secondary bg-secondary/10'
+              : 'border-outline-variant/40 text-on-surface-variant/40 bg-on-surface/5'
           }`}
         >
           💻 TSX
@@ -106,7 +106,7 @@ export const SceneStatusBadges = ({
 
       {/* 4. Режиссёрский пейсинг — динамика кадра */}
       <span
-        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+        className={`text-xxs px-1.5 py-0.5 rounded border font-medium ${
           isVisualBoring
             ? 'border-error/40 text-error bg-error/10'
             : 'border-secondary/40 text-secondary bg-secondary/10'
@@ -119,7 +119,7 @@ export const SceneStatusBadges = ({
       {/* 5. Режиссёрский пейсинг — темп речи (WPM) */}
       {hasSync && (
         <span
-          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+          className={`text-xxs px-1.5 py-0.5 rounded border font-medium ${
             isAudioBoring
               ? 'border-warning/40 text-warning bg-warning/10'
               : 'border-secondary/40 text-secondary bg-secondary/10'
@@ -133,7 +133,7 @@ export const SceneStatusBadges = ({
       {isVisualBoring && onCopyFixPacingPrompt && (
         <button
           onClick={stop(onCopyFixPacingPrompt)}
-          className="text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium"
           title="Скопировать промпт для ИИ, чтобы добавить динамики"
         >
           ✨ ИИ
@@ -142,7 +142,7 @@ export const SceneStatusBadges = ({
       {isAudioBoring && onFixAudioPacing && (
         <button
           onClick={stop(onFixAudioPacing)}
-          className="text-[10px] px-1.5 py-0.5 rounded border border-accent/40 text-accent bg-accent/10 hover:bg-accent/20 transition-colors flex items-center gap-1 font-medium"
+          className="text-xxs px-1.5 py-0.5 rounded border border-secondary/40 text-secondary bg-secondary/10 hover:bg-secondary/20 transition-colors flex items-center gap-1 font-medium"
           title="Автоматически вырезать тишину и пересинхронизировать тайминги"
         >
           ✂️ Исправить

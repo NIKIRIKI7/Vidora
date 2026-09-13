@@ -106,9 +106,9 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
    \`\`\`tsx
    <Sequence from={...} durationInFrames={...}>
      <OffthreadVideo src={staticFile("assets/b-roll/ИМЯ_ФАЙЛА")} className="w-full h-full object-cover" />
-     <AbsoluteFill className="bg-black/30" />
+     <AbsoluteFill className="bg-surface-container-lowest/30" />
      <AbsoluteFill className="flex items-end p-12">
-       <p className="text-4xl font-black text-white drop-shadow-md">ТЕКСТ СУФЛЕРА</p>
+       <p className="text-4xl font-black text-on-surface drop-shadow-md">ТЕКСТ СУФЛЕРА</p>
      </AbsoluteFill>
    </Sequence>
    \`\`\`

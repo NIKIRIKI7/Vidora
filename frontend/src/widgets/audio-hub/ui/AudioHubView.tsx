@@ -1,16 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { Button, Input, Slider, Switch, Select, Spinner, VoiceTagToolbar, useVoiceTagInserter, TextArea, PageHeader, SegmentedControl } from '@shared/ui'
 import {
-  Button,
-  Input,
-  Slider,
-  Switch,
-  Select,
-  Spinner,
-  VoiceTagToolbar,
-  useVoiceTagInserter,
-} from '@shared/ui'
-import {
-  ArrowLeft,
   Mic,
   Play,
   RefreshCw,
@@ -368,145 +358,113 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 1. Минималистичная верхняя панель (Хедер) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <header className="h-14 shrink-0 border-b border-white/10 bg-surface-container-lowest/80 backdrop-blur-xl px-6 flex items-center justify-between z-30">
-        <div className="flex items-center gap-3">
-          <Button variant="icon" icon={ArrowLeft} onClick={onBack} className="p-1.5" />
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
-              <Mic size={15} className="text-primary" />
-            </div>
-            <span className="font-bold text-sm text-white tracking-tight">Voice Studio</span>
-          </div>
-        </div>
-
-        {/* Четкий переключатель главных действий */}
-        <div className="flex bg-surface-container-lowest border border-white/10 p-1 rounded-xl shadow-inner">
-          <button
-            type="button"
-            onClick={() => setActiveAction('synthesize')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeAction === 'synthesize'
-                ? 'bg-primary/20 text-primary border border-primary/30 shadow-sm'
-                : 'text-on-surface-variant hover:text-white'
-            }`}
-          >
-            <Play size={13} className="fill-current" /> Озвучка &amp; Тест
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveAction('design')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeAction === 'design'
-                ? 'bg-secondary/20 text-secondary border border-secondary/30 shadow-sm'
-                : 'text-on-surface-variant hover:text-white'
-            }`}
-          >
-            <Wand2 size={13} /> Voice Design
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveAction('clone')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeAction === 'clone'
-                ? 'bg-accent/20 text-accent border border-accent/30 shadow-sm'
-                : 'text-on-surface-variant hover:text-white'
-            }`}
-          >
-            <Upload size={13} /> Voice Clone
-          </button>
-        </div>
-
-        {/* Правый блок: компактный индикатор нейросетей */}
-        <div className="flex items-center gap-2 relative" ref={statusMenuRef}>
-          <button
-            type="button"
-            onClick={() => setIsStatusOpen(!isStatusOpen)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all ${
-              isLocalGpuReady
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
-                : 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
-            }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isLocalGpuReady ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-amber-400'
+      <PageHeader
+        title="Voice Studio"
+        icon={Mic}
+        onBack={onBack}
+        centerContent={
+          <SegmentedControl
+            value={activeAction}
+            onChange={(v) => setActiveAction(v as typeof activeAction)}
+            options={[
+              { value: 'synthesize', label: 'Озвучка & Тест', icon: Play },
+              { value: 'design', label: 'Voice Design', icon: Wand2, accent: 'secondary' },
+              { value: 'clone', label: 'Voice Clone', icon: Upload, accent: 'secondary' },
+            ]}
+          />
+        }
+        rightContent={
+          <div className="flex items-center gap-2 relative" ref={statusMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsStatusOpen(!isStatusOpen)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all ${
+                isLocalGpuReady
+                  ? 'bg-success/10 border-success/30 text-success hover:bg-success/20'
+                  : 'bg-warning/10 border-warning/30 text-warning hover:bg-warning/20'
               }`}
-            />
-            <span>{isLocalGpuReady ? 'GPU Ready' : 'GPU Offline'}</span>
-            <ChevronDown size={14} className="opacity-70" />
-          </button>
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isLocalGpuReady ? 'bg-success shadow-lg shadow-secondary/50' : 'bg-warning'
+                }`}
+              />
+              <span>{isLocalGpuReady ? 'GPU Ready' : 'GPU Offline'}</span>
+              <ChevronDown size={14} className="opacity-70" />
+            </button>
 
-          <Button
-            variant="ghost"
-            onClick={() => loadData(true)}
-            className="p-1.5 text-on-surface-variant hover:text-white"
-            title="Обновить статусы"
-          >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          </Button>
+            <Button
+              variant="ghost"
+              onClick={() => loadData(true)}
+              className="p-1.5 text-on-surface-variant hover:text-on-surface"
+              title="Обновить статусы"
+            >
+              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            </Button>
 
-          {/* Диагностическое окно */}
-          {isStatusOpen && (
-            <div className="absolute right-0 top-full mt-2 w-72 bg-surface-container border border-white/15 rounded-2xl p-4 shadow-2xl z-50 flex flex-col gap-3 text-xs animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                <span className="font-bold text-white uppercase text-[11px] font-mono">
-                  Локальные модели
-                </span>
-                <span className="text-secondary font-mono text-[10px]">
-                  Готово: {localModels.filter((m) => m.status === 'Ready').length}/{localModels.length}
-                </span>
-              </div>
+            {/* Диагностическое окно */}
+            {isStatusOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-surface-container border border-outline-variant/60 rounded-2xl p-4 shadow-2xl z-50 flex flex-col gap-3 text-xs animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-outline-variant/40 pb-2">
+                  <span className="font-bold text-on-surface uppercase text-2xs font-mono">
+                    Локальные модели
+                  </span>
+                  <span className="text-secondary font-mono text-xxs">
+                    Готово: {localModels.filter((m) => m.status === 'Ready').length}/{localModels.length}
+                  </span>
+                </div>
 
-              <div className="flex flex-col gap-1.5">
-                {localModels.map((m) => {
-                  const isReady = m.status === 'Ready'
-                  return (
-                    <div
-                      key={m.id}
-                      className="flex items-center justify-between p-2 rounded-xl bg-surface-container-lowest border border-white/5"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white text-[11px]">{m.name.split(' ')[0]}</span>
-                        <span className="text-[10px] text-on-surface-variant font-mono">
-                          {m.category === 'Stt' ? 'Whisper STT' : 'TTS Модель'}
+                <div className="flex flex-col gap-1.5">
+                  {localModels.map((m) => {
+                    const isReady = m.status === 'Ready'
+                    return (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between p-2 rounded-xl bg-surface-container-lowest border border-outline-variant/20"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-bold text-on-surface text-2xs">{m.name.split(' ')[0]}</span>
+                          <span className="text-xxs text-on-surface-variant font-mono">
+                            {m.category === 'Stt' ? 'Whisper STT' : 'TTS Модель'}
+                          </span>
+                        </div>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-xxs font-mono border ${
+                            isReady
+                              ? 'bg-success/15 text-success border-success/30'
+                              : 'bg-on-surface/5 text-on-surface-variant/60 border-outline-variant/40'
+                          }`}
+                        >
+                          {isReady ? 'Готов' : 'Нет файлов'}
                         </span>
                       </div>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
-                          isReady
-                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                            : 'bg-white/5 text-on-surface-variant/60 border-white/10'
-                        }`}
-                      >
-                        {isReady ? 'Готов' : 'Нет файлов'}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
 
-              <div className="pt-2 border-t border-white/10">
-                <Button
-                  variant="ghost"
-                  onClick={handleUnloadVram}
-                  className="w-full text-xs text-secondary border border-secondary/20 hover:bg-secondary/10 py-1.5"
-                >
-                  <Cpu size={13} className="mr-1.5" /> Очистить память VRAM
-                </Button>
+                <div className="pt-2 border-t border-outline-variant/40">
+                  <Button
+                    variant="ghost"
+                    onClick={handleUnloadVram}
+                    className="w-full text-xs text-secondary border border-secondary/20 hover:bg-secondary/10 py-1.5"
+                  >
+                    <Cpu size={13} className="mr-1.5" /> Очистить память VRAM
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </header>
+            )}
+          </div>
+        }
+      />
 
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 2. Рабочая область (3 колонки) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
         {/* ЛЕВАЯ КОЛОНКА: Каталог дикторов (310px) */}
-        <aside className="w-[310px] shrink-0 border-r border-white/10 bg-surface-container-lowest/40 flex flex-col">
+        <aside className="w-[var(--layout-sidebar-sm)] shrink-0 border-r border-outline-variant/40 bg-surface-container-lowest/40 flex flex-col">
           {/* Разграничение: Локально vs Облако */}
-          <div className="p-3 border-b border-white/5 flex flex-col gap-2.5">
+          <div className="p-3 border-b border-outline-variant/20 flex flex-col gap-2.5">
             <Input
               placeholder="Поиск диктора..."
               value={searchQuery}
@@ -515,14 +473,14 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             />
 
             {/* Главные вкладки среды */}
-            <div className="flex bg-surface-container-lowest border border-white/10 p-0.5 rounded-xl text-xs">
+            <div className="flex bg-surface-container-lowest border border-outline-variant/40 p-0.5 rounded-xl text-xs">
               <button
                 type="button"
                 onClick={() => setActiveEnv('local')}
                 className={`flex-1 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   activeEnv === 'local'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
-                    : 'text-on-surface-variant hover:text-white'
+                    ? 'bg-success/20 text-success border border-success/30 shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
                 <Server size={13} /> Локальные
@@ -532,8 +490,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 onClick={() => setActiveEnv('cloud')}
                 className={`flex-1 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   activeEnv === 'cloud'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm'
-                    : 'text-on-surface-variant hover:text-white'
+                    ? 'bg-secondary/20 text-secondary border border-secondary/30 shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
                 <Cloud size={13} /> Облачные
@@ -541,14 +499,14 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             </div>
 
             {/* Под-фильтр категорий */}
-            <div className="flex gap-1 text-[11px]">
+            <div className="flex gap-1 text-2xs">
               <button
                 type="button"
                 onClick={() => setCategoryFilter('all')}
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   categoryFilter === 'all'
-                    ? 'bg-white/10 text-white font-bold'
-                    : 'text-on-surface-variant hover:text-white'
+                    ? 'bg-on-surface/10 text-on-surface font-bold'
+                    : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
                 Все
@@ -559,7 +517,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   categoryFilter === 'BuiltIn'
                     ? 'bg-secondary/20 text-secondary font-bold'
-                    : 'text-on-surface-variant hover:text-white'
+                    : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
                 Заготовки
@@ -569,8 +527,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 onClick={() => setCategoryFilter('custom')}
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   categoryFilter === 'custom'
-                    ? 'bg-accent/20 text-accent font-bold'
-                    : 'text-on-surface-variant hover:text-white'
+                    ? 'bg-secondary/20 text-secondary font-bold'
+                    : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
                 Мои профили
@@ -602,8 +560,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     }}
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 group ${
                       isSelected
-                        ? 'bg-primary/15 border-primary shadow-[0_0_15px_rgba(221,183,255,0.12)]'
-                        : 'bg-surface-container/40 border-white/5 hover:border-white/20'
+                        ? 'bg-primary/15 border-primary shadow-lg shadow-primary/12'
+                        : 'bg-surface-container/40 border-outline-variant/20 hover:border-outline-variant/80'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -611,17 +569,17 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                         <div
                           className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
                             isLocal
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-sky-500/20 text-sky-300'
+                              ? 'bg-success/20 text-success'
+                              : 'bg-secondary/20 text-secondary'
                           }`}
                         >
                           {spk.name.slice(0, 1).toUpperCase()}
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-xs text-white truncate group-hover:text-primary transition-colors">
+                          <span className="font-bold text-xs text-on-surface truncate group-hover:text-primary transition-colors">
                             {spk.name}
                           </span>
-                          <span className="text-[10px] font-mono text-on-surface-variant/70 truncate">
+                          <span className="text-xxs font-mono text-on-surface-variant/70 truncate">
                             {spk.speaker_id}
                           </span>
                         </div>
@@ -639,7 +597,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                             const audio = new Audio(streamUrl)
                             audio.play().catch(() => {})
                           }}
-                          className="p-1 rounded bg-white/5 hover:bg-primary text-on-surface-variant hover:text-black transition-colors shrink-0"
+                          className="p-1 rounded bg-on-surface/5 hover:bg-primary text-on-surface-variant hover:text-surface-container-lowest transition-colors shrink-0"
                           title="Прослушать сэмпл"
                         >
                           <Play size={11} className="fill-current" />
@@ -647,8 +605,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] font-mono pt-1 border-t border-white/5 text-on-surface-variant/60">
-                      <span className={isLocal ? 'text-emerald-300/80' : 'text-sky-300/80'}>
+                    <div className="flex items-center justify-between text-xxs font-mono pt-1 border-t border-outline-variant/20 text-on-surface-variant/60">
+                      <span className={isLocal ? 'text-success/80' : 'text-secondary/80'}>
                         {isLocal ? 'Локально (GPU)' : 'Облако (API)'}
                       </span>
                       <span>
@@ -669,24 +627,24 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             {activeAction === 'synthesize' && activeSpeaker && (
               <>
                 {/* Карточка активного диктора */}
-                <div className="p-5 bg-surface-container/60 rounded-2xl border border-white/10 flex items-center justify-between gap-4">
+                <div className="p-5 bg-surface-container/60 rounded-2xl border border-outline-variant/40 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-primary/30 to-secondary/30 border border-white/10 flex items-center justify-center text-lg font-bold text-white shrink-0">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-primary/30 to-secondary/30 border border-outline-variant/40 flex items-center justify-center text-lg font-bold text-on-surface shrink-0">
                       {activeSpeaker.name.slice(0, 1).toUpperCase()}
                     </div>
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <h2 className="text-base font-bold text-white">{activeSpeaker.name}</h2>
+                        <h2 className="text-base font-bold text-on-surface">{activeSpeaker.name}</h2>
                         <span
-                          className={`text-[9px] font-mono px-2 py-0.5 rounded-full border ${
+                          className={`text-3xs font-mono px-2 py-0.5 rounded-full border ${
                             activeSpeaker.mode === 'local'
-                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                              : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                              ? 'bg-success/15 text-success border-success/30'
+                              : 'bg-secondary/15 text-secondary border-secondary/30'
                           }`}
                         >
                           {activeSpeaker.mode === 'local' ? 'Локальный GPU' : 'Облако API'}
                         </span>
-                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-on-surface-variant border border-white/10">
+                        <span className="text-3xs font-mono px-2 py-0.5 rounded-full bg-on-surface/5 text-on-surface-variant border border-outline-variant/40">
                           {activeSpeaker.source_type}
                         </span>
                       </div>
@@ -711,11 +669,11 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 {/* Редактор текста с интонационными тегами */}
                 <div className="bg-surface-container/40 border border-primary/20 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-on-surface flex items-center gap-1.5">
                       <Mic size={14} className="text-primary" /> Текст для синтеза
                     </span>
-                    <span className="text-[11px] font-mono text-secondary">
-                      Диктор: <b className="text-white">{activeSpeaker.speaker_id}</b>
+                    <span className="text-2xs font-mono text-secondary">
+                      Диктор: <b className="text-on-surface">{activeSpeaker.speaker_id}</b>
                     </span>
                   </div>
 
@@ -726,12 +684,12 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     className="w-full"
                   />
 
-                  <textarea
+                  <TextArea
                     ref={textEditorRef}
                     value={testText}
                     onChange={(e) => setTestText(e.target.value)}
                     rows={3}
-                    className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-primary/50 font-sans leading-relaxed resize-none shadow-inner"
+                    className="w-full bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-3 text-xs text-on-surface focus:outline-none focus:border-primary/50 font-sans leading-relaxed resize-none shadow-inner"
                     placeholder="Введите текст для озвучки диктором..."
                   />
 
@@ -755,7 +713,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     </Button>
 
                     {audioResultUrl && (
-                      <div className="flex-1 flex items-center gap-3 bg-black/40 px-3 py-1.5 rounded-xl border border-secondary/30 animate-in fade-in">
+                      <div className="flex-1 flex items-center gap-3 bg-surface-container-lowest/40 px-3 py-1.5 rounded-xl border border-secondary/30 animate-in fade-in">
                         <audio src={audioResultUrl} autoPlay controls className="w-full h-7" />
                         {audioDuration && (
                           <span className="text-xs font-mono text-secondary whitespace-nowrap">
@@ -768,15 +726,15 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
                   {/* Пословные таймкоды (Whisper) */}
                   {timedWords.length > 0 && (
-                    <div className="pt-3 border-t border-white/5 flex flex-col gap-2">
-                      <span className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">
+                    <div className="pt-3 border-t border-outline-variant/20 flex flex-col gap-2">
+                      <span className="text-xxs font-mono text-on-surface-variant uppercase tracking-wider">
                         Пословные таймкоды (Whisper Alignment):
                       </span>
                       <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto custom-scrollbar">
                         {timedWords.map((w, idx) => (
                           <span
                             key={idx}
-                            className="px-2 py-0.5 rounded bg-surface-container-lowest border border-white/10 text-[11px] font-mono text-slate-300 hover:border-primary/50 hover:text-primary transition-colors cursor-default"
+                            className="px-2 py-0.5 rounded bg-surface-container-lowest border border-outline-variant/40 text-2xs font-mono text-on-surface hover:border-primary/50 hover:text-primary transition-colors cursor-default"
                             title={`${(w.start_ms / 1000).toFixed(2)}s - ${(w.end_ms / 1000).toFixed(2)}s (Уверенность: ${Math.round(w.confidence * 100)}%)`}
                           >
                             {w.word}
@@ -792,10 +750,10 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             {/* РЕЖИМ 2: VOICE DESIGN (КОНСТРУКТОР ТЕМБРА) */}
             {activeAction === 'design' && (
               <div className="bg-surface-container/40 border border-secondary/20 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
-                <div className="border-b border-white/10 pb-3">
+                <div className="border-b border-outline-variant/40 pb-3">
                   <div className="flex items-center gap-2">
                     <Wand2 size={16} className="text-secondary" />
-                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+                    <h3 className="font-bold text-sm text-on-surface uppercase tracking-wider">
                       Конструктор тембра (Voice Design — Локально)
                     </h3>
                   </div>
@@ -807,10 +765,10 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
                 <div className="flex flex-col gap-4">
                   {/* Динамический выбор движка дизайна с бэкенда */}
-                  <div className="space-y-1.5 bg-surface-container-lowest/60 p-3.5 rounded-xl border border-white/5">
+                  <div className="space-y-1.5 bg-surface-container-lowest/60 p-3.5 rounded-xl border border-outline-variant/20">
                     <div className="flex items-center justify-between text-xs">
-                      <label className="font-semibold text-slate-300">Движок генерации тембра</label>
-                      <span className="text-[10px] font-mono text-secondary">
+                      <label className="font-semibold text-on-surface">Движок генерации тембра</label>
+                      <span className="text-xxs font-mono text-secondary">
                         {availableDesignEngines.length > 0
                           ? `${availableDesignEngines.length} доступно`
                           : 'Нет движков'}
@@ -831,14 +789,14 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                       ))}
                     </Select>
                     {engines.find((e) => e.id === designEngine)?.description && (
-                      <p className="text-[11px] text-on-surface-variant/70 leading-relaxed">
+                      <p className="text-2xs text-on-surface-variant/70 leading-relaxed">
                         {engines.find((e) => e.id === designEngine)?.description}
                       </p>
                     )}
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Имя нового голоса</label>
+                    <label className="text-xs font-semibold text-on-surface">Имя нового голоса</label>
                     <Input
                       value={designName}
                       onChange={(e) => setDesignName(e.target.value)}
@@ -849,7 +807,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-xs font-semibold text-slate-300">
+                      <label className="text-xs font-semibold text-on-surface">
                         Промпт тембра и характера (свободный текст)
                       </label>
                       <button
@@ -859,19 +817,19 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                             RANDOM_PRESETS[Math.floor(Math.random() * RANDOM_PRESETS.length)]
                           )
                         }
-                        className="text-[11px] text-secondary hover:underline flex items-center gap-1"
+                        className="text-2xs text-secondary hover:underline flex items-center gap-1"
                       >
                         <Dices size={13} /> Случайный пресет
                       </button>
                     </div>
-                    <textarea
+                    <TextArea
                       value={designPrompt}
                       onChange={(e) => setDesignPrompt(e.target.value)}
                       rows={3}
-                      className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-secondary font-mono leading-relaxed"
+                      className="w-full bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-3 text-xs text-on-surface focus:outline-none focus:border-secondary font-mono leading-relaxed"
                       placeholder="Например: male, low pitch, russian accent"
                     />
-                    <div className="text-[10px] text-on-surface-variant/60 leading-relaxed bg-black/20 p-2 rounded-lg border border-white/5 mt-1">
+                    <div className="text-xxs text-on-surface-variant/60 leading-relaxed bg-surface-container-lowest/20 p-2 rounded-lg border border-outline-variant/20 mt-1">
                       <b>Допустимые теги (через запятую):</b><br/>
                       <b>Пол/Возраст:</b> male, female, child, teenager, young adult, middle-aged, elderly<br/>
                       <b>Голос:</b> whisper, very low pitch, low pitch, moderate pitch, high pitch, very high pitch<br/>
@@ -880,12 +838,12 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-white/10 flex justify-end">
+                <div className="pt-3 border-t border-outline-variant/40 flex justify-end">
                   <Button
                     variant="primary"
                     onClick={handleCreateDesign}
                     disabled={isDesigning || !designPrompt.trim()}
-                    className="px-6 py-2 text-xs font-bold flex items-center gap-2 bg-gradient-to-r from-secondary to-primary text-black"
+                    className="px-6 py-2 text-xs font-bold flex items-center gap-2 bg-gradient-to-r from-secondary to-primary text-surface-container-lowest"
                   >
                     {isDesigning ? <Spinner className="w-3.5 h-3.5" /> : <Sparkles size={14} />}
                     Сгенерировать профиль
@@ -896,11 +854,11 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
             {/* РЕЖИМ 3: VOICE CLONE (КЛОНИРОВАНИЕ) */}
             {activeAction === 'clone' && (
-              <div className="bg-surface-container/40 border border-accent/20 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
-                <div className="border-b border-white/10 pb-3">
+              <div className="bg-surface-container/40 border border-secondary/20 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
+                <div className="border-b border-outline-variant/40 pb-3">
                   <div className="flex items-center gap-2">
-                    <Upload size={16} className="text-accent" />
-                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+                    <Upload size={16} className="text-secondary" />
+                    <h3 className="font-bold text-sm text-on-surface uppercase tracking-wider">
                       Клонирование голоса по аудио (Voice Clone)
                     </h3>
                   </div>
@@ -911,7 +869,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
 
                 <div className="flex flex-col gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Название голоса</label>
+                    <label className="text-xs font-semibold text-on-surface">Название голоса</label>
                     <Input
                       value={cloneName}
                       onChange={(e) => setCloneName(e.target.value)}
@@ -930,37 +888,37 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                           onClick={() => handleCloneModeChange('local')}
                           className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
                             cloneMode === 'local'
-                              ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-sm'
-                              : 'bg-surface-container-lowest border-white/10 text-on-surface-variant'
+                              ? 'bg-success/20 border-success text-on-surface shadow-sm'
+                              : 'bg-surface-container-lowest border-outline-variant/40 text-on-surface-variant'
                           }`}
                         >
                           <span className="text-xs font-bold flex items-center gap-1.5">
-                            <Server size={13} className="text-emerald-400" /> Локально (GPU)
+                            <Server size={13} className="text-success" /> Локально (GPU)
                           </span>
-                          <span className="text-[10px] opacity-70">Бесплатно на вашей видеокарте</span>
+                          <span className="text-xxs opacity-70">Бесплатно на вашей видеокарте</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleCloneModeChange('cloud')}
                           className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
                             cloneMode === 'cloud'
-                              ? 'bg-sky-500/20 border-sky-500 text-white shadow-sm'
-                              : 'bg-surface-container-lowest border-white/10 text-on-surface-variant'
+                              ? 'bg-secondary/20 border-secondary text-on-surface shadow-sm'
+                              : 'bg-surface-container-lowest border-outline-variant/40 text-on-surface-variant'
                           }`}
                         >
                           <span className="text-xs font-bold flex items-center gap-1.5">
-                            <Cloud size={13} className="text-sky-400" /> В облаке (API)
+                            <Cloud size={13} className="text-secondary" /> В облаке (API)
                           </span>
-                          <span className="text-[10px] opacity-70">Высокоточный облачный клон</span>
+                          <span className="text-xxs opacity-70">Высокоточный облачный клон</span>
                         </button>
                       </div>
                     </div>
 
                     {/* Динамический выбор движка, полученного с бэкенда */}
-                    <div className="space-y-1.5 bg-surface-container-lowest/60 p-3 rounded-xl border border-white/5">
+                    <div className="space-y-1.5 bg-surface-container-lowest/60 p-3 rounded-xl border border-outline-variant/20">
                       <div className="flex items-center justify-between text-xs">
-                        <label className="font-semibold text-slate-300">Движок клонирования</label>
-                        <span className="text-[10px] font-mono text-secondary">
+                        <label className="font-semibold text-on-surface">Движок клонирования</label>
+                        <span className="text-xxs font-mono text-secondary">
                           {availableCloneEngines.length > 0
                             ? `${availableCloneEngines.length} доступно`
                             : 'Нет движков'}
@@ -981,7 +939,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                         ))}
                       </Select>
                       {engines.find((e) => e.id === cloneEngine)?.description && (
-                        <p className="text-[11px] text-on-surface-variant/70 leading-relaxed">
+                        <p className="text-2xs text-on-surface-variant/70 leading-relaxed">
                           {engines.find((e) => e.id === cloneEngine)?.description}
                         </p>
                       )}
@@ -1003,7 +961,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     <button
                       type="button"
                       onClick={() => uploadInputRef.current?.click()}
-                      className="w-full p-4 rounded-xl border border-dashed border-accent/40 hover:bg-accent/10 text-accent transition-all flex items-center justify-center gap-2 text-xs font-semibold"
+                      className="w-full p-4 rounded-xl border border-dashed border-secondary/40 hover:bg-secondary/10 text-secondary transition-all flex items-center justify-center gap-2 text-xs font-semibold"
                     >
                       <FileAudio size={16} />
                       {cloneFile ? cloneFile.name : 'Выбрать аудиофайл (5–15 сек)'}
@@ -1014,17 +972,17 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                     <label className="text-xs text-on-surface-variant">
                       Текст из аудиофайла (опционально)
                     </label>
-                    <textarea
+                    <TextArea
                       value={cloneRefText}
                       onChange={(e) => setCloneRefText(e.target.value)}
                       rows={2}
                       placeholder="Оставьте пустым или укажите текст, который звучит в файле..."
-                      className="w-full bg-surface-container-lowest border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-accent"
+                      className="w-full bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-3 text-xs text-on-surface focus:outline-none focus:border-secondary"
                     />
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-white/10 flex justify-end">
+                <div className="pt-3 border-t border-outline-variant/40 flex justify-end">
                   <Button
                     variant="primary"
                     onClick={handleCreateClone}
@@ -1041,9 +999,9 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
         </main>
 
         {/* ПРАВАЯ КОЛОНКА: Инспектор параметров инференса (280px) */}
-        <aside className="w-[280px] shrink-0 border-l border-white/10 bg-surface-container-lowest/40 flex flex-col p-4 gap-5 overflow-y-auto custom-scrollbar">
-          <div className="border-b border-white/10 pb-2 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+        <aside className="w-[var(--layout-sidebar-xs)] shrink-0 border-l border-outline-variant/40 bg-surface-container-lowest/40 flex flex-col p-4 gap-5 overflow-y-auto custom-scrollbar">
+          <div className="border-b border-outline-variant/40 pb-2 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-on-surface flex items-center gap-1.5">
               <SlidersHorizontal size={14} className="text-secondary" /> Параметры инференса
             </span>
           </div>
@@ -1052,7 +1010,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-medium">Guidance Scale (CFG)</span>
+                <span className="text-on-surface font-medium">Guidance Scale (CFG)</span>
                 <span className="font-mono text-secondary font-bold">{guidanceScale.toFixed(1)}</span>
               </div>
               <Slider
@@ -1062,14 +1020,14 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 value={guidanceScale}
                 onChange={(e) => setGuidanceScale(Number(e.target.value))}
               />
-              <span className="text-[10px] text-on-surface-variant/60 leading-tight">
+              <span className="text-xxs text-on-surface-variant/60 leading-tight">
                 Сила следования заданному тембру
               </span>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-medium">Шаги диффузии (Steps)</span>
+                <span className="text-on-surface font-medium">Шаги диффузии (Steps)</span>
                 <span className="font-mono text-primary font-bold">{numSteps}</span>
               </div>
               <Slider
@@ -1079,7 +1037,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 value={numSteps}
                 onChange={(e) => setNumSteps(Number(e.target.value))}
               />
-              <span className="text-[10px] text-on-surface-variant/60 leading-tight">
+              <span className="text-xxs text-on-surface-variant/60 leading-tight">
                 Детализация звуковой волны (16 — быстро, 32 — оптимум)
               </span>
             </div>
@@ -1087,8 +1045,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             {/* Скорость */}
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-medium">Скорость речи</span>
-                <span className="font-mono text-white font-bold">{speed.toFixed(2)}x</span>
+                <span className="text-on-surface font-medium">Скорость речи</span>
+                <span className="font-mono text-on-surface font-bold">{speed.toFixed(2)}x</span>
               </div>
               <Slider
                 min={0.5}
@@ -1102,8 +1060,8 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             {/* Высота тона */}
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-medium">Высота тона (Pitch)</span>
-                <span className="font-mono text-white font-bold">{pitch.toFixed(2)}x</span>
+                <span className="text-on-surface font-medium">Высота тона (Pitch)</span>
+                <span className="font-mono text-on-surface font-bold">{pitch.toFixed(2)}x</span>
               </div>
               <Slider
                 min={0.7}
@@ -1115,11 +1073,11 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
             </div>
           </div>
 
-          <div className="h-px bg-white/10" />
+          <div className="h-px bg-on-surface/10" />
 
           {/* Фильтры и DSP */}
           <div className="flex flex-col gap-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-on-surface">
               Фильтры и Мастеринг
             </span>
 
@@ -1144,7 +1102,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           {/* Кнопка сброса */}
-          <div className="mt-auto pt-3 border-t border-white/10">
+          <div className="mt-auto pt-3 border-t border-outline-variant/40">
             <button
               type="button"
               onClick={() => {
@@ -1155,7 +1113,7 @@ export const AudioHubView = ({ onBack }: { onBack: () => void }) => {
                 setEnableDenoise(true)
                 setAlignmentEngine('Whisper')
               }}
-              className="text-xs text-on-surface-variant hover:text-white transition-colors text-center w-full py-1"
+              className="text-xs text-on-surface-variant hover:text-on-surface transition-colors text-center w-full py-1"
             >
               Сбросить параметры к базовым
             </button>

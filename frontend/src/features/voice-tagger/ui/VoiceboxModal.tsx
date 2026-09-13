@@ -85,12 +85,12 @@ export const VoiceboxModal = ({
       </div>
 
       {project.customVoices && project.customVoices.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
+        <div className="flex flex-col gap-2 border-t border-outline-variant/40 pt-4">
           <h4 className="text-xs font-label uppercase text-on-surface-variant">Сохранённые голоса</h4>
           {project.customVoices.map(v => (
             <div
               key={v.id}
-              className="flex justify-between items-center p-2 rounded-lg bg-surface-container-lowest/50 border border-white/5"
+              className="flex justify-between items-center p-2 rounded-lg bg-surface-container-lowest/50 border border-outline-variant/20"
             >
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-on-surface">{v.name}</span>

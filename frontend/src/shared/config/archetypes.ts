@@ -25,8 +25,8 @@ export const VISUAL_ARCHETYPES: Record<VisualArchetype, ArchetypeConfig> = {
     shortDesc: 'Плавное приближение камеры scale: 1 -> 1.15 к ключевому объекту',
     physicsHint: 'spring(damping: 14, mass: 0.8)',
     icon: ZoomIn,
-    color: 'text-sky-400 border-sky-400/30 bg-sky-400/10',
-    bgHover: 'hover:border-sky-400/50',
+    color: 'text-secondary border-secondary/30 bg-secondary/10',
+    bgHover: 'hover:border-secondary/50',
   },
   EXPLODE: {
     id: 'EXPLODE',
@@ -34,8 +34,8 @@ export const VISUAL_ARCHETYPES: Record<VisualArchetype, ArchetypeConfig> = {
     shortDesc: 'Разлёт элементов из центра: цифры, графики, шок-факты',
     physicsHint: 'interpolate(progress, [0, 1], [0.8, 1.25])',
     icon: Sparkles,
-    color: 'text-amber-400 border-amber-400/30 bg-amber-400/10',
-    bgHover: 'hover:border-amber-400/50',
+    color: 'text-warning border-warning/30 bg-warning/10',
+    bgHover: 'hover:border-warning/50',
   },
   CASCADE: {
     id: 'CASCADE',
@@ -43,8 +43,8 @@ export const VISUAL_ARCHETYPES: Record<VisualArchetype, ArchetypeConfig> = {
     shortDesc: 'Поочерёдное появление списков и плашек с задержкой 3 кадра',
     physicsHint: 'stagger(delay = index * 3)',
     icon: Layers,
-    color: 'text-fuchsia-400 border-fuchsia-400/30 bg-fuchsia-400/10',
-    bgHover: 'hover:border-fuchsia-400/50',
+    color: 'text-tertiary border-tertiary/30 bg-tertiary/10',
+    bgHover: 'hover:border-tertiary/50',
   },
   FLOW: {
     id: 'FLOW',
@@ -52,8 +52,8 @@ export const VISUAL_ARCHETYPES: Record<VisualArchetype, ArchetypeConfig> = {
     shortDesc: 'Направленное смещение по траектории слева направо',
     physicsHint: 'translateX with clamp',
     icon: MoveRight,
-    color: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10',
-    bgHover: 'hover:border-emerald-400/50',
+    color: 'text-success border-success/30 bg-success/10',
+    bgHover: 'hover:border-success/50',
   },
   PULSE: {
     id: 'PULSE',
@@ -61,8 +61,8 @@ export const VISUAL_ARCHETYPES: Record<VisualArchetype, ArchetypeConfig> = {
     shortDesc: 'Ритмичный акцент и возврат под ударные слова диктора',
     physicsHint: 'sin(frame * frequency) scale pulse',
     icon: Activity,
-    color: 'text-rose-400 border-rose-500/30 bg-rose-500/10',
-    bgHover: 'hover:border-rose-500/50',
+    color: 'text-error border-error/30 bg-error/10',
+    bgHover: 'hover:border-error/50',
   },
 }
 

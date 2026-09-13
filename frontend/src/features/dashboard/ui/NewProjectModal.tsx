@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Monitor, Smartphone, Sparkles, X } from 'lucide-react'
 import { THEME_PRESETS, type ThemePreset } from '@shared/config'
+import { Button, Input, Select, OptionCard } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
 export const NewProjectModal: React.FC = () => {
@@ -27,137 +28,109 @@ export const NewProjectModal: React.FC = () => {
   }
 
   return (
-    <div key={selectedFormatForNew} className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 font-bold text-white text-lg">
-            <Sparkles className="text-sky-400" size={20} />
+    <div key={selectedFormatForNew} className="fixed inset-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-surface-container-low border border-outline-variant rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl">
+        <div className="p-6 border-b border-outline-variant flex items-center justify-between">
+          <div className="flex items-center gap-2.5 font-bold text-on-surface text-lg">
+            <Sparkles className="text-secondary" size={20} />
             <span>Создание нового видео-проекта</span>
           </div>
-          <button onClick={closeModal} className="text-slate-400 hover:text-white">
-            <X size={18} />
-          </button>
+          <Button variant="icon" icon={X} onClick={closeModal} />
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Название проекта *</label>
-            <input
+            <label className="text-xs font-semibold text-on-surface">Название проекта *</label>
+            <Input
               type="text"
               placeholder="Например: Обзор DeepSeek V3"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500"
               required
               autoFocus
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Формат холста</label>
+            <label className="text-xs font-semibold text-on-surface">Формат холста</label>
             <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
+              <OptionCard
+                icon={Monitor}
+                title="16:9 Landscape"
+                subtitle="YouTube, Desktop"
+                isActive={format === '16:9'}
+                accent="secondary"
                 onClick={() => setFormat('16:9')}
-                className={`p-3 rounded-2xl border flex items-center gap-3 transition-all ${
-                  format === '16:9'
-                    ? 'bg-sky-500/15 border-sky-500 text-white shadow-md'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <Monitor size={18} className={format === '16:9' ? 'text-sky-400' : ''} />
-                <div className="text-left">
-                  <div className="text-xs font-bold">16:9 Landscape</div>
-                  <div className="text-[10px] text-slate-500">YouTube, Desktop</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
+              />
+              <OptionCard
+                icon={Smartphone}
+                title="9:16 Shorts"
+                subtitle="TikTok, Reels"
+                isActive={format === '9:16'}
+                accent="error"
                 onClick={() => setFormat('9:16')}
-                className={`p-3 rounded-2xl border flex items-center gap-3 transition-all ${
-                  format === '9:16'
-                    ? 'bg-rose-500/15 border-rose-500 text-white shadow-md'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <Smartphone size={18} className={format === '9:16' ? 'text-rose-400' : ''} />
-                <div className="text-left">
-                  <div className="text-xs font-bold">9:16 Shorts</div>
-                  <div className="text-[10px] text-slate-500">TikTok, Reels</div>
-                </div>
-              </button>
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Частота кадров</label>
-              <select
+              <label className="text-xs font-semibold text-on-surface">Частота кадров</label>
+              <Select
                 value={fps}
                 onChange={(e) => setFps(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                className="text-xs"
               >
                 <option value={24}>24 FPS (Кино)</option>
                 <option value={30}>30 FPS (YouTube)</option>
                 <option value={60}>60 FPS (Плавно)</option>
-              </select>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Стиль анимации</label>
-              <select
+              <label className="text-xs font-semibold text-on-surface">Стиль анимации</label>
+              <Select
                 value={animationStyle}
                 onChange={(e) => setAnimationStyle(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                className="text-xs"
               >
                 <option value="cinematic_smooth">Плавный (Spring Damped)</option>
                 <option value="dynamic_pop">Динамичный (Bounce Pop)</option>
                 <option value="minimal_clean">Минималистичный (Fade)</option>
-              </select>
+              </Select>
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-300">Палитра бренда</label>
+            <label className="text-xs font-semibold text-on-surface">Палитра бренда</label>
             <div className="flex gap-2">
               {THEME_PRESETS.map((p) => (
-                <button
+                <OptionCard
                   key={p.id}
-                  type="button"
+                  showIcon={false}
+                  isActive={selectedPalette.id === p.id}
+                  accent="secondary"
                   onClick={() => setSelectedPalette(p)}
-                  className={`flex-1 p-2.5 rounded-xl border text-left transition-all ${
-                    selectedPalette.id === p.id
-                      ? 'bg-slate-950 border-sky-500 shadow-sm'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400'
-                  }`}
+                  title={p.name}
+                  className="flex-1 p-2.5"
                 >
                   <div className="flex gap-1 mb-1.5">
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colors.primary }} />
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colors.accent }} />
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colors.surface }} />
                   </div>
-                  <span className="text-[11px] font-bold text-white block truncate">{p.name}</span>
-                </button>
+                </OptionCard>
               ))}
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-3 border-t border-slate-800/80">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
-            >
+          <div className="pt-2 flex justify-end gap-3 border-t border-outline-variant/80">
+            <Button type="button" variant="ghost" onClick={closeModal}>
               Отмена
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="px-6 py-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20"
-            >
+            </Button>
+            <Button type="submit" disabled={!name.trim()}>
               Создать проект
-            </button>
+            </Button>
           </div>
         </form>
       </div>

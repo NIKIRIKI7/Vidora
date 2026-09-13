@@ -13,10 +13,10 @@ interface LogEntry {
 }
 
 const LEVEL_COLORS: Record<string, string> = {
-  ERROR: 'bg-rose-950/20 border-rose-500/30 text-rose-200',
-  WARN: 'bg-amber-950/20 border-amber-500/30 text-amber-200',
-  SUCCESS: 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200',
-  INFO: 'bg-slate-900/50 border-white/5 text-slate-300',
+  ERROR: 'bg-error/20 border-error/30 text-error',
+  WARN: 'bg-warning/20 border-warning/30 text-warning',
+  SUCCESS: 'bg-success/20 border-success/30 text-success',
+  INFO: 'bg-surface-container-low/50 border-outline-variant/20 text-on-surface',
 }
 
 export const LogsViewer: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -62,14 +62,14 @@ export const LogsViewer: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             key={lvl}
             onClick={() => setFilter(lvl)}
             className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
-              filter === lvl ? 'bg-primary text-black' : 'bg-white/5 text-on-surface-variant hover:text-white'
+              filter === lvl ? 'bg-primary text-surface-container-lowest' : 'bg-on-surface/5 text-on-surface-variant hover:text-on-surface'
             }`}
           >
             {lvl}
           </button>
         ))}
         <div className="flex-1" />
-        <button onClick={fetchLogs} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-on-surface-variant hover:text-white transition-colors" title="Обновить">
+        <button onClick={fetchLogs} className="p-1.5 rounded-lg bg-on-surface/5 hover:bg-on-surface/10 text-on-surface-variant hover:text-on-surface transition-colors" title="Обновить">
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
@@ -78,25 +78,25 @@ export const LogsViewer: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         {filtered.length === 0 && <div className="text-center text-on-surface-variant/60 py-8 text-sm">Логов пока нет</div>}
         {filtered.map(log => (
           <div key={log.id} className={`p-3 rounded-xl border flex flex-col gap-1.5 ${LEVEL_COLORS[log.level] || LEVEL_COLORS.INFO}`}>
-            <div className="flex items-center justify-between text-[11px] opacity-70">
+            <div className="flex items-center justify-between text-2xs opacity-70">
               <span className="font-mono font-bold">{log.timestamp}</span>
               <div className="flex items-center gap-2">
-                <span className="px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-mono">{log.module}</span>
-                <span className="px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-mono">{log.level}</span>
+                <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest/40 text-xxs font-mono">{log.module}</span>
+                <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest/40 text-xxs font-mono">{log.level}</span>
               </div>
             </div>
             <p className="text-sm font-medium leading-tight m-0">{log.message}</p>
             {log.details && (
               <div className="relative">
-                <pre className="mt-1.5 p-2 rounded-lg bg-black/60 text-rose-400 font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-40 custom-scrollbar">
+                <pre className="mt-1.5 p-2 rounded-lg bg-surface-container-lowest/60 text-error font-mono text-2xs leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-40 custom-scrollbar">
                   {log.details}
                 </pre>
                 <button
                   onClick={() => copy(log.details || '', log.id)}
-                  className="absolute top-2 right-2 p-1 rounded bg-black/50 hover:bg-black/80 text-on-surface-variant hover:text-white transition-colors"
+                  className="absolute top-2 right-2 p-1 rounded bg-surface-container-lowest/50 hover:bg-surface-container-lowest/80 text-on-surface-variant hover:text-on-surface transition-colors"
                   title="Копировать"
                 >
-                  {copied === log.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  {copied === log.id ? <Check size={12} className="text-success" /> : <Copy size={12} />}
                 </button>
               </div>
             )}

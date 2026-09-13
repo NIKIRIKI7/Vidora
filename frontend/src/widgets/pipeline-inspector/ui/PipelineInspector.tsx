@@ -4,6 +4,7 @@ import { ContentTab } from './tabs/ContentTab'
 import { AudioTab } from './tabs/AudioTab'
 import { VisualTab } from './tabs/VisualTab'
 import { ExportTab } from './tabs/ExportTab'
+import { Tabs } from '@shared/ui'
 
 type InspectorTab = 'content' | 'audio' | 'visual' | 'export'
 
@@ -93,17 +94,16 @@ export const PipelineInspector = React.memo((props: Props) => {
   }
 
   return (
-    <aside className="w-full h-full border-l border-white/10 bg-surface-container/30 flex flex-col shrink-0">
-      <div className="flex border-b border-white/10 bg-surface-container-lowest/50 shrink-0">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`flex-1 py-2.5 px-1 text-center text-[10px] uppercase tracking-wide font-semibold transition-colors border-b-2 truncate ${activeTab === t.id ? 'border-primary text-primary bg-primary/10' : 'border-transparent text-on-surface-variant hover:text-white hover:bg-white/5'}`}
-          >
-            {t.label}
-          </button>
-        ))}
+    <aside className="w-full h-full border-l border-outline-variant/40 bg-surface-container/30 flex flex-col shrink-0">
+      <div className="border-b border-outline-variant/40 bg-surface-container-lowest/50 shrink-0">
+        <Tabs
+          fill
+          variant="underline"
+          value={activeTab}
+          onChange={(id) => setActiveTab(id as InspectorTab)}
+          items={TABS.map(t => ({ id: t.id, label: t.label }))}
+          className="w-full"
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar">

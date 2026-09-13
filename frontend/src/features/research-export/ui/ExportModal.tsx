@@ -24,11 +24,11 @@ interface Props {
 
 const renderIcon = (name: string, size = 20) => {
   switch (name) {
-    case 'file-spreadsheet': return <FileSpreadsheet size={size} className="text-emerald-400" />
-    case 'file-text': return <FileText size={size} className="text-cyan-400" />
-    case 'file-code': return <FileCode size={size} className="text-amber-400" />
-    case 'clipboard-copy': return <ClipboardCopy size={size} className="text-fuchsia-400" />
-    case 'table': return <Table size={size} className="text-sky-400" />
+    case 'file-spreadsheet': return <FileSpreadsheet size={size} className="text-success" />
+    case 'file-text': return <FileText size={size} className="text-secondary" />
+    case 'file-code': return <FileCode size={size} className="text-warning" />
+    case 'clipboard-copy': return <ClipboardCopy size={size} className="text-tertiary" />
+    case 'table': return <Table size={size} className="text-secondary" />
     default: return <Download size={size} />
   }
 }
@@ -84,10 +84,10 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Экспорт аналитики DeepTrend" className="max-w-2xl sm:max-w-2xl">
-      <div className="flex flex-col gap-5 text-slate-100">
+      <div className="flex flex-col gap-5 text-on-surface">
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
-            <Layers size={14} className="text-indigo-400" /> Объем выгрузки
+          <label className="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5 uppercase tracking-wider">
+            <Layers size={14} className="text-primary" /> Объем выгрузки
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
@@ -109,12 +109,12 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
                   }}
                   className={`p-2.5 rounded-xl border text-left flex flex-col gap-0.5 transition-all ${
                     active
-                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-md'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      ? 'bg-primary/20 border-primary text-on-surface shadow-md'
+                      : 'bg-surface-container-low border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-outline-variant'
                   }`}
                 >
                   <span className="text-xs font-bold leading-tight">{s.label}</span>
-                  <span className="text-[10px] font-mono opacity-70">{s.sub}</span>
+                  <span className="text-xxs font-mono opacity-70">{s.sub}</span>
                 </button>
               )
             })}
@@ -122,8 +122,8 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
-            <Sparkles size={14} className="text-sky-400" /> Выберите формат
+          <label className="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5 uppercase tracking-wider">
+            <Sparkles size={14} className="text-secondary" /> Выберите формат
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {strategies.map((strat) => {
@@ -137,23 +137,23 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
                   onClick={() => setSelectedFormat(strat.id)}
                   className={`p-3 rounded-xl border text-left flex items-start gap-3 transition-all ${
                     disabled
-                      ? 'opacity-30 cursor-not-allowed border-slate-800'
+                      ? 'opacity-30 cursor-not-allowed border-outline-variant'
                       : isSelected
-                      ? 'bg-slate-900 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
-                      : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                      ? 'bg-surface-container-low border-primary shadow-md ring-1 ring-primary/50'
+                      : 'bg-surface-container-low/60 border-outline-variant hover:border-outline-variant text-on-surface'
                   }`}
                 >
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 shrink-0">
+                  <div className="p-2 rounded-xl bg-surface-container-lowest border border-outline-variant shrink-0">
                     {renderIcon(strat.iconName, 20)}
                   </div>
                   <div className="flex flex-col min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-white whitespace-normal">{strat.title}</span>
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
+                      <span className="text-xs font-bold text-on-surface whitespace-normal">{strat.title}</span>
+                      <span className="text-3xs font-mono px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant shrink-0">
                         {strat.badge}
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    <span className="text-2xs text-on-surface-variant mt-1 leading-relaxed">
                       {strat.description}
                     </span>
                   </div>
@@ -163,9 +163,9 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
           </div>
         </div>
 
-        <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 flex items-center justify-between">
-          <span className="text-xs text-slate-200 flex items-center gap-2 font-medium">
-            <Flame size={15} className="text-rose-400" /> Только Rocket-видео (вирусные аномалии)
+        <div className="p-3 bg-surface-container-low/80 rounded-xl border border-outline-variant flex items-center justify-between">
+          <span className="text-xs text-on-surface flex items-center gap-2 font-medium">
+            <Flame size={15} className="text-error" /> Только Rocket-видео (вирусные аномалии)
           </span>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -174,12 +174,12 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
               onChange={(e) => setOnlyRockets(e.target.checked)}
               className="sr-only peer"
             />
-            <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+            <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-outline-variant/40 after:content-[''] after:absolute after:top-0.5 after:start-0.5 after:bg-on-surface after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
           </label>
         </div>
 
-        <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
-          <span className="text-[11px] font-mono text-slate-400">
+        <div className="flex items-center justify-between pt-3 border-t border-outline-variant/80">
+          <span className="text-2xs font-mono text-on-surface-variant">
             К выгрузке: {onlyRockets ? rocketVideosCount : dataset.videos.length} видео
           </span>
           <div className="flex items-center gap-2.5">
@@ -187,7 +187,7 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
               type="button"
               onClick={onClose}
               disabled={isExporting}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition"
             >
               Отмена
             </button>
@@ -195,7 +195,7 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
               type="button"
               onClick={handleExecuteExport}
               disabled={isExporting || (scope === 'videos' && dataset.videos.length === 0)}
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition active:scale-95 flex items-center gap-2"
+              className="px-5 py-2 bg-primary hover:bg-primary disabled:opacity-50 text-on-surface rounded-xl text-xs font-bold shadow-lg shadow-primary/20 transition active:scale-95 flex items-center gap-2"
             >
               {isExporting ? (
                 <>
@@ -203,7 +203,7 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, dataset, onNotif
                 </>
               ) : isCopied ? (
                 <>
-                  <CheckCircle2 size={15} className="text-emerald-300" /> Скопировано!
+                  <CheckCircle2 size={15} className="text-success" /> Скопировано!
                 </>
               ) : selectedFormat === 'clipboard_tsv' ? (
                 <>

@@ -3,7 +3,7 @@ import type { ProjectSettings, Resolution, VideoFormat, BackgroundMusicSettings,
 import {
   useSettingsStore, useNotificationStore, astToProjectDelta, useScenarioEngineStore,
 } from '@entities/project'
-import { Button, Modal, FieldGroup, Switch, Input, Select, Slider } from '@shared/ui'
+import { Button, Modal, FieldGroup, Switch, Input, Select, Slider, TextArea } from '@shared/ui'
 import { THEME_PRESETS, DEFAULT_BACKGROUND_MUSIC, type ThemePreset } from '@shared/config'
 import { createProductionProject } from '@shared/api'
 import { useEditorWorkspace } from '@pages/editor/model/useEditorWorkspace'
@@ -349,14 +349,14 @@ export const EditorPage = ({
       />
 
       <Modal isOpen={model.isSettingsOpen} onClose={() => model.setIsSettingsOpen(false)} title="Настройки Проекта">
-        <div className="flex flex-wrap gap-1 mb-5 p-1 bg-surface-container-lowest/50 rounded-lg border border-white/5">
-          <button onClick={() => setSettingsTab('project')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'project' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Проект</button>
-          <button onClick={() => setSettingsTab('ui')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'ui' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white hover:bg-white/5'}`}>Интерфейс</button>
+        <div className="flex flex-wrap gap-1 mb-5 p-1 bg-surface-container-lowest/50 rounded-lg border border-outline-variant/20">
+          <button onClick={() => setSettingsTab('project')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'project' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-on-surface/5'}`}>Проект</button>
+          <button onClick={() => setSettingsTab('ui')} className={`flex-auto text-center py-1.5 px-3 text-xs font-medium rounded-md transition-colors ${settingsTab === 'ui' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-on-surface/5'}`}>Интерфейс</button>
         </div>
 
         <div className="flex flex-col gap-4 pb-2">
           {settingsTab === 'ui' ? (
-            <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-4">
+            <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-outline-variant/20 flex flex-col gap-4">
               <Switch label="Показывать левую панель (Сайдбар сцен)" checked={uiPreferences.showSceneSidebar} onChange={(v) => setUiPreferences({ showSceneSidebar: v })} />
               <Switch label="Показывать нижнюю панель (Таймлайн)" checked={uiPreferences.showTimeline} onChange={(v) => setUiPreferences({ showTimeline: v })} />
               <Switch label="Показывать правую панель (Инспектор)" checked={uiPreferences.showInspector} onChange={(v) => setUiPreferences({ showInspector: v })} />
@@ -393,20 +393,20 @@ export const EditorPage = ({
                 </FieldGroup>
               </div>
 
-              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-3 mb-4">
+              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-outline-variant/20 flex flex-col gap-3 mb-4">
                 <Switch
                   label="Автоподбор B-Roll (Auto B-Roll Matcher)"
                   checked={project.autoBRollEnabled !== false}
                   onChange={val => onUpdateProject({ ...project, autoBRollEnabled: val })}
                 />
-                <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                <p className="text-xxs text-on-surface-variant leading-relaxed">
                   Если включено, ИИ автоматически найдет и обрежет стоковые видео под тайминги фрагментов при сборке проекта.
                 </p>
               </div>
 
-              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 mb-4">
+              <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-outline-variant/20 mb-4">
                 <Switch label="Использовать 3D графику (Beta, React Three Fiber)" checked={project.use3D ?? false} onChange={val => onUpdateProject({ ...project, use3D: val })} />
-                <p className="text-[10px] text-on-surface-variant mt-2 leading-relaxed">
+                <p className="text-xxs text-on-surface-variant mt-2 leading-relaxed">
                   Если включено, ИИ сможет генерировать 3D-сцены с помощью @remotion/three. Рендер сложных 3D-объектов может занимать больше времени.
                 </p>
               </div>
@@ -415,8 +415,8 @@ export const EditorPage = ({
                 <Input value={project.metadata?.title || ''} onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, title: e.target.value } })} />
               </FieldGroup>
               <FieldGroup label="Описание (Description)">
-                <textarea
-                  className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary/50 transition-all"
+                <TextArea
+                  className="w-full bg-surface-container-lowest border border-outline-variant/40 rounded-lg py-2 px-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary/50 transition-all"
                   rows={3}
                   value={project.metadata?.description || ''}
                   onChange={e => onUpdateProject({ ...project, metadata: { ...project.metadata, description: e.target.value } })}
@@ -456,11 +456,11 @@ export const EditorPage = ({
                       className="flex flex-col items-center gap-1 shrink-0 group"
                       title={tpl.name}
                     >
-                      <div className="w-8 h-8 rounded-full border-2 border-transparent group-hover:border-white/50 flex overflow-hidden">
+                      <div className="w-8 h-8 rounded-full border-2 border-transparent group-hover:border-outline-variant/100 flex overflow-hidden">
                         <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
                         <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
                       </div>
-                      <span className="text-[10px] text-on-surface-variant group-hover:text-white">{tpl.name.split(' ')[0]}</span>
+                      <span className="text-xxs text-on-surface-variant group-hover:text-on-surface">{tpl.name.split(' ')[0]}</span>
                     </button>
                   ))}
                 </div>
@@ -470,8 +470,8 @@ export const EditorPage = ({
                 <div className="grid grid-cols-3 gap-3 mt-2">
                   {(['primary', 'secondary', 'accent', 'background', 'surface', 'text'] as const).map(colorKey => (
                     <div key={colorKey} className="flex flex-col gap-1">
-                      <span className="text-[10px] text-on-surface-variant uppercase">{colorKey}</span>
-                      <div className="flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg p-1">
+                      <span className="text-xxs text-on-surface-variant uppercase">{colorKey}</span>
+                      <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/40 rounded-lg p-1">
                         <input
                           type="color"
                           value={project.montage?.colors?.[colorKey] || '#000000'}
@@ -491,7 +491,7 @@ export const EditorPage = ({
                 </div>
               </FieldGroup>
 
-              <div className="h-px bg-white/10 my-2" />
+              <div className="h-px bg-on-surface/10 my-2" />
               <Button variant="dashed" className="text-error border-error/30 hover:bg-error/10" onClick={() => onDeleteProject(project.name)}>
                 Удалить проект
               </Button>
@@ -524,7 +524,7 @@ export const EditorPage = ({
             <Slider min={0} max={30} step={0.5} value={model.duration} onChange={e => model.setDuration(Number(e.target.value))} />
           </FieldGroup>
 
-          <div className="flex flex-col gap-3 mt-2 border-t border-white/10 pt-4">
+          <div className="flex flex-col gap-3 mt-2 border-t border-outline-variant/40 pt-4">
             <Switch checked={model.denoise} onChange={model.setDenoise} label="Шумоподавление (Denoise)" />
             <Switch checked={model.preprocessPrompt} onChange={model.setPreprocessPrompt} label="Предобработка промпта (Preprocess)" />
             <Switch checked={model.postprocessOutput} onChange={model.setPostprocessOutput} label="Постобработка (Postprocess)" />

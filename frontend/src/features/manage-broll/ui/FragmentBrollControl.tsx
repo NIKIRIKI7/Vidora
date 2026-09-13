@@ -43,10 +43,10 @@ export const FragmentBrollControl = ({
         trigger={
           <button
             type="button"
-            className={`text-[11px] p-1 rounded transition-colors flex items-center gap-1 border ${
+            className={`text-2xs p-1 rounded transition-colors flex items-center gap-1 border ${
               hasBroll
                 ? 'text-secondary border-secondary/40 bg-secondary/10 hover:bg-secondary/20'
-                : 'text-on-surface-variant border-transparent hover:text-secondary hover:bg-white/5'
+                : 'text-on-surface-variant border-transparent hover:text-secondary hover:bg-on-surface/5'
             }`}
             title={hasBroll ? `B-Roll: ${brollFilename}` : 'Медиа / B-Roll'}
           >
@@ -55,20 +55,20 @@ export const FragmentBrollControl = ({
         }
       >
         <DropdownItem onClick={onOpenStockModal}>
-          <ExternalLink size={14} className="mr-2 inline text-sky-400" />
+          <ExternalLink size={14} className="mr-2 inline text-secondary" />
           Выбрать из стока (Pexels)
         </DropdownItem>
         <DropdownItem onClick={() => fileInputRef.current?.click()}>
-          <Upload size={14} className="mr-2 inline text-emerald-400" />
+          <Upload size={14} className="mr-2 inline text-success" />
           Загрузить локальный файл
         </DropdownItem>
         <DropdownItem onClick={onAutoMatchAi}>
-          <Sparkles size={14} className="mr-2 inline text-fuchsia-400" />
+          <Sparkles size={14} className="mr-2 inline text-tertiary" />
           Автоподбор через AI
         </DropdownItem>
         {hasBroll && (
           <>
-            <div className="h-px bg-white/10 my-1" />
+            <div className="h-px bg-on-surface/10 my-1" />
             <DropdownItem onClick={onUnlink} danger>
               <Trash2 size={14} className="mr-2 inline" />
               Отвязать B-Roll

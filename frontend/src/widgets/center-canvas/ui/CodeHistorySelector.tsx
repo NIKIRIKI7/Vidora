@@ -57,7 +57,7 @@ export const CodeHistorySelector: React.FC<Props> = ({ projectId, sceneId, onRes
       <select
         onChange={e => { if (e.target.value) void restore(e.target.value) }}
         defaultValue=""
-        className="bg-surface-container-lowest border border-white/10 text-[11px] font-mono text-on-surface rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary/50 max-w-[220px]"
+        className="bg-surface-container-lowest border border-outline-variant/40 text-2xs font-mono text-on-surface rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary/50 max-w-[var(--layout-tooltip)]"
       >
         <option value="" disabled>История версий TSX ({revisions.length})</option>
         {revisions.map(rev => (

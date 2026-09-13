@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   Plus,
-  Search,
   Trash2,
   Edit3,
   CheckCircle2,
@@ -10,6 +9,7 @@ import {
   RefreshCw,
   Info,
 } from 'lucide-react'
+import { SearchInput } from '@shared/ui'
 import type { SkillCreate, SkillItem, SkillStage, SkillUpdate } from '@entities/skill'
 import { skillsApi } from '@entities/skill'
 import { useSkillsStore } from '@entities/skill'
@@ -75,17 +75,17 @@ export const SkillsSettingsView: React.FC = () => {
 
   return (
     // overflow-x-hidden и w-full предотвращают горизонтальный скролл окна
-    <div className="w-full max-w-full overflow-x-hidden p-4 sm:p-6 space-y-5 text-zinc-100">
+    <div className="w-full max-w-full overflow-x-hidden p-4 sm:p-6 space-y-5 text-on-surface">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-variant/80 pb-5">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <Database className="w-6 h-6 text-indigo-400 shrink-0" />
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            <Database className="w-6 h-6 text-primary shrink-0" />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-on-surface">
               LLM Skills & Prompts Registry
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-zinc-400 max-w-xl">
+          <p className="text-xs sm:text-sm text-on-surface-variant max-w-xl">
             Все системные и кастомные правила хранятся в SQLite БД. Контекст собирается по стадиям и бюджету токенов.
           </p>
         </div>
@@ -93,7 +93,7 @@ export const SkillsSettingsView: React.FC = () => {
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             onClick={() => fetchSkills(true)}
-            className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 transition"
+            className="p-2.5 rounded-xl border border-outline-variant bg-surface-container-low/80 hover:bg-surface-container-high text-on-surface transition"
             title="Обновить список"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -103,7 +103,7 @@ export const SkillsSettingsView: React.FC = () => {
               setEditingSkill(null)
               setIsModalOpen(true)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-xs sm:text-sm transition shadow-lg shadow-indigo-600/25 shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary text-on-surface rounded-xl font-medium text-xs sm:text-sm transition shadow-lg shadow-primary/25 shrink-0"
           >
             <Plus className="w-4 h-4" /> Добавить скил
           </button>
@@ -111,7 +111,7 @@ export const SkillsSettingsView: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar (Адаптивный flex-wrap без вылезания за границы) */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-zinc-900/50 p-2.5 sm:p-3 rounded-2xl border border-zinc-800/60">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-surface-container-low/50 p-2.5 sm:p-3 rounded-2xl border border-outline-variant/60">
 
         {/* Скроллируемые табы БЕЗ уродливого нативного скроллбара */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -119,8 +119,8 @@ export const SkillsSettingsView: React.FC = () => {
             onClick={() => setSelectedStage('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap shrink-0 ${
               selectedStage === 'all'
-                ? 'bg-zinc-100 text-zinc-900 shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                ? 'bg-surface-container-high text-outline shadow-sm'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/60'
             }`}
           >
             Все ({skills.length})
@@ -134,38 +134,37 @@ export const SkillsSettingsView: React.FC = () => {
                 onClick={() => setSelectedStage(key as SkillStage)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                   selectedStage === key
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                    ? 'bg-primary text-on-surface shadow-md shadow-primary/20'
+                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/60'
                 }`}
               >
                 <span>{config.label}</span>
-                <span className="text-[10px] opacity-70">({count})</span>
+                <span className="text-xxs opacity-70">({count})</span>
               </button>
             )
           })}
         </div>
 
         {/* Search Input — с фиксированной минимальной шириной и без сжатия */}
-        <div className="relative min-w-[200px] lg:w-64 shrink-0">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+        <div className="min-w-[var(--layout-search)] lg:w-64 shrink-0">
+          <SearchInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onClear={() => setSearchQuery('')}
             placeholder="Поиск по скилам..."
-            className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition"
+            className="text-xs"
           />
         </div>
       </div>
 
       {/* Skills List */}
       {loading ? (
-        <div className="py-20 text-center text-zinc-500 text-sm">Загрузка скилов из базы данных...</div>
+        <div className="py-20 text-center text-outline text-sm">Загрузка скилов из базы данных...</div>
       ) : filteredSkills.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-zinc-800/80 rounded-2xl">
-          <Info className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-          <p className="text-zinc-400 text-sm">Скилы не найдены</p>
-          <p className="text-zinc-600 text-xs mt-1">Попробуйте изменить поисковый запрос или фильтр</p>
+        <div className="py-16 text-center border border-dashed border-outline-variant/80 rounded-2xl">
+          <Info className="w-8 h-8 text-outline mx-auto mb-2" />
+          <p className="text-on-surface-variant text-sm">Скилы не найдены</p>
+          <p className="text-outline text-xs mt-1">Попробуйте изменить поисковый запрос или фильтр</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3">
@@ -176,40 +175,40 @@ export const SkillsSettingsView: React.FC = () => {
                 key={skill.id}
                 className={`p-4 rounded-2xl border transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4 min-w-0 ${
                   skill.is_active
-                    ? 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700/80'
-                    : 'bg-zinc-950/30 border-zinc-900/60 opacity-60'
+                    ? 'bg-surface-container-low/40 border-outline-variant/80 hover:border-outline-variant/80'
+                    : 'bg-surface-container-lowest/30 border-outline-variant/60 opacity-60'
                 }`}
               >
                 {/* Левая колонка информации */}
                 <div className="flex-1 min-w-0 space-y-2 w-full">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-zinc-100 truncate max-w-md">
+                    <span className="text-sm font-semibold text-on-surface truncate max-w-md">
                       {skill.name}
                     </span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${stageConfig.color}`}>
+                    <span className={`text-2xs px-2 py-0.5 rounded-md border font-medium ${stageConfig.color}`}>
                       {stageConfig.label}
                     </span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                      className={`text-xxs px-1.5 py-0.5 rounded font-mono ${
                         skill.is_custom
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/40'
+                          ? 'bg-warning/10 text-warning border border-warning/20'
+                          : 'bg-surface-container-high/80 text-on-surface-variant border border-outline-variant/40'
                       }`}
                     >
                       {skill.is_custom ? 'Custom' : `System (v${skill.version})`}
                     </span>
-                    <span className="text-[11px] text-zinc-500 font-mono">
+                    <span className="text-2xs text-outline font-mono">
                       Priority: {skill.priority}
                     </span>
                   </div>
 
                   {skill.description && (
-                    <p className="text-xs text-zinc-400 truncate">{skill.description}</p>
+                    <p className="text-xs text-on-surface-variant truncate">{skill.description}</p>
                   )}
 
                   {/* Превью промпта с защитой от горизонтального распирания */}
-                  <div className="bg-zinc-950/70 rounded-xl p-2.5 border border-zinc-800/60 max-w-full overflow-hidden">
-                    <p className="font-mono text-[11px] text-zinc-400 line-clamp-2 leading-relaxed break-words">
+                  <div className="bg-surface-container-lowest/70 rounded-xl p-2.5 border border-outline-variant/60 max-w-full overflow-hidden">
+                    <p className="font-mono text-2xs text-on-surface-variant line-clamp-2 leading-relaxed break-words">
                       {skill.prompt}
                     </p>
                   </div>
@@ -221,8 +220,8 @@ export const SkillsSettingsView: React.FC = () => {
                     onClick={() => handleToggleActive(skill)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                       skill.is_active
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
-                        : 'bg-zinc-800/60 text-zinc-500 border border-zinc-700/30 hover:bg-zinc-800 hover:text-zinc-300'
+                        ? 'bg-success/10 text-success border border-success/30 hover:bg-success/20'
+                        : 'bg-surface-container-high/60 text-outline border border-outline-variant/30 hover:bg-surface-container-high hover:text-on-surface'
                     }`}
                   >
                     {skill.is_active ? (
@@ -241,7 +240,7 @@ export const SkillsSettingsView: React.FC = () => {
                       setEditingSkill(skill)
                       setIsModalOpen(true)
                     }}
-                    className="p-2 rounded-xl bg-zinc-800/70 hover:bg-zinc-700 text-zinc-300 border border-zinc-700/30 transition"
+                    className="p-2 rounded-xl bg-surface-container-high/70 hover:bg-surface-container-highest text-on-surface border border-outline-variant/30 transition"
                     title="Редактировать"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
@@ -249,7 +248,7 @@ export const SkillsSettingsView: React.FC = () => {
 
                   <button
                     onClick={() => handleDelete(skill.id, skill.name)}
-                    className="p-2 rounded-xl bg-zinc-800/70 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 border border-zinc-700/30 transition"
+                    className="p-2 rounded-xl bg-surface-container-high/70 hover:bg-error/20 hover:text-error text-on-surface-variant border border-outline-variant/30 transition"
                     title="Удалить"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

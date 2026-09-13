@@ -159,25 +159,25 @@ export const BRollModal = ({
         </div>
 
         {/* Геометрия кадра */}
-        <div className="bg-surface-container-lowest/60 p-4 rounded-xl border border-white/5 flex items-center justify-between">
+        <div className="bg-surface-container-lowest/60 p-4 rounded-xl border border-outline-variant/20 flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+            <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
               <MonitorPlay size={14} className="text-secondary" /> Авто-подгонка под {project.format} ({project.resolution})
             </span>
-            <span className="text-[11px] text-on-surface-variant">FFmpeg нормализация с постоянным FPS</span>
+            <span className="text-2xs text-on-surface-variant">FFmpeg нормализация с постоянным FPS</span>
           </div>
-          <div className="flex bg-surface-container-lowest border border-white/10 p-0.5 rounded-lg">
+          <div className="flex bg-surface-container-lowest border border-outline-variant/40 p-0.5 rounded-lg">
             <button
               type="button"
               onClick={() => setFitMode('cover')}
-              className={`text-xs px-3 py-1 rounded transition-all font-medium ${fitMode === 'cover' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
+              className={`text-xs px-3 py-1 rounded transition-all font-medium ${fitMode === 'cover' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}
             >
               Cover (Без полос)
             </button>
             <button
               type="button"
               onClick={() => setFitMode('blur_pad')}
-              className={`text-xs px-3 py-1 rounded transition-all font-medium ${fitMode === 'blur_pad' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
+              className={`text-xs px-3 py-1 rounded transition-all font-medium ${fitMode === 'blur_pad' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}
             >
               Blur Pad (Размытые поля)
             </button>
@@ -185,18 +185,18 @@ export const BRollModal = ({
         </div>
 
         {/* Источник файла */}
-        <div className="flex border-b border-white/10">
+        <div className="flex border-b border-outline-variant/40">
           <button
             type="button"
             onClick={() => setSourceTab('upload')}
-            className={`flex-1 py-2 text-xs font-bold border-b-2 transition-colors ${sourceTab === 'upload' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
+            className={`flex-1 py-2 text-xs font-bold border-b-2 transition-colors ${sourceTab === 'upload' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
           >
             Локальный файл
           </button>
           <button
             type="button"
             onClick={() => setSourceTab('pexels')}
-            className={`flex-1 py-2 text-xs font-bold border-b-2 transition-colors ${sourceTab === 'pexels' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-white'}`}
+            className={`flex-1 py-2 text-xs font-bold border-b-2 transition-colors ${sourceTab === 'pexels' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
           >
             Поиск на Pexels
           </button>
@@ -206,7 +206,7 @@ export const BRollModal = ({
           <div className="flex flex-col gap-3 py-2">
             <input type="file" ref={fileInputRef} accept="video/*" className="hidden" onChange={e => e.target.files?.[0] && setSelectedFile(e.target.files[0])} />
             <Button variant="dashed" onClick={() => fileInputRef.current?.click()} className="w-full py-6 flex-col gap-2">
-              <span className="text-sm font-semibold text-white">{selectedFile ? selectedFile.name : 'Выберите видеофайл (.mp4, .mov, .mkv)'}</span>
+              <span className="text-sm font-semibold text-on-surface">{selectedFile ? selectedFile.name : 'Выберите видеофайл (.mp4, .mov, .mkv)'}</span>
               {selectedFile && <span className="text-xs text-secondary font-mono">Размер: {(selectedFile.size / 1024 / 1024).toFixed(1)} MB</span>}
             </Button>
           </div>
@@ -232,11 +232,11 @@ export const BRollModal = ({
                     key={video.id}
                     onClick={() => setSelectedStockVideo(video)}
                     className={`relative rounded-lg overflow-hidden aspect-video border cursor-pointer transition-all ${
-                      isSelected ? 'border-primary ring-2 ring-primary/40' : 'border-white/10 hover:border-white/30'
+                      isSelected ? 'border-primary ring-2 ring-primary/40' : 'border-outline-variant/40 hover:border-outline-variant/100'
                     }`}
                   >
                     <img src={video.image} alt="preview" className="w-full h-full object-cover" />
-                    <span className="absolute bottom-1 right-1 px-1 rounded bg-black/70 text-[9px] font-mono text-white">
+                    <span className="absolute bottom-1 right-1 px-1 rounded bg-surface-container-lowest/70 text-3xs font-mono text-on-surface">
                       {video.duration}s
                     </span>
                     {isSelected && (
@@ -251,7 +251,7 @@ export const BRollModal = ({
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+        <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/40">
           <Button variant="ghost" onClick={onClose} disabled={isProcessing}>Отмена</Button>
           <Button
             variant="primary"

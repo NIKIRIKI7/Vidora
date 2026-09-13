@@ -1,7 +1,7 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef, useMemo } from 'react'
-import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
-import { ArrowLeft, Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2, ShieldAlert, AlertTriangle, Info, Check } from 'lucide-react'
+import { Button, Input, Select, FieldGroup, Spinner, VoiceTagToolbar, useVoiceTagInserter, TextArea, GradientButton, PageHeader, Alert, EmptyState } from '@shared/ui'
+import { Wand2, FileText, Download, FileUp, Clock, Copy, Mic, Sparkles, Settings2, ShieldAlert, AlertTriangle, Info, Check } from 'lucide-react'
 import { parseMarkdownFull, type ProjectSettings, type VideoFormat, type Resolution, type IdeaFormat, type VideoResult } from '@entities/project'
 import { THEME_PRESETS, type ThemePreset, SCENARIO_PARSER_RULES } from '@shared/config'
 import { formatTimecode } from '@shared/lib'
@@ -209,22 +209,12 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
   }
 
   return (
-    <div className="flex h-dvh w-full bg-background overflow-hidden animate-in fade-in duration-300">
+    <div className="flex flex-col h-dvh w-full bg-background overflow-hidden animate-in fade-in duration-300">
+      <PageHeader title="Создание проекта" icon={Wand2} onBack={onBack} />
 
+      <div className="flex flex-1 overflow-hidden">
       {/* Левый сайдбар настроек */}
-      <div className="w-[380px] shrink-0 bg-surface-container/40 border-r border-white/10 flex flex-col shadow-2xl z-10 relative">
-
-        {/* Шапка (Исправлена иконка "Назад") */}
-        <div className="p-4 border-b border-white/5 flex items-center gap-3 bg-surface-container-lowest/50 shrink-0">
-          <button
-            onClick={onBack}
-            className="p-1.5 text-on-surface-variant hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
-            title="Назад"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <h2 className="font-bold text-lg text-white">Создание проекта</h2>
-        </div>
+      <div className="w-[var(--layout-sidebar-lg)] shrink-0 bg-surface-container/40 border-r border-outline-variant/40 flex flex-col shadow-2xl z-10 relative">
 
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6 custom-scrollbar pb-6">
 
@@ -235,7 +225,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Например: Обзор RTX 5090"
-                className="bg-surface-container-lowest font-medium border-primary/30 focus:border-primary/50 text-white"
+                className="bg-surface-container-lowest font-medium border-primary/30 focus:border-primary/50 text-on-surface"
               />
             </FieldGroup>
 
@@ -262,7 +252,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
               <div className="flex gap-3 overflow-x-auto py-2 px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {THEME_PRESETS.map((tpl: ThemePreset) => (
                   <button key={tpl.name} onClick={() => setTheme(tpl)} className="flex flex-col items-center gap-1.5 shrink-0 group">
-                    <div className={`w-10 h-10 rounded-full border-2 flex overflow-hidden shadow-sm transition-all ${theme.name === tpl.name ? 'border-primary scale-110 shadow-primary/20' : 'border-transparent group-hover:border-white/50'}`}>
+                    <div className={`w-10 h-10 rounded-full border-2 flex overflow-hidden shadow-sm transition-all ${theme.name === tpl.name ? 'border-primary scale-110 shadow-primary/20' : 'border-transparent group-hover:border-outline-variant/100'}`}>
                       <div className="flex-1" style={{backgroundColor: tpl.colors.primary}} />
                       <div className="flex-1" style={{backgroundColor: tpl.colors.background}} />
                     </div>
@@ -278,17 +268,17 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
 
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-[11px] uppercase font-bold text-primary tracking-wider">AI-Ассистент</span>
+              <span className="text-2xs uppercase font-bold text-primary tracking-wider">AI-Ассистент</span>
             </div>
 
             <div className="flex items-end gap-3">
               <div className="flex-1">
                 <FieldGroup label="Хронометраж (мин)">
-                  <Input type="number" min={0.5} max={60} step={0.5} value={genDuration} onChange={e => setGenDuration(e.target.value)} className="text-xs bg-black/40 border-primary/20 focus:border-primary/50" />
+                  <Input type="number" min={0.5} max={60} step={0.5} value={genDuration} onChange={e => setGenDuration(e.target.value)} className="text-xs bg-surface-container-lowest/40 border-primary/20 focus:border-primary/50" />
                 </FieldGroup>
               </div>
               <div className="pb-2">
-                <span className="text-[11px] text-on-surface-variant font-mono leading-tight">≈ {Math.round(Number(genDuration) * 150)} слов</span>
+                <span className="text-2xs text-on-surface-variant font-mono leading-tight">≈ {Math.round(Number(genDuration) * 150)} слов</span>
               </div>
             </div>
 
@@ -297,10 +287,10 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
                 <Settings2 size={13} /> Движок генерации
               </label>
 
-              <div className="bg-black/40 border border-primary/20 rounded-xl p-1.5 flex flex-col gap-2">
-                <div className="flex bg-black/60 rounded-lg p-0.5">
-                  <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
-                  <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
+              <div className="bg-surface-container-lowest/40 border border-primary/20 rounded-xl p-1.5 flex flex-col gap-2">
+                <div className="flex bg-surface-container-lowest/60 rounded-lg p-0.5">
+                  <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-on-surface'}`}>Облако</button>
+                  <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-on-surface'}`}>Локально</button>
                 </div>
 
                 {taskModes.scenario === 'cloud' ? (
@@ -340,7 +330,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
           {/* Блок 3: Скачивание оригинала (если пришли из Идей) */}
           {videos && videos.length > 0 && (
             <div className="bg-secondary/10 border border-secondary/20 p-4 rounded-xl flex flex-col gap-3">
-              <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">Скопировать транскрипт оригинала</span>
+              <span className="text-xxs uppercase font-bold text-secondary tracking-wider">Скопировать транскрипт оригинала</span>
               <div className="flex flex-col gap-2">
                 {videos.slice(0,3).map((v, i) => (
                   <Button key={i} variant="dashed" onClick={() => handleCopyOriginal(v)} disabled={isGenerating} className="text-xs text-left h-auto py-2 px-3 justify-start border-secondary/30 text-secondary hover:bg-secondary/20 bg-secondary/5">
@@ -351,14 +341,14 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
             </div>
           )}
 
-          <div className="h-px bg-white/5" />
+          <div className="h-px bg-on-surface/5" />
 
           {/* Блок 4: Ручной импорт файла */}
           <FieldGroup label="Или загрузите готовый .md файл">
             <input type="file" accept=".md" className="hidden" ref={fileInputRef} onChange={async (e) => {
               if (e.target.files?.[0]) setMarkdown(await e.target.files[0].text())
             }} />
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="w-full text-xs py-2 bg-white/5 border-white/10 hover:bg-white/10 text-on-surface">
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="w-full text-xs py-2 bg-on-surface/5 border-outline-variant/40 hover:bg-on-surface/10 text-on-surface">
               <FileUp size={16} className="mr-1.5" /> Выбрать файл
             </Button>
           </FieldGroup>
@@ -366,12 +356,12 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
         </div>
 
         {/* Подвал сайдбара с кнопкой создания */}
-        <div className="p-5 bg-surface-container/95 border-t border-white/5 backdrop-blur-md shrink-0 z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.2)]">
-          <div className="flex items-center justify-between mb-3 text-sm font-medium text-white bg-black/40 p-2.5 rounded-lg border border-white/10 shadow-inner">
+        <div className="p-5 bg-surface-container/95 border-t border-outline-variant/20 backdrop-blur-md shrink-0 z-20 shadow-2xl">
+          <div className="flex items-center justify-between mb-3 text-sm font-medium text-on-surface bg-surface-container-lowest/40 p-2.5 rounded-lg border border-outline-variant/40 shadow-inner">
             <span className="flex items-center gap-1.5 text-xs text-on-surface-variant"><Clock size={15} className="text-secondary" /> Хронометраж:</span>
             <span className="text-secondary font-mono tracking-widest">{formatTimecode(estimatedDuration)}</span>
           </div>
-          <Button variant="primary" onClick={handleCreate} disabled={isGenerating || !name || !markdown} className="w-full py-3 text-sm shadow-[0_0_20px_rgba(221,183,255,0.2)]">
+          <Button variant="primary" onClick={handleCreate} disabled={isGenerating || !name || !markdown} className="w-full py-3 text-sm shadow-lg shadow-primary/20">
             <FileText size={16} className="mr-1.5" /> Создать проект
           </Button>
         </div>
@@ -385,30 +375,27 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
               onInsertTag={insertTag}
               onToggleCaps={toggleCaps}
               hasSelection={hasSelection}
-              className="shrink-0 bg-surface-container/50 border-white/10 shadow-sm"
+              className="shrink-0 bg-surface-container/50 border-outline-variant/40 shadow-sm"
             />
-            <Button
+            <GradientButton
               onClick={handleRunLinter}
               disabled={isLinting}
-              className={`shrink-0 text-xs py-1.5 px-4 transition-all border ${showLinter ? 'bg-primary/20 text-primary border-primary/40' : 'bg-transparent text-on-surface-variant border-white/10 hover:text-white hover:bg-white/5'}`}
+              className="shrink-0 text-xs py-1.5 px-4"
+              icon={isLinting ? <Spinner className="w-3.5 h-3.5" /> : <Sparkles size={14} />}
             >
-              {isLinting ? <Spinner className="w-3.5 h-3.5 mr-2" /> : <Sparkles size={14} className="mr-2" />}
               Проверить сценарий (Линтер)
-            </Button>
+            </GradientButton>
           </div>
 
-          <div className="w-full bg-primary/5 border border-primary/20 px-4 py-2.5 rounded-xl flex items-center justify-between shadow-sm">
-            <div className="text-[11px] font-mono text-primary/80 leading-relaxed flex items-center gap-2">
-              <Mic size={16} className="shrink-0" />
-              <span><span className="font-bold">Шпаргалка (OmniVoice/MiniMax):</span> Эмоция: <code className="bg-black/40 px-1.5 py-0.5 rounded text-white">[emotion: happy]</code> • Паузы: <code className="bg-black/40 px-1.5 py-0.5 rounded text-white">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-black/40 px-1.5 py-0.5 rounded text-white">(sighs)</code></span>
-            </div>
-          </div>
+          <Alert variant="info" icon={<Mic size={16} />} className="font-mono text-2xs py-2.5">
+            <span className="font-bold">Шпаргалка (OmniVoice/MiniMax):</span> Эмоция: <code className="bg-surface-container-lowest/40 px-1.5 py-0.5 rounded text-on-surface">[emotion: happy]</code> • Паузы: <code className="bg-surface-container-lowest/40 px-1.5 py-0.5 rounded text-on-surface">&lt;#1.5#&gt;</code> • Звуки: <code className="bg-surface-container-lowest/40 px-1.5 py-0.5 rounded text-on-surface">(sighs)</code>
+          </Alert>
         </div>
 
         <div className="flex-1 flex overflow-hidden p-6 pt-3 gap-4 min-h-0">
-          <textarea
+          <TextArea
             ref={markdownRef}
-            className="flex-1 bg-surface-container/40 border border-white/10 rounded-2xl p-8 font-mono text-sm leading-relaxed text-on-surface resize-none outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 custom-scrollbar shadow-2xl transition-all"
+            className="flex-1 bg-surface-container/40 border border-outline-variant/40 rounded-2xl p-8 font-mono text-sm leading-relaxed text-on-surface resize-none outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 custom-scrollbar shadow-2xl transition-all"
             value={markdown}
             onChange={e => setMarkdown(e.target.value)}
             spellCheck={false}
@@ -417,12 +404,12 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
 
           {/* Боковая панель линтера (выезжает по кнопке) */}
           {showLinter && (
-            <div className="w-[340px] shrink-0 bg-surface-container border border-white/10 rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-300 shadow-2xl">
-              <div className="p-4 bg-surface-container-low border-b border-white/5 flex items-center justify-between">
-                <h3 className="font-bold text-white text-xs tracking-wide uppercase flex items-center gap-2">
+            <div className="w-[var(--layout-sidebar)] shrink-0 bg-surface-container border border-outline-variant/40 rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-300 shadow-2xl">
+              <div className="p-4 bg-surface-container-low border-b border-outline-variant/20 flex items-center justify-between">
+                <h3 className="font-bold text-on-surface text-xs tracking-wide uppercase flex items-center gap-2">
                   <Sparkles className="text-secondary" size={14} /> Режиссёрский линтер
                 </h3>
-                <button onClick={() => setShowLinter(false)} className="text-on-surface-variant hover:text-white text-sm leading-none px-1 py-0.5 cursor-pointer" title="Закрыть">
+                <button onClick={() => setShowLinter(false)} className="text-on-surface-variant hover:text-on-surface text-sm leading-none px-1 py-0.5 cursor-pointer" title="Закрыть">
                   ✕
                 </button>
               </div>
@@ -434,10 +421,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
                     Анализ драматургии и структуры...
                   </div>
                 ) : linterIssues.length === 0 ? (
-                  <div className="text-center text-on-surface-variant/50 mt-10 text-xs">
-                    <Check size={24} className="mx-auto mb-2 opacity-50 text-success" />
-                    Сценарий чист. Нарушений динамики и структуры не найдено.
-                  </div>
+                  <EmptyState icon={Check} title="Сценарий чист" description="Нарушений динамики и структуры не найдено." className="mt-6" />
                 ) : (
                   linterIssues.map((issue, idx) => {
                     const config = SeverityConfig[issue.severity] || SeverityConfig.Info
@@ -446,10 +430,10 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
                       <div key={`${issue.code}-${idx}`} className={`p-3 rounded-xl border flex flex-col gap-2 ${config.bg}`}>
                         <div className="flex items-start gap-2">
                           <Icon size={14} className={`mt-0.5 shrink-0 ${config.color}`} />
-                          <span className="text-xs text-white leading-tight font-medium">{issue.message}</span>
+                          <span className="text-xs text-on-surface leading-tight font-medium">{issue.message}</span>
                         </div>
                         {issue.code && (
-                          <span className="text-[10px] font-mono uppercase tracking-wide text-on-surface-variant/70">{issue.code}</span>
+                          <span className="text-xxs font-mono uppercase tracking-wide text-on-surface-variant/70">{issue.code}</span>
                         )}
                       </div>
                     )
@@ -459,6 +443,7 @@ export const ScenarioBuilder = ({ idea, videos, onBack, onCreate }: Props) => {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

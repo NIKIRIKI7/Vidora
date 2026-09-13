@@ -3,27 +3,27 @@ import type { SkillStage } from '@entities/skill'
 export const STAGE_CONFIG: Record<SkillStage, { label: string; color: string; desc: string }> = {
   scene_generation: {
     label: 'Scene Gen',
-    color: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    color: 'bg-primary/10 text-primary border-primary/30',
     desc: 'Генерация сцен и компонентов Remotion',
   },
   project: {
     label: 'Project Arch',
-    color: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    color: 'bg-primary/10 text-primary border-primary/30',
     desc: 'Композиция и структура таймлайна',
   },
   fragment: {
     label: 'Fragment',
-    color: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    color: 'bg-warning/10 text-warning border-warning/30',
     desc: 'Правки отдельных частей кода',
   },
   tts: {
     label: 'TTS Speech',
-    color: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
+    color: 'bg-tertiary/10 text-tertiary border-tertiary/30',
     desc: 'Нормализация и разметка озвучки',
   },
   script_drafting: {
     label: 'Script Draft',
-    color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+    color: 'bg-secondary/10 text-secondary border-secondary/30',
     desc: 'Генерация сценариев и скриптов',
   },
   hook_analysis: {
@@ -33,12 +33,12 @@ export const STAGE_CONFIG: Record<SkillStage, { label: string; color: string; de
   },
   broll_matching: {
     label: 'B-Roll Matcher',
-    color: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+    color: 'bg-error/10 text-error border-error/30',
     desc: 'Подбор и встраивание B-Roll видео по семантике фрагмента',
   },
   general: {
     label: 'General / Global',
-    color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30',
+    color: 'bg-surface-container-highest/10 text-on-surface-variant border-outline-variant/30',
     desc: 'Глобальные правила (всегда подмешиваются)',
   },
 }

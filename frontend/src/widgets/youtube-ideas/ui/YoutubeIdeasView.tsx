@@ -1,9 +1,9 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useRef, useEffect } from 'react'
-import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal } from '@shared/ui'
+import { Input, Button, Slider, FieldGroup, Spinner, Select, Modal, Tabs, TextArea, SegmentedControl, PageHeader, Badge } from '@shared/ui'
 import {
   Bot, X, Plus, Sparkles, CirclePlay, List, LayoutGrid,
-  BrainCircuit, Flame, FishingHook, Copy, ArrowLeft,
+  BrainCircuit, Flame, FishingHook, Copy,
   TrendingUp,
   MessageSquare, MessageCircle, TriangleAlert,
   Compass, Eye, Check
@@ -98,7 +98,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
 
   const defaultSaved = getSavedFilters()
 
-  const [activeTab, setActiveTab] = useState<'agent' | 'thumbnail'>('agent')
+  const [activeTab] = useState<'agent' | 'thumbnail'>('agent')
   const [searchEngine, setSearchEngine] = useState<'auto' | 'ytscrape' | 'api'>(defaultSaved?.searchEngine || 'auto')
   const [searchMode, setSearchMode] = useState<'trending' | 'competitors'>(defaultSaved?.searchMode || 'trending')
   const [videoType, setVideoType] = useState<'all' | 'long' | 'short'>(defaultSaved?.videoType || 'all')
@@ -431,20 +431,12 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
 
   return (
     <div className="flex flex-col w-full h-full bg-background animate-in fade-in duration-300">
-      <div className="flex border-b border-white/10 bg-surface-container/60 shrink-0 px-6 pt-4 gap-4 items-center">
-        <Button variant="ghost" icon={ArrowLeft} onClick={onBack} className="mb-1 p-2" />
-        <button
-          onClick={() => setActiveTab('agent')}
-          className={`px-8 py-3 text-sm font-semibold uppercase tracking-wide transition-colors rounded-t-xl ${activeTab === 'agent' ? 'bg-primary/20 text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:bg-white/5 hover:text-white'}`}
-        >
-          <Bot size={24} className="align-middle mr-2" /> AI-Агент (Идеи & Тренды)
-        </button>
-      </div>
+      <PageHeader title="AI-Агент (Идеи & Тренды)" icon={Bot} onBack={onBack} />
 
       <div className="flex-1 flex overflow-hidden">
         {activeTab === 'agent' && (
           <>
-            <div className="w-[340px] xl:w-[380px] flex flex-col gap-4 bg-surface-container-lowest/30 border-r border-white/10 p-5 shrink-0 overflow-y-auto custom-scrollbar">
+            <div className="w-[var(--layout-sidebar)] xl:w-[var(--layout-sidebar-lg)] flex flex-col gap-4 bg-surface-container-lowest/30 border-r border-outline-variant/40 p-5 shrink-0 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-3">
                 <FieldGroup label="Источник поиска">
                   <Select value={searchEngine} onChange={e => setSearchEngine(e.target.value as 'auto' | 'ytscrape' | 'api')} className="text-xs">
@@ -468,12 +460,12 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
               </div>
 
               {searchMode === 'competitors' ? (
-                <div className="flex flex-col gap-2 bg-surface-container-lowest/50 border border-white/5 p-3 rounded-xl">
+                <div className="flex flex-col gap-2 bg-surface-container-lowest/50 border border-outline-variant/20 p-3 rounded-xl">
                   <span className="text-xs font-label uppercase text-on-surface-variant">Каналы конкурентов</span>
                   <div className="flex flex-wrap gap-2">
                     {competitorChannels.map((ch, i) => (
                       <span key={i} className="bg-primary/10 border border-primary/20 text-primary px-2 py-1 rounded text-xs flex items-center gap-1">
-                        {ch} <span className="cursor-pointer hover:text-white" onClick={() => handleRemoveChannel(ch)}><X size={14} /></span>
+                        {ch} <span className="cursor-pointer hover:text-on-surface" onClick={() => handleRemoveChannel(ch)}><X size={14} /></span>
                       </span>
                     ))}
                   </div>
@@ -482,7 +474,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                     <Button variant="secondary" onClick={handleAddChannel} className="shrink-0 px-2 py-1 h-auto"><Plus size={16} /></Button>
                   </div>
                   <Button variant="dashed" onClick={handleSuggestCompetitors} disabled={isSuggestingCompetitors} className="mt-2 text-xs border-secondary/30 text-secondary hover:bg-secondary/10 py-1.5 h-auto">
-                    {isSuggestingCompetitors ? <Spinner className="text-[14px]" /> : <><Sparkles size={14} className="mr-1" /> Подобрать ИИ</>}
+                    {isSuggestingCompetitors ? <Spinner className="text-sm" /> : <><Sparkles size={14} className="mr-1" /> Подобрать ИИ</>}
                   </Button>
                 </div>
               ) : (
@@ -540,8 +532,8 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
 
               <FieldGroup label="О чем ваш канал? (Контекст)">
                 <div className="relative">
-                  <textarea
-                    className="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 px-3 pb-8 text-sm text-on-surface resize-none focus:border-primary/50"
+                  <TextArea
+                    className="w-full bg-surface-container-lowest border border-outline-variant/40 rounded-lg py-2 px-3 pb-8 text-sm text-on-surface resize-none focus:border-primary/50"
                     rows={3}
                     value={channelContext}
                     onChange={e => setChannelContext(e.target.value)}
@@ -549,7 +541,7 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                   />
                   {isYoutubeUrl(channelContext.trim()) && (
                     <div className="absolute bottom-2 right-2">
-                      <Button variant="secondary" onClick={handleAnalyzeChannel} disabled={isAnalyzingChannel} className="text-[10px] py-1 px-2 h-auto">
+                      <Button variant="secondary" onClick={handleAnalyzeChannel} disabled={isAnalyzingChannel} className="text-xxs py-1 px-2 h-auto">
                         {isAnalyzingChannel ? <Spinner className="w-3 h-3 mr-1" /> : <Sparkles size={12} className="mr-1" />}
                         Анализ
                       </Button>
@@ -566,10 +558,15 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                     <option value="local">Локально (Ollama / GGUF)</option>
                   </Select>
                 </FieldGroup>
-                <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-1 shrink-0">
-                  <button onClick={() => setTaskMode('scenario', 'cloud')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'cloud' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}>Облако</button>
-                  <button onClick={() => setTaskMode('scenario', 'local')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${taskModes.scenario === 'local' ? 'bg-success/20 text-success border border-success/30' : 'text-on-surface-variant hover:text-white'}`}>Локально</button>
-                </div>
+                <SegmentedControl
+                  fill
+                  value={taskModes.scenario}
+                  onChange={(v) => setTaskMode('scenario', v)}
+                  options={[
+                    { value: 'cloud', label: 'Облако' },
+                    { value: 'local', label: 'Локально', accent: 'success' },
+                  ]}
+                />
                 <FieldGroup label="Модель">
                   {taskModes.scenario === 'cloud' ? (
                     <>
@@ -595,13 +592,13 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                 </FieldGroup>
               </div>
 
-              <Button variant="primary" onClick={() => handleRunAgent()} disabled={isAgentRunning} className="mt-auto py-3 text-base shadow-[0_0_20px_rgba(221,183,255,0.2)]">
+              <Button variant="primary" onClick={() => handleRunAgent()} disabled={isAgentRunning} className="mt-auto py-3 text-base shadow-lg shadow-primary/20">
                 {isAgentRunning ? <><Spinner className="text-xl" /> Идет поиск...</> : <><CirclePlay size={20} /> Запустить поиск</>}
               </Button>
             </div>
 
             <div className="flex-1 flex flex-col p-6 gap-6 overflow-hidden relative bg-surface-container/10">
-              <div className="h-[120px] shrink-0 bg-[#0A0E17] border border-white/10 rounded-xl p-4 font-mono text-xs overflow-y-auto custom-scrollbar shadow-inner">
+              <div className="h-[var(--layout-chart-sm)] shrink-0 bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-4 font-mono text-xs overflow-y-auto custom-scrollbar shadow-inner">
                 {agentLogs.length === 0 && !isAgentRunning && <div className="text-on-surface-variant/50 m-auto text-center mt-6">Здесь будут отображаться этапы анализа...</div>}
                 {agentLogs.map((log, i) => (
                   <div key={i} className={`flex items-start gap-2 ${log.status === 'error' ? 'text-error font-bold' : log.status === 'success' ? 'text-success' : log.status === 'warning' ? 'text-warning' : 'text-primary'}`}>
@@ -609,22 +606,37 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                     <span>{log.message}</span>
                   </div>
                 ))}
-                {isAgentRunning && <div className="text-primary animate-pulse flex items-center gap-2 mt-2"><Spinner className="text-[12px]" /></div>}
+                {isAgentRunning && <div className="text-primary animate-pulse flex items-center gap-2 mt-2"><Spinner className="text-xs" /></div>}
                 <div ref={logsEndRef} />
               </div>
 
-              <div className="flex-1 bg-surface-900/60 border border-white/10 rounded-xl overflow-y-auto custom-scrollbar relative shadow-xl">
-                <div className="sticky top-0 z-30 flex justify-between items-center bg-surface-900/90 backdrop-blur-md px-6 py-3 border-b border-white/10">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setResultsTab('details')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${resultsTab === 'details' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><List size={18} /> Детали</button>
-                    <button onClick={() => setResultsTab('blue_ocean')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${resultsTab === 'blue_ocean' ? 'bg-cyan-500/20 text-cyan-300' : 'text-on-surface-variant hover:text-white'}`}>
-                      <Compass size={18} /> Голубые Океаны {blueOceanGaps.length > 0 && <span className="text-[10px] font-bold bg-cyan-500/25 text-cyan-300 px-1.5 py-0.2 rounded-full border border-cyan-500/30">{blueOceanGaps.length}</span>}
-                    </button>
-                    <button onClick={() => setResultsTab('goldmine')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${resultsTab === 'goldmine' ? 'bg-warning/20 text-warning' : 'text-on-surface-variant hover:text-white'}`}>
-                      <MessageSquare size={18} /> Боли &amp; Споры {goldmineReports.length > 0 && <span className="text-[10px] font-bold bg-warning/20 text-warning px-1.5 py-0.5 rounded-full">{goldmineReports.length}</span>}
-                    </button>
-                    <button onClick={() => setResultsTab('thumbnails')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${resultsTab === 'thumbnails' ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><Eye size={18} /> Обложки</button>
-                  </div>
+              <div className="flex-1 bg-surface-container-low/60 border border-outline-variant/40 rounded-xl overflow-y-auto custom-scrollbar relative shadow-xl">
+                <div className="sticky top-0 z-30 flex justify-between items-center bg-surface-container-low/90 backdrop-blur-md px-6 py-3 border-b border-outline-variant/40">
+                  <Tabs
+                    variant="pill"
+                    value={resultsTab}
+                    onChange={(id) => setResultsTab(id as typeof resultsTab)}
+                    items={[
+                      { id: 'details', label: 'Детали', icon: List },
+                      {
+                        id: 'blue_ocean',
+                        label: 'Голубые Океаны',
+                        icon: Compass,
+                        badge: blueOceanGaps.length > 0
+                          ? <span className="text-xxs font-bold bg-secondary/20 text-secondary px-1.5 rounded-full">{blueOceanGaps.length}</span>
+                          : undefined,
+                      },
+                      {
+                        id: 'goldmine',
+                        label: 'Боли & Споры',
+                        icon: MessageSquare,
+                        badge: goldmineReports.length > 0
+                          ? <span className="text-xxs font-bold bg-warning/20 text-warning px-1.5 rounded-full">{goldmineReports.length}</span>
+                          : undefined,
+                      },
+                      { id: 'thumbnails', label: 'Обложки', icon: Eye },
+                    ]}
+                  />
                   <ExportButton dataset={exportDataset} onNotify={showNotification} />
                 </div>
 
@@ -638,14 +650,14 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                             {earlySignals.map((s) => (
-                              <div key={s.id} className="bg-[#0A0E17] border border-white/10 rounded-xl p-4 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+                              <div key={s.id} className="bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-4 flex flex-col gap-3 hover:border-primary/40 transition-colors">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${s.vps_score >= 80 ? 'bg-error/20 text-error border-error/40' : 'bg-primary/20 text-primary border-primary/40'}`}>
+                                  <Badge variant={s.vps_score >= 80 ? 'error' : 'primary'} size="md">
                                     VPS: {s.vps_score}/100 {s.breakout ? '🔥 Breakout' : ''}
-                                  </span>
-                                  <span className="text-[10px] text-on-surface-variant font-medium">{s.growth_pct}</span>
+                                  </Badge>
+                                  <span className="text-xxs text-on-surface-variant font-medium">{s.growth_pct}</span>
                                 </div>
-                                <a href={s.source_url || `https://www.google.com/search?q=${encodeURIComponent(s.title)}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-white hover:text-secondary line-clamp-2 leading-snug">
+                                <a href={s.source_url || `https://www.google.com/search?q=${encodeURIComponent(s.title)}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-on-surface hover:text-secondary line-clamp-2 leading-snug">
                                   {s.title}
                                 </a>
                               </div>
@@ -660,32 +672,36 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                             <h3 className="text-on-surface font-bold text-xl flex items-center gap-2">
                               <Flame size={24} className="text-error" /> Найденные вирусные видео (по критериям)
                             </h3>
-                            <div className="flex items-center gap-1 bg-surface-800/60 border border-white/10 rounded-lg p-1 shrink-0">
-                              <button onClick={() => setIsGridView(false)} className={`px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1 transition-colors ${!isGridView ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><List size={14} /> Список</button>
-                              <button onClick={() => setIsGridView(true)} className={`px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1 transition-colors ${isGridView ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-white'}`}><LayoutGrid size={14} /> Сетка</button>
-                            </div>
+                            <SegmentedControl
+                              value={isGridView ? 'grid' : 'list'}
+                              onChange={(v) => setIsGridView(v === 'grid')}
+                              options={[
+                                { value: 'list', label: 'Список', icon: List },
+                                { value: 'grid', label: 'Сетка', icon: LayoutGrid },
+                              ]}
+                            />
                           </div>
 
                           <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" : "flex flex-col gap-3"}>
                             {!isGridView ? (
                               agentResults.map((v, i) => (
-                                <div key={i} className="bg-black/40 border border-white/10 p-3 rounded-xl flex items-center justify-between gap-4 hover:border-primary/40 transition-colors shadow-sm group">
-                                  <a href={v.url} target="_blank" rel="noopener noreferrer" className="relative w-44 shrink-0 aspect-video rounded-lg overflow-hidden bg-slate-900 block">
+                                <div key={i} className="bg-surface-container-lowest/40 border border-outline-variant/40 p-3 rounded-xl flex items-center justify-between gap-4 hover:border-primary/40 transition-colors shadow-sm group">
+                                  <a href={v.url} target="_blank" rel="noopener noreferrer" className="relative w-44 shrink-0 aspect-video rounded-lg overflow-hidden bg-surface-container-low block">
                                     <img src={v.thumbnail_url || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                    <div className="absolute top-1 right-1 bg-error text-white px-1.5 py-0.5 rounded text-[10px] font-black font-mono">
+                                    <div className="absolute top-1 right-1 bg-error text-on-surface px-1.5 py-0.5 rounded text-xxs font-black font-mono">
                                       {v.vph} VPH
                                     </div>
                                   </a>
                                   <div className="flex-1 min-w-0">
-                                    <a href={v.url} target="_blank" rel="noopener noreferrer" className="font-bold text-sm text-white hover:text-primary transition-colors line-clamp-1">
+                                    <a href={v.url} target="_blank" rel="noopener noreferrer" className="font-bold text-sm text-on-surface hover:text-primary transition-colors line-clamp-1">
                                       {v.title}
                                     </a>
                                     <div className="text-xs text-on-surface-variant mt-0.5">
                                       {v.channel} • {v.subs > 0 ? `${v.subs.toLocaleString('ru')} сабов` : ''} • {v.views.toLocaleString('ru')} views
                                     </div>
                                     <div className="flex gap-2 mt-2">
-                                      <span className="bg-warning/20 text-warning px-1.5 py-0.5 rounded text-[10px] font-bold border border-warning/30">x{v.ratio} ratio</span>
-                                      <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold border border-primary/30">{fmtDuration(v)}</span>
+                                      <span className="bg-warning/20 text-warning px-1.5 py-0.5 rounded text-xxs font-bold border border-warning/30">x{v.ratio} ratio</span>
+                                      <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xxs font-bold border border-primary/30">{fmtDuration(v)}</span>
                                     </div>
                                   </div>
                                   <Button variant="dashed" className="shrink-0 text-xs py-2 px-4 border-secondary/40 text-secondary hover:bg-secondary/10 flex items-center gap-1.5" onClick={() => handleAnalyzeHook(v)}>
@@ -695,21 +711,21 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                               ))
                             ) : (
                               agentResults.map((v, i) => (
-                                <div key={i} className="bg-black/40 border border-white/10 p-3 rounded-2xl flex flex-col gap-3 group hover:border-primary/30 transition-colors shadow-md relative">
-                                  <a href={v.url} target="_blank" rel="noopener noreferrer" className="relative rounded-xl overflow-hidden aspect-video block group/thumb bg-slate-900">
+                                <div key={i} className="bg-surface-container-lowest/40 border border-outline-variant/40 p-3 rounded-2xl flex flex-col gap-3 group hover:border-primary/30 transition-colors shadow-md relative">
+                                  <a href={v.url} target="_blank" rel="noopener noreferrer" className="relative rounded-xl overflow-hidden aspect-video block group/thumb bg-surface-container-low">
                                     <img src={v.thumbnail_url || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`} alt={v.title} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300" />
-                                    <div className="absolute top-2 right-2 bg-error text-white px-2 py-1 rounded-lg text-xs font-black shadow-lg border border-error/50">
+                                    <div className="absolute top-2 right-2 bg-error text-on-surface px-2 py-1 rounded-lg text-xs font-black shadow-lg border border-error/50">
                                       {v.vph} VPH 🔥
                                     </div>
                                   </a>
                                   <div className="flex-1">
-                                    <a href={v.url} target="_blank" rel="noopener noreferrer" className="font-bold text-[14px] line-clamp-2 leading-snug mb-1 text-white hover:text-primary transition-colors">
+                                    <a href={v.url} target="_blank" rel="noopener noreferrer" className="font-bold text-sm line-clamp-2 leading-snug mb-1 text-on-surface hover:text-primary transition-colors">
                                       {v.title}
                                     </a>
-                                    <div className="text-[11px] text-on-surface-variant mb-2">{v.channel} • {v.subs > 0 ? `${v.subs.toLocaleString('ru')} сабов` : ''} • {v.views.toLocaleString('ru')} views</div>
+                                    <div className="text-2xs text-on-surface-variant mb-2">{v.channel} • {v.subs > 0 ? `${v.subs.toLocaleString('ru')} сабов` : ''} • {v.views.toLocaleString('ru')} views</div>
                                     <div className="flex gap-2 flex-wrap">
-                                      <span className="bg-warning/20 text-warning px-1.5 py-0.5 rounded text-[10px] font-bold border border-warning/30">x{v.ratio} ratio</span>
-                                      <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold border border-primary/30">{fmtDuration(v)}</span>
+                                      <span className="bg-warning/20 text-warning px-1.5 py-0.5 rounded text-xxs font-bold border border-warning/30">x{v.ratio} ratio</span>
+                                      <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xxs font-bold border border-primary/30">{fmtDuration(v)}</span>
                                     </div>
                                   </div>
                                   <div className="mt-auto pt-2 flex items-center gap-2">
@@ -726,11 +742,11 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                             <button
                               onClick={handleLoadMoreVideos}
                               disabled={isAgentRunning}
-                              className="flex items-center gap-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl border border-white/10 shadow-lg transition-all cursor-pointer"
+                              className="flex items-center gap-2 px-6 py-2.5 bg-surface-container-high hover:bg-surface-container-highest active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-on-surface text-sm font-semibold rounded-xl border border-outline-variant/40 shadow-lg transition-all cursor-pointer"
                             >
                               {isAgentRunning ? (
                                 <>
-                                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                  <div className="w-4 h-4 border-2 border-outline-variant/80 border-t-white rounded-full animate-spin" />
                                   <span>ИИ ищет новые ролики по Google Trends...</span>
                                 </>
                               ) : (
@@ -750,10 +766,10 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                     <div className="flex flex-col gap-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-cyan-300 font-bold text-xl flex items-center gap-2">
+                          <h3 className="text-secondary font-bold text-xl flex items-center gap-2">
                             <Compass size={24} /> Голубые Океаны (Ниши без конкуренции)
                           </h3>
-                          <p className="text-xs text-slate-400 mt-1">
+                          <p className="text-xs text-on-surface-variant mt-1">
                             Темы с высоким спросом аудитории, где еще нет доминирующих видео крупных каналов.
                           </p>
                         </div>
@@ -765,10 +781,10 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                       </div>
 
                       {blueOceanGaps.length === 0 ? (
-                        <div className="w-full py-16 flex flex-col items-center justify-center text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
-                          <Compass className="w-12 h-12 text-cyan-400/40 mb-3" />
-                          <h4 className="text-base font-bold text-white mb-1">Голубые Океаны еще не выделены</h4>
-                          <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
+                        <div className="w-full py-16 flex flex-col items-center justify-center text-center bg-surface-container-low/40 rounded-2xl border border-dashed border-outline-variant">
+                          <Compass className="w-12 h-12 text-secondary/40 mb-3" />
+                          <h4 className="text-base font-bold text-on-surface mb-1">Голубые Океаны еще не выделены</h4>
+                          <p className="text-xs text-on-surface-variant max-w-md mb-5 leading-relaxed">
                             Нажмите кнопку ниже, чтобы ИИ сопоставил ранние сигналы с базой видео и сформировал свободные ниши.
                           </p>
                           <Button variant="primary" onClick={handleSynthesizeBlueOceansLocally} className="text-xs">
@@ -778,30 +794,30 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {blueOceanGaps.map((gap, i) => (
-                            <div key={i} className="bg-slate-900/90 border border-cyan-500/20 hover:border-cyan-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all">
+                            <div key={i} className="bg-surface-container-low/90 border border-secondary/20 hover:border-secondary/50 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all">
                               <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                  <span className="text-xxs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-secondary/20 text-secondary border border-secondary/30">
                                     Оценка: {gap.opportunity_score}/100
                                   </span>
-                                  <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                                  <span className="text-xxs font-mono text-success font-semibold">
                                     {gap.status}
                                   </span>
                                 </div>
-                                <h4 className="font-bold text-white text-sm leading-snug">
+                                <h4 className="font-bold text-on-surface text-sm leading-snug">
                                   {gap.topic}
                                 </h4>
-                                <p className="text-xs text-slate-300 leading-relaxed bg-black/30 p-2.5 rounded-xl border border-white/5">
+                                <p className="text-xs text-on-surface leading-relaxed bg-surface-container-lowest/30 p-2.5 rounded-xl border border-outline-variant/20">
                                   💡 {gap.actionable_angle}
                                 </p>
                               </div>
-                              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
-                                <span className="text-[11px] text-slate-400 font-mono">
-                                  Источник: <b className="text-slate-300">{gap.demand_source}</b>
+                              <div className="pt-3 border-t border-outline-variant flex items-center justify-between text-xs">
+                                <span className="text-2xs text-on-surface-variant font-mono">
+                                  Источник: <b className="text-on-surface">{gap.demand_source}</b>
                                 </span>
                                 <button
                                   onClick={() => copyToClipboard(gap.topic, `ocean_${i}`)}
-                                  className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-300 hover:text-black rounded-lg transition-all text-xs font-semibold flex items-center gap-1"
+                                  className="px-2.5 py-1 bg-secondary/10 hover:bg-secondary text-secondary hover:text-surface-container-lowest rounded-lg transition-all text-xs font-semibold flex items-center gap-1"
                                 >
                                   {copiedKey === `ocean_${i}` ? <><Check size={12} /> Скопировано</> : <><Copy size={12} /> Тема</>}
                                 </button>
@@ -817,20 +833,20 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                     <div className="flex flex-col gap-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-amber-300 font-bold text-xl flex items-center gap-2">
+                          <h3 className="text-warning font-bold text-xl flex items-center gap-2">
                             <MessageSquare size={24} /> Золотая Жила Комментариев (Боли &amp; Споры)
                           </h3>
-                          <p className="text-xs text-slate-400 mt-1">
+                          <p className="text-xs text-on-surface-variant mt-1">
                             Реальные вопросы, фрустрации и разногласия зрителей, из которых получаются темы с максимальным CTR.
                           </p>
                         </div>
                       </div>
 
                       {goldmineReports.length === 0 ? (
-                        <div className="w-full py-16 flex flex-col items-center justify-center text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
-                          <MessageCircle className="w-12 h-12 text-amber-400/40 mb-3" />
-                          <h4 className="text-base font-bold text-white mb-1">Анализ комментариев еще не выполнен</h4>
-                          <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
+                        <div className="w-full py-16 flex flex-col items-center justify-center text-center bg-surface-container-low/40 rounded-2xl border border-dashed border-outline-variant">
+                          <MessageCircle className="w-12 h-12 text-warning/40 mb-3" />
+                          <h4 className="text-base font-bold text-on-surface mb-1">Анализ комментариев еще не выполнен</h4>
+                          <p className="text-xs text-on-surface-variant max-w-md mb-5 leading-relaxed">
                             Запустите поиск видео — ИИ извлечет комментарии и выделит боли зрителей.
                           </p>
                           <Button variant="secondary" onClick={() => handleRunAgent(undefined, false)} disabled={isAgentRunning} className="text-xs">
@@ -841,21 +857,21 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {goldmineReports.map((report, i) => (
-                            <div key={i} className="bg-slate-900/90 border border-amber-500/20 hover:border-amber-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all">
+                            <div key={i} className="bg-surface-container-low/90 border border-warning/20 hover:border-warning/50 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all">
                               <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  <span className="text-xxs font-bold px-2 py-0.5 rounded-full bg-warning/20 text-warning border border-warning/30">
                                     {report.confusion_status || 'DISRUPTION_OPPORTUNITY'}
                                   </span>
-                                  <span className="text-[10px] font-mono text-slate-400">
+                                  <span className="text-xxs font-mono text-on-surface-variant">
                                     {report.views?.toLocaleString('ru')} views • {report.vph} VPH
                                   </span>
                                 </div>
-                                <h4 className="font-bold text-white text-sm leading-snug line-clamp-2">
+                                <h4 className="font-bold text-on-surface text-sm leading-snug line-clamp-2">
                                   {report.video_title}
                                 </h4>
                                 {report.actionable_fix && (
-                                  <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/20 text-xs text-amber-200">
+                                  <div className="p-2.5 rounded-xl bg-warning/20 border border-warning/20 text-xs text-warning">
                                     <span className="font-bold block mb-1">🛠️ Как снять лучше:</span>
                                     {report.actionable_fix}
                                   </div>
@@ -863,18 +879,18 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                                 {report.top_pains && report.top_pains.length > 0 && (
                                   <div className="flex flex-wrap gap-1.5 mt-1">
                                     {report.top_pains.map((p, pIdx) => (
-                                      <span key={pIdx} className="text-[11px] px-2 py-1 bg-black/40 border border-white/10 rounded-lg text-slate-300 flex items-center gap-1">
-                                        <span className="text-amber-400">🔥</span> {p.topic} <b className="text-secondary font-mono">({p.count})</b>
+                                      <span key={pIdx} className="text-2xs px-2 py-1 bg-surface-container-lowest/40 border border-outline-variant/40 rounded-lg text-on-surface flex items-center gap-1">
+                                        <span className="text-warning">🔥</span> {p.topic} <b className="text-secondary font-mono">({p.count})</b>
                                       </span>
                                     ))}
                                   </div>
                                 )}
                               </div>
-                              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                                <span>Вопросы: <b className="text-white">{report.questions_count || 0}</b> • Споры: <b className="text-white">{report.debates_count || 0}</b></span>
+                              <div className="pt-2 border-t border-outline-variant flex items-center justify-between text-xs text-on-surface-variant">
+                                <span>Вопросы: <b className="text-on-surface">{report.questions_count || 0}</b> • Споры: <b className="text-on-surface">{report.debates_count || 0}</b></span>
                                 <button
                                   onClick={() => copyToClipboard(report.actionable_fix || report.video_title, `fix_${i}`)}
-                                  className="text-xs text-amber-300 hover:underline flex items-center gap-1"
+                                  className="text-xs text-warning hover:underline flex items-center gap-1"
                                 >
                                   {copiedKey === `fix_${i}` ? <><Check size={12} /> Скопировано</> : <><Copy size={12} /> Скопировать инсайт</>}
                                 </button>
@@ -890,50 +906,50 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                     <div className="flex flex-col gap-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-purple-300 font-bold text-xl flex items-center gap-2">
+                          <h3 className="text-primary font-bold text-xl flex items-center gap-2">
                             <Eye size={24} /> Анализ Вирусных Обложек (Thumbnails)
                           </h3>
-                          <p className="text-xs text-slate-400 mt-1">
+                          <p className="text-xs text-on-surface-variant mt-1">
                             Визуальные паттерны, компоновки и заголовки, обеспечившие максимальный CTR в вашей нише.
                           </p>
                         </div>
                       </div>
 
                       {agentResults.length === 0 ? (
-                        <div className="w-full py-16 flex flex-col items-center justify-center text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
-                          <Eye className="w-12 h-12 text-purple-400/40 mb-3" />
-                          <h4 className="text-base font-bold text-white mb-1">Нет роликов для визуального анализа</h4>
-                          <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
+                        <div className="w-full py-16 flex flex-col items-center justify-center text-center bg-surface-container-low/40 rounded-2xl border border-dashed border-outline-variant">
+                          <Eye className="w-12 h-12 text-primary/40 mb-3" />
+                          <h4 className="text-base font-bold text-on-surface mb-1">Нет роликов для визуального анализа</h4>
+                          <p className="text-xs text-on-surface-variant max-w-md mb-5 leading-relaxed">
                             Запустите поиск, чтобы собрать ролики с наивысшим VPH и изучить их обложки.
                           </p>
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                           {agentResults.map((v, i) => (
-                            <div key={i} className="bg-slate-900/80 border border-slate-800 hover:border-purple-500/40 rounded-2xl p-3 flex flex-col justify-between gap-3 shadow-lg group transition-all">
-                              <div className="relative aspect-video rounded-xl overflow-hidden bg-black">
+                            <div key={i} className="bg-surface-container-low/80 border border-outline-variant hover:border-primary/40 rounded-2xl p-3 flex flex-col justify-between gap-3 shadow-lg group transition-all">
+                              <div className="relative aspect-video rounded-xl overflow-hidden bg-surface-container-lowest">
                                 <img
                                   src={v.thumbnail_url || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
                                   alt={v.title}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                 />
-                                <div className="absolute top-2 right-2 bg-purple-600/90 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded-md shadow">
+                                <div className="absolute top-2 right-2 bg-primary/90 text-on-surface font-mono text-xxs font-bold px-2 py-0.5 rounded-md shadow">
                                   {v.vph} VPH
                                 </div>
-                                <span className="absolute bottom-2 left-2 bg-black/80 text-cyan-300 font-mono text-[10px] px-1.5 py-0.5 rounded">
+                                <span className="absolute bottom-2 left-2 bg-surface-container-lowest/80 text-secondary font-mono text-xxs px-1.5 py-0.5 rounded">
                                   x{v.ratio} Ratio
                                 </span>
                               </div>
                               <div className="flex flex-col gap-1">
-                                <h4 className="text-xs font-bold text-white line-clamp-2 leading-snug">
+                                <h4 className="text-xs font-bold text-on-surface line-clamp-2 leading-snug">
                                   {v.title}
                                 </h4>
-                                <span className="text-[11px] text-slate-400 truncate">{v.channel}</span>
+                                <span className="text-2xs text-on-surface-variant truncate">{v.channel}</span>
                               </div>
-                              <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                              <div className="pt-2 border-t border-outline-variant flex items-center justify-between">
                                 <button
                                   onClick={() => copyToClipboard(`Промпт для обложки на тему: "${v.title}". Стиль: YouTube High CTR thumbnail, эмоциональный акцент, контрастный неоновый свет, минималистичный текст до 3 слов.`, `thumb_${i}`)}
-                                  className="w-full py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                                  className="w-full py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
                                 >
                                   {copiedKey === `thumb_${i}` ? <><Check size={12} /> Скопировано</> : <><Sparkles size={12} /> Промпт для обложки</>}
                                 </button>
@@ -959,18 +975,18 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
       className="max-w-3xl"
     >
       {selectedVideoForHook && (
-        <div className="flex flex-col gap-5 text-slate-100 pb-2">
-          <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
+        <div className="flex flex-col gap-5 text-on-surface pb-2">
+          <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-surface-container-low border border-outline-variant">
             <div className="flex-1 min-w-0">
-              <span className="text-[11px] text-slate-400 font-mono block mb-1">
+              <span className="text-2xs text-on-surface-variant font-mono block mb-1">
                 {selectedVideoForHook.channel} • {selectedVideoForHook.views.toLocaleString('ru')} просмотров
               </span>
-              <h4 className="text-sm font-bold text-white line-clamp-2">
+              <h4 className="text-sm font-bold text-on-surface line-clamp-2">
                 {selectedVideoForHook.title}
               </h4>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 font-bold font-mono text-xs border border-rose-500/30">
+              <span className="px-2.5 py-1 rounded-lg bg-error/20 text-error font-bold font-mono text-xs border border-error/30">
                 {selectedVideoForHook.vph} VPH 🔥
               </span>
               <span className="px-2 py-1 rounded-lg bg-secondary/15 text-secondary font-mono text-xs border border-secondary/30">
@@ -981,38 +997,38 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
 
           {/* Реальный транскрипт первых секунд */}
           {hookData?.transcript_snippet && hookData.transcript_snippet.length > 20 && (
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-              <span className="text-slate-400 font-mono text-[10px] uppercase font-bold block mb-1">Оригинальный транскрипт (0:00 - 0:30):</span>
-              <p className="text-slate-200 italic leading-relaxed font-mono">«{hookData.transcript_snippet}»</p>
+            <div className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant text-xs">
+              <span className="text-on-surface-variant font-mono text-xxs uppercase font-bold block mb-1">Оригинальный транскрипт (0:00 - 0:30):</span>
+              <p className="text-on-surface italic leading-relaxed font-mono">«{hookData.transcript_snippet}»</p>
             </div>
           )}
 
           {/* График тепловой карты удержания */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Flame size={14} className="text-rose-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant flex items-center gap-1.5">
+                <Flame size={14} className="text-error" />
                 Тепловая карта удержания (YouTube Retention)
               </span>
-              <span className="text-[11px] font-mono text-secondary">
+              <span className="text-2xs font-mono text-secondary">
                 Пик удержания: 0:12 (93%)
               </span>
             </div>
 
-            <div className="relative h-28 w-full bg-[#080d16] rounded-xl border border-slate-800 p-3 flex flex-col justify-end overflow-hidden">
+            <div className="relative h-28 w-full bg-surface-container-lowest rounded-xl border border-outline-variant p-3 flex flex-col justify-end overflow-hidden">
               <div
-                className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-rose-500/20 to-transparent border-r border-rose-500/40 pointer-events-none z-0"
+                className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-error/20 to-transparent border-r border-error/40 pointer-events-none z-0"
                 style={{ width: '25%' }}
               >
-                <span className="absolute top-2 left-2 text-[9px] font-mono text-rose-300 uppercase tracking-wider bg-black/60 px-1.5 py-0.5 rounded border border-rose-500/30">
+                <span className="absolute top-2 left-2 text-3xs font-mono text-error uppercase tracking-wider bg-surface-container-lowest/60 px-1.5 py-0.5 rounded border border-error/30">
                   Зона хука 0-15s
                 </span>
               </div>
               <svg viewBox="0 0 1000 120" className="w-full h-full z-10 overflow-visible" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="hookRetGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.45" />
-                    <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+                    <stop offset="0%" style={{ stopColor: 'var(--color-secondary)', stopOpacity: 0.45 }} />
+                    <stop offset="100%" style={{ stopColor: 'var(--color-secondary)', stopOpacity: 0 }} />
                   </linearGradient>
                 </defs>
                 {(() => {
@@ -1031,13 +1047,13 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                   return (
                     <>
                       <path d={areaStr} fill="url(#hookRetGrad)" />
-                      <path d={dStr} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" />
+                      <path d={dStr} fill="none" style={{ stroke: 'var(--color-secondary)' }} strokeWidth="2.5" strokeLinecap="round" />
                     </>
                   );
                 })()}
               </svg>
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1 border-t border-slate-800/80 pt-1 z-10">
-                <span className="text-rose-400 font-medium">0:00 (Старт)</span>
+              <div className="flex justify-between text-xxs text-outline mt-1 border-t border-outline-variant/80 pt-1 z-10">
+                <span className="text-error font-medium">0:00 (Старт)</span>
                 <span>0:15 (Хук)</span>
                 <span>0:45</span>
                 <span>1:30</span>
@@ -1047,31 +1063,31 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
           </div>
 
           {isHookAnalyzing ? (
-            <div className="py-10 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <div className="py-10 flex flex-col items-center justify-center gap-3 text-on-surface-variant">
               <Spinner className="text-3xl text-secondary" />
               <span className="text-xs font-medium">LLM деконструирует психологию хука и генерирует вирусные формулы...</span>
             </div>
           ) : hookData ? (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-900 border border-primary/20 rounded-xl flex flex-col gap-1">
+                <div className="p-3 bg-surface-container-low border border-primary/20 rounded-xl flex flex-col gap-1">
                   <div className="flex items-center gap-1.5 text-primary font-bold text-xs">
                     <BrainCircuit size={14} />
                     Психология удержания
                   </div>
-                  <p className="text-slate-300 leading-relaxed text-xs">{hookData.psychology}</p>
+                  <p className="text-on-surface leading-relaxed text-xs">{hookData.psychology}</p>
                 </div>
-                <div className="p-3 bg-slate-900 border border-rose-500/20 rounded-xl flex flex-col gap-1">
-                  <div className="flex items-center gap-1.5 text-rose-400 font-bold text-xs">
+                <div className="p-3 bg-surface-container-low border border-error/20 rounded-xl flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5 text-error font-bold text-xs">
                     <TriangleAlert size={14} />
                     Слабые места оригинала
                   </div>
-                  <p className="text-slate-300 leading-relaxed text-xs">{hookData.flaws_identified}</p>
+                  <p className="text-on-surface leading-relaxed text-xs">{hookData.flaws_identified}</p>
                 </div>
               </div>
 
               <div className="flex flex-col gap-2.5">
-                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
                   <Sparkles size={14} className="text-secondary" />
                   Адаптированные формулы хуков для вашего видео:
                 </span>
@@ -1079,25 +1095,25 @@ export const YoutubeIdeasView = ({ onBack }: Props) => {
                   {(hookData.stolen_hooks || []).map((h, idx) => {
                     const hook = typeof h === 'string' ? { angle: h, hook_0_5s: '', hook_5_20s: '', why_it_converts: '' } : h
                     return (
-                    <div key={idx} className="p-3.5 bg-slate-900 border border-slate-800 hover:border-secondary/40 rounded-xl transition-all flex flex-col gap-2">
+                    <div key={idx} className="p-3.5 bg-surface-container-low border border-outline-variant hover:border-secondary/40 rounded-xl transition-all flex flex-col gap-2">
                       <div className="flex justify-between items-center">
                         <span className="text-secondary font-bold text-xs">Угол {idx + 1}: {hook.angle}</span>
                         <button
                           onClick={() => copyToClipboard(`${hook.hook_0_5s} ${hook.hook_5_20s}`, `hook_${idx}`)}
-                          className="px-2.5 py-1 bg-secondary/15 hover:bg-secondary text-secondary hover:text-black font-semibold rounded-lg transition-all flex items-center gap-1 text-[11px]"
+                          className="px-2.5 py-1 bg-secondary/15 hover:bg-secondary text-secondary hover:text-surface-container-lowest font-semibold rounded-lg transition-all flex items-center gap-1 text-2xs"
                         >
                           {copiedKey === `hook_${idx}` ? <><Check size={12} /> Скопировано</> : <><Copy size={12} /> Скопировать формулу</>}
                         </button>
                       </div>
-                      <div className="p-2 rounded bg-black/50 border-l-2 border-rose-500 text-xs">
-                        <span className="text-[10px] text-rose-400 uppercase font-mono block font-bold">0:00 - 0:05 (Разрыв шаблона):</span>
-                        <span className="text-white font-medium">{hook.hook_0_5s}</span>
+                      <div className="p-2 rounded bg-surface-container-lowest/50 border-l-2 border-error text-xs">
+                        <span className="text-xxs text-error uppercase font-mono block font-bold">0:00 - 0:05 (Разрыв шаблона):</span>
+                        <span className="text-on-surface font-medium">{hook.hook_0_5s}</span>
                       </div>
-                      <div className="p-2 rounded bg-black/50 border-l-2 border-secondary text-xs">
-                        <span className="text-[10px] text-secondary uppercase font-mono block font-bold">0:05 - 0:20 (Закрепление интриги):</span>
-                        <span className="text-slate-200">{hook.hook_5_20s}</span>
+                      <div className="p-2 rounded bg-surface-container-lowest/50 border-l-2 border-secondary text-xs">
+                        <span className="text-xxs text-secondary uppercase font-mono block font-bold">0:05 - 0:20 (Закрепление интриги):</span>
+                        <span className="text-on-surface">{hook.hook_5_20s}</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 italic">
+                      <div className="text-xxs text-on-surface-variant italic">
                         Почему это сработает: {hook.why_it_converts}
                       </div>
                     </div>

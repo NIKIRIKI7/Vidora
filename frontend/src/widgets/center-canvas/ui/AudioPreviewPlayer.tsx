@@ -36,7 +36,7 @@ export const AudioPreviewPlayer = ({ audioPath, fragments, activeFragmentId, onA
   if (!audioPath) return null
 
   return (
-    <div className="flex flex-col gap-2 p-3 bg-surface-container border border-white/10 rounded-xl">
+    <div className="flex flex-col gap-2 p-3 bg-surface-container border border-outline-variant/40 rounded-xl">
       <audio ref={audioRef} src={`${API}/api/v1/render/media?path=${encodeURIComponent(audioPath)}`} onEnded={() => setIsPlaying(false)} />
       <div className="flex items-center gap-3">
         <Button variant="icon" icon={isPlaying ? Pause : Play} onClick={() => {

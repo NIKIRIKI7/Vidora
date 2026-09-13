@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { SceneFragment, BackgroundMusicSettings } from '@entities/project'
-import { Button } from '@shared/ui'
-import { Play, Pause, ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split, Volume2, VolumeX, Video } from 'lucide-react'
+import { Button, IconButton } from '@shared/ui'
+import { Play, Pause, ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split, Volume2, VolumeX, Video, Plus, Settings } from 'lucide-react'
 
 type TimelineTool = 'select' | 'razor'
 
@@ -21,7 +21,14 @@ interface TimelineProps {
   onOpenBRollModal?: (scope: 'fragment' | 'scene' | 'project', fragId?: string) => void
 }
 
-const WaveformCanvas = React.memo(({ width, height = 36, seed, color = '#ddb7ff' }: { width: number; height?: number; seed: string; color?: string }) => {
+const resolveCssColor = (value: string) => {
+  const match = value.match(/^var\((--[\w-]+)\)$/)
+  if (!match) return value
+  const resolved = getComputedStyle(document.documentElement).getPropertyValue(match[1]).trim()
+  return resolved || value
+}
+
+const WaveformCanvas = React.memo(({ width, height = 36, seed, color = 'var(--color-primary)' }: { width: number; height?: number; seed: string; color?: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -30,7 +37,7 @@ const WaveformCanvas = React.memo(({ width, height = 36, seed, color = '#ddb7ff'
     if (!ctx) return
     const clampedW = Math.max(1, Math.floor(width))
     ctx.clearRect(0, 0, clampedW, height)
-    ctx.fillStyle = color
+    ctx.fillStyle = resolveCssColor(color)
     let h = Array.from(seed).reduce((a, b) => a + b.charCodeAt(0), 0) + 123
     const step = 4
     const barWidth = 2
@@ -274,8 +281,8 @@ export const Timeline = ({
     const step = zoom < 50 ? 5 : zoom < 80 ? 2 : 1
     for (let i = 0; i <= Math.ceil(duration); i += step) {
       ticks.push(
-        <div key={i} className="absolute top-0 bottom-0 border-l border-white/20 pointer-events-none" style={{ left: i * zoom }}>
-          <span className="absolute top-1 left-1.5 text-[9px] font-mono text-on-surface-variant select-none opacity-60">{i}s</span>
+        <div key={i} className="absolute top-0 bottom-0 border-l border-outline-variant/80 pointer-events-none" style={{ left: i * zoom }}>
+          <span className="absolute top-1 left-1.5 text-3xs font-mono text-on-surface-variant select-none opacity-60">{i}s</span>
         </div>
       )
     }
@@ -283,108 +290,104 @@ export const Timeline = ({
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-surface-container/90 backdrop-blur-xl select-none border-t border-white/10">
-      <div className="h-10 border-b border-white/10 flex items-center px-4 justify-between bg-surface-container-lowest/70 shrink-0">
+    <div className="w-full h-full flex flex-col bg-surface-container/90 backdrop-blur-xl select-none border-t border-outline-variant/40">
+      <div className="h-10 border-b border-outline-variant/40 flex items-center px-4 justify-between bg-surface-container-lowest/70 shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" className="p-1 w-8 h-8 rounded-full hover:bg-primary/20" onClick={togglePlay} title="Воспроизведение (Space)">
             {isPlaying ? <Pause size={18} className="text-primary" /> : <Play size={18} className="text-primary fill-primary" />}
           </Button>
-          <span className="font-mono text-xs text-primary font-bold tracking-widest bg-black/40 px-2 py-1 rounded border border-primary/20">{formatTime(currentTime)}</span>
+          <span className="font-mono text-xs text-primary font-bold tracking-widest bg-surface-container-lowest/40 px-2 py-1 rounded border border-primary/20">{formatTime(currentTime)}</span>
         </div>
-        <div className="flex items-center gap-1 bg-surface-container-lowest border border-white/10 p-0.5 rounded-lg">
-          <button
+        <div className="flex items-center gap-1 bg-surface-container-lowest border border-outline-variant/40 p-0.5 rounded-lg">
+          <IconButton
+            icon={MousePointer}
+            accent="primary"
+            active={activeTool === 'select'}
             onClick={() => setActiveTool('select')}
-            className={`p-1.5 rounded transition-all flex items-center gap-1 text-xs ${activeTool === 'select' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
             title="Курсор выбора (V)"
-          >
-            <MousePointer size={14} /><span className="text-[10px] font-mono hidden lg:inline">Выбор (V)</span>
-          </button>
-          <button
+          />
+          <IconButton
+            icon={Scissors}
+            accent="error"
+            active={activeTool === 'razor'}
             onClick={() => setActiveTool('razor')}
-            className={`p-1.5 rounded transition-all flex items-center gap-1 text-xs ${activeTool === 'razor' ? 'bg-error/20 text-error border border-error/40' : 'text-on-surface-variant hover:text-white'}`}
             title="Лезвие (C)"
-          >
-            <Scissors size={14} /><span className="text-[10px] font-mono hidden lg:inline">Лезвие (C)</span>
-          </button>
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          <button
+          />
+          <div className="w-px h-4 bg-on-surface/10 mx-1" />
+          <IconButton
+            icon={Split}
+            accent="secondary"
             onClick={() => {
               const currentFrag = computedFragments.find(f => currentTime > f.computedStart + 0.1 && currentTime < f.computedEnd - 0.1)
               if (currentFrag) onSplitFragment?.(currentFrag.id, currentTime)
             }}
-            className="p-1.5 text-on-surface-variant hover:text-secondary hover:bg-white/5 rounded text-xs transition-colors flex items-center gap-1"
             title="Разрезать по плейхеду (S / Ctrl+K)"
-          >
-            <Split size={14} /><span className="text-[10px] hidden lg:inline">Разрезать (S)</span>
-          </button>
-          <button
+          />
+          <IconButton
+            icon={Copy}
+            accent="primary"
+            disabled={!selectedFragmentId}
             onClick={() => selectedFragmentId && onDuplicateFragment?.(selectedFragmentId)}
-            disabled={!selectedFragmentId}
-            className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-white/5 rounded text-xs transition-colors disabled:opacity-30"
             title="Дублировать (Ctrl+D)"
-          >
-            <Copy size={14} />
-          </button>
-          <button
-            onClick={() => selectedFragmentId && onDeleteFragment?.(selectedFragmentId)}
+          />
+          <IconButton
+            icon={Trash2}
+            accent="error"
             disabled={!selectedFragmentId}
-            className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/10 rounded text-xs transition-colors disabled:opacity-30"
+            onClick={() => selectedFragmentId && onDeleteFragment?.(selectedFragmentId)}
             title="Удалить (Delete)"
-          >
-            <Trash2 size={14} />
-          </button>
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          <button
+          />
+          <div className="w-px h-4 bg-on-surface/10 mx-1" />
+          <IconButton
+            icon={isAudioLinked ? Link : Unlink}
+            accent={isAudioLinked ? 'primary' : 'warning'}
+            active={isAudioLinked}
             onClick={() => setIsAudioLinked((l) => !l)}
-            className={`p-1.5 rounded transition-colors text-xs flex items-center gap-1 ${isAudioLinked ? 'text-primary hover:bg-primary/10' : 'text-warning bg-warning/10 border border-warning/30'}`}
             title="Связка аудио и визуала"
-          >
-            {isAudioLinked ? <Link size={14} /> : <Unlink size={14} />}
-          </button>
-          <button
+          />
+          <IconButton
+            icon={Magnet}
+            accent="secondary"
+            active={isSnapEnabled}
             onClick={() => setIsSnapEnabled((s) => !s)}
-            className={`p-1.5 rounded transition-colors ${isSnapEnabled ? 'text-secondary hover:bg-secondary/10' : 'text-on-surface-variant/50'}`}
             title="Магнитная привязка (M)"
-          >
-            <Magnet size={14} />
-          </button>
+          />
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" className="p-1 w-7 h-7" onClick={() => setZoom((z) => Math.max(30, z - 20))}>
             <ZoomOut size={15} />
           </Button>
-          <span className="text-[10px] text-on-surface-variant font-mono w-10 text-center">{zoom}px/s</span>
+          <span className="text-xxs text-on-surface-variant font-mono w-10 text-center">{zoom}px/s</span>
           <Button variant="ghost" className="p-1 w-7 h-7" onClick={() => setZoom((z) => Math.min(300, z + 20))}>
             <ZoomIn size={15} />
           </Button>
         </div>
       </div>
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-28 shrink-0 border-r border-white/10 bg-surface-container-lowest/40 flex flex-col z-20">
-          <div className="h-7 border-b border-white/5 px-3 flex items-center text-[9px] font-mono uppercase text-on-surface-variant/60">Шкала</div>
-          <div className="h-12 flex items-center px-3 text-[10px] uppercase font-bold text-on-surface border-b border-white/5">Сценарий</div>
-          <div className="h-12 flex items-center justify-between px-3 text-[10px] uppercase font-bold text-secondary border-b border-white/5">
+        <div className="w-28 shrink-0 border-r border-outline-variant/40 bg-surface-container-lowest/40 flex flex-col z-20">
+          <div className="h-7 border-b border-outline-variant/20 px-3 flex items-center text-3xs font-mono uppercase text-on-surface-variant/60">Шкала</div>
+          <div className="h-12 flex items-center px-3 text-xxs uppercase font-bold text-on-surface border-b border-outline-variant/20">Сценарий</div>
+          <div className="h-12 flex items-center justify-between px-3 text-xxs uppercase font-bold text-secondary border-b border-outline-variant/20">
             <span>B-Roll</span>
             {onOpenBRollModal && (
-              <button
-                type="button"
+              <IconButton
+                icon={Plus}
+                size="xs"
+                accent="secondary"
                 onClick={() => onOpenBRollModal('scene')}
-                className="text-on-surface-variant hover:text-secondary p-0.5"
                 title="Добавить B-Roll на сцену"
-              >
-                +
-              </button>
+              />
             )}
           </div>
-          <div className="h-12 flex items-center px-3 text-[10px] uppercase font-bold text-primary border-b border-white/5">Аудио</div>
-          <div className="h-12 flex items-center justify-between px-3 text-[10px] uppercase font-bold text-accent border-b border-white/5">
+          <div className="h-12 flex items-center px-3 text-xxs uppercase font-bold text-primary border-b border-outline-variant/20">Аудио</div>
+          <div className="h-12 flex items-center justify-between px-3 text-xxs uppercase font-bold text-secondary border-b border-outline-variant/20">
             <span className="flex items-center gap-1"><Volume2 size={11} /> Музыка</span>
             {onOpenMusicSettings && (
-              <button onClick={onOpenMusicSettings} className="text-on-surface-variant hover:text-accent p-0.5">⚙️</button>
+              <IconButton icon={Settings} size="xs" accent="secondary" onClick={onOpenMusicSettings} title="Настройки музыки" />
             )}
           </div>
         </div>
-        <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar relative bg-[#070b14]" ref={scrollRef}>
+        <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar relative bg-surface-container-lowest" ref={scrollRef}>
           <div
             ref={timelineTracksRef}
             className={`relative h-full ${activeTool === 'razor' ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -395,11 +398,11 @@ export const Timeline = ({
             }}
             onMouseLeave={() => setHoveredTime(null)}
           >
-            <div className="h-7 border-b border-white/10 relative bg-white/5 hover:bg-white/10 transition-colors cursor-pointer" onMouseDown={handleScrubStart}>
+            <div className="h-7 border-b border-outline-variant/40 relative bg-on-surface/5 hover:bg-on-surface/10 transition-colors cursor-pointer" onMouseDown={handleScrubStart}>
               {renderTicks()}
             </div>
             {['text', 'broll', 'audio'].map((track) => (
-              <div key={track} className="h-12 border-b border-white/5 relative" onMouseDown={activeTool === 'select' ? handleScrubStart : undefined}>
+              <div key={track} className="h-12 border-b border-outline-variant/20 relative" onMouseDown={activeTool === 'select' ? handleScrubStart : undefined}>
                 {computedFragments.map((f) => {
                   const left = f.computedStart * zoom
                   const width = (f.computedEnd - f.computedStart) * zoom
@@ -408,29 +411,29 @@ export const Timeline = ({
                   let bgColor = ''
                   if (track === 'text') {
                     bgColor = isSelected
-                      ? 'bg-primary/20 border-primary shadow-[0_0_12px_rgba(221,183,255,0.3)] text-white'
+                      ? 'bg-primary/20 border-primary shadow-lg shadow-primary/30 text-on-surface'
                       : 'bg-surface-bright/80 border-outline-variant/60 text-on-surface hover:border-primary/50'
                     content = (
-                      <span className="truncate text-[10px] px-2 font-medium select-none pointer-events-none">
+                      <span className="truncate text-xxs px-2 font-medium select-none pointer-events-none">
                         {f.text || <span className="opacity-40 italic">Пустой фрагмент</span>}
                       </span>
                     )
                   } else if (track === 'broll') {
                     bgColor = f.bRollFileName
                       ? 'bg-secondary/20 border-secondary/50 text-secondary cursor-pointer hover:bg-secondary/30'
-                      : 'bg-transparent border-dashed border-white/5 hover:border-white/20 cursor-pointer'
+                      : 'bg-transparent border-dashed border-outline-variant/20 hover:border-outline-variant/80 cursor-pointer'
                     content = f.bRollFileName ? (
-                      <span className="truncate text-[10px] px-2 select-none pointer-events-none font-mono flex items-center gap-1">
+                      <span className="truncate text-xxs px-2 select-none pointer-events-none font-mono flex items-center gap-1">
                         <Video size={12} /> {f.bRollFileName}
                       </span>
                     ) : (
-                      <span className="text-[9px] text-on-surface-variant/40 px-2 select-none">+ B-Roll</span>
+                      <span className="text-3xs text-on-surface-variant/40 px-2 select-none">+ B-Roll</span>
                     )
                   } else if (track === 'audio') {
                     bgColor = hasAnyAudio || f.audioFileName
                       ? 'bg-primary/15 border-primary/40 text-primary'
-                      : 'bg-transparent border-dashed border-white/5'
-                    content = (hasAnyAudio || f.audioFileName) ? <WaveformCanvas width={width} seed={f.id} color="#ddb7ff" /> : null
+                      : 'bg-transparent border-dashed border-outline-variant/20'
+                    content = (hasAnyAudio || f.audioFileName) ? <WaveformCanvas width={width} seed={f.id} color="var(--color-primary)" /> : null
                   }
                   return (
                     <div
@@ -451,24 +454,24 @@ export const Timeline = ({
                     >
                       {activeTool === 'select' && (
                         <div
-                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-20 flex items-center justify-center group/handle"
+                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-on-surface/40 z-20 flex items-center justify-center group/handle"
                           onMouseDown={(e) => handleMouseDownEdge(e, f.id, 'start')}
                         >
-                          <div className="w-[1px] h-3.5 bg-white/60 group-hover/handle:bg-white" />
+                          <div className="w-px h-3.5 bg-on-surface/60 group-hover/handle:bg-on-surface" />
                         </div>
                       )}
                       {content}
                       {activeTool === 'select' && (
                         <div
-                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-20 flex items-center justify-center group/handle"
+                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-on-surface/40 z-20 flex items-center justify-center group/handle"
                           onMouseDown={(e) => handleMouseDownEdge(e, f.id, 'end')}
                         >
-                          <div className="w-[1px] h-3.5 bg-white/60 group-hover/handle:bg-white" />
+                          <div className="w-px h-3.5 bg-on-surface/60 group-hover/handle:bg-on-surface" />
                         </div>
                       )}
                       {activeTool === 'razor' && hoveredTime !== null && hoveredTime >= f.computedStart && hoveredTime <= f.computedEnd && (
                         <div
-                          className="absolute top-0 bottom-0 w-[2px] bg-error pointer-events-none shadow-[0_0_8px_rgba(255,0,0,0.8)] z-30"
+                          className="absolute top-0 bottom-0 w-0.5 bg-error pointer-events-none shadow-lg shadow-error/80 z-30"
                           style={{ left: (hoveredTime - f.computedStart) * zoom }}
                         />
                       )}
@@ -477,16 +480,16 @@ export const Timeline = ({
                 })}
               </div>
             ))}
-            <div key="music" className="h-12 border-b border-white/5 relative">
+            <div key="music" className="h-12 border-b border-outline-variant/20 relative">
               {backgroundMusic?.enabled ? (
                 <div
                   onClick={onOpenMusicSettings}
-                  className="absolute top-1 bottom-1 left-0 rounded-md border border-accent/40 bg-accent/15 text-accent flex items-center px-3 gap-2 cursor-pointer hover:bg-accent/25 transition-all"
+                  className="absolute top-1 bottom-1 left-0 rounded-md border border-secondary/40 bg-secondary/15 text-secondary flex items-center px-3 gap-2 cursor-pointer hover:bg-secondary/25 transition-all"
                   style={{ width: duration * zoom }}
                 >
-                  <span className="text-[10px] font-mono font-bold shrink-0 truncate max-w-[180px]">🎵 {backgroundMusic.trackName || 'Фоновая музыка'}</span>
+                  <span className="text-xxs font-mono font-bold shrink-0 truncate max-w-[var(--layout-label-lg)]">🎵 {backgroundMusic.trackName || 'Фоновая музыка'}</span>
                   <div className="flex-1 h-full overflow-hidden">
-                    <WaveformCanvas width={duration * zoom} seed="bg_music_track" color="#ffb4ab" />
+                    <WaveformCanvas width={duration * zoom} seed="bg_music_track" color="var(--color-error)" />
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto">
                     <input
@@ -497,20 +500,21 @@ export const Timeline = ({
                       value={backgroundMusic.baseVolume}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => onUpdateBackgroundMusic?.({ ...backgroundMusic, baseVolume: Number(e.target.value) })}
-                      className="w-16 h-1 accent-accent"
+                      className="w-16 h-1 accent-secondary"
                     />
-                    <button
+                    <IconButton
+                      icon={VolumeX}
+                      size="xs"
+                      accent="neutral"
                       onClick={(e) => { e.stopPropagation(); onUpdateBackgroundMusic?.({ ...backgroundMusic, enabled: false }) }}
-                      className="p-1 hover:text-white rounded"
-                    >
-                      <VolumeX size={13} />
-                    </button>
+                      title="Выключить музыку"
+                    />
                   </div>
                 </div>
               ) : (
                 <div
                   onClick={onOpenMusicSettings}
-                  className="absolute top-1 bottom-1 left-0 rounded-md border border-dashed border-white/10 flex items-center justify-center text-[10px] text-on-surface-variant/40 hover:text-white hover:border-white/30 cursor-pointer"
+                  className="absolute top-1 bottom-1 left-0 rounded-md border border-dashed border-outline-variant/40 flex items-center justify-center text-xxs text-on-surface-variant/40 hover:text-on-surface hover:border-outline-variant/100 cursor-pointer"
                   style={{ width: duration * zoom }}
                 >
                   + Нажмите, чтобы добавить фоновую музыку
@@ -518,14 +522,14 @@ export const Timeline = ({
               )}
             </div>
             <div
-              className="absolute top-0 bottom-0 w-[2px] bg-error z-40 pointer-events-none shadow-[0_0_12px_rgba(255,80,80,0.9)] transition-all duration-75"
+              className="absolute top-0 bottom-0 w-0.5 bg-error z-40 pointer-events-none shadow-lg shadow-error/90 transition-all duration-75"
               style={{ left: currentTime * zoom }}
             >
               <div
-                className="w-3.5 h-4 bg-error rounded-b-sm -translate-x-[6px] shadow-lg flex items-center justify-center cursor-ew-resize pointer-events-auto"
+                className="w-3.5 h-4 bg-error rounded-b-sm -translate-x-1.5 shadow-lg flex items-center justify-center cursor-ew-resize pointer-events-auto"
                 onMouseDown={handleScrubStart}
               >
-                <div className="w-1 h-2 bg-white/80 rounded-full" />
+                <div className="w-1 h-2 bg-on-surface/80 rounded-full" />
               </div>
             </div>
           </div>

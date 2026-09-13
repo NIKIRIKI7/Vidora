@@ -29,11 +29,11 @@ export const ArchetypeSelector = ({ currentArchetype, onSelect, compact = false 
               className={`p-1.5 rounded-lg border text-xs transition-all flex items-center gap-1 shrink-0 ${
                 isSelected
                   ? `${item.color} shadow-sm font-bold scale-105`
-                  : 'border-white/10 bg-black/20 text-on-surface-variant hover:text-white hover:border-white/30'
+                  : 'border-outline-variant/40 bg-surface-container-lowest/20 text-on-surface-variant hover:text-on-surface hover:border-outline-variant/100'
               }`}
             >
               <Icon size={13} />
-              <span className="text-[10px] uppercase font-mono">{item.id}</span>
+              <span className="text-xxs uppercase font-mono">{item.id}</span>
             </button>
           )
         }
@@ -43,17 +43,17 @@ export const ArchetypeSelector = ({ currentArchetype, onSelect, compact = false 
             key={key}
             type="button"
             onClick={() => onSelect(key)}
-            className={`flex-1 min-w-[104px] p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${item.bgHover} ${
+            className={`flex-1 min-w-[var(--layout-chip)] p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${item.bgHover} ${
               isSelected
                 ? `${item.color} shadow-md ring-1 ring-current`
-                : 'border-white/10 bg-surface-container-lowest/60 text-on-surface-variant hover:text-white'
+                : 'border-outline-variant/40 bg-surface-container-lowest/60 text-on-surface-variant hover:text-on-surface'
             }`}
           >
             <div className="flex items-center gap-1.5">
               <Icon size={14} />
               <span className="text-xs font-bold">{item.label}</span>
             </div>
-            <span className="text-[10px] opacity-70 leading-tight line-clamp-2">{item.shortDesc}</span>
+            <span className="text-xxs opacity-70 leading-tight line-clamp-2">{item.shortDesc}</span>
           </button>
         )
       })}

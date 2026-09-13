@@ -84,18 +84,18 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="🎛️ Настройка Музыки и Auto-Ducking" className="max-w-2xl">
       <div className="flex flex-col gap-5 pb-2">
-        <div className="flex items-center justify-between p-4 bg-surface-container-lowest/60 rounded-xl border border-white/5">
+        <div className="flex items-center justify-between p-4 bg-surface-container-lowest/60 rounded-xl border border-outline-variant/20">
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-white">Включить фоновую музыку</span>
+            <span className="text-sm font-bold text-on-surface">Включить фоновую музыку</span>
             <span className="text-xs text-on-surface-variant">Автоматическое приглушение (Auto-Ducking) при голосе диктора</span>
           </div>
           <Switch checked={settings.enabled} onChange={(val) => setSettings({ ...settings, enabled: val })} />
         </div>
 
-        <div className="flex items-center justify-between p-3 bg-surface-container-lowest/40 rounded-xl border border-white/5">
+        <div className="flex items-center justify-between p-3 bg-surface-container-lowest/40 rounded-xl border border-outline-variant/20">
           <div className="flex flex-col min-w-0">
-            <span className="text-[10px] font-mono uppercase text-secondary">Активный саундтрек</span>
-            <span className="text-xs font-semibold text-white truncate max-w-sm">{settings.trackName || 'Не выбран'}</span>
+            <span className="text-xxs font-mono uppercase text-secondary">Активный саундтрек</span>
+            <span className="text-xs font-semibold text-on-surface truncate max-w-sm">{settings.trackName || 'Не выбран'}</span>
           </div>
           <Button variant="secondary" onClick={onOpenLibrary} className="text-xs py-1 px-3 shrink-0">
             Выбрать трек
@@ -114,11 +114,11 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
                   type="button"
                   onClick={() => { setIsProMode(false); applyPreset(key) }}
                   className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                    isSelected ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-container-lowest border-white/5 hover:border-white/20 text-on-surface'
+                    isSelected ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-container-lowest border-outline-variant/20 hover:border-outline-variant/80 text-on-surface'
                   }`}
                 >
                   <span className="text-xs font-bold leading-tight">{p.name.split(' ')[0]}</span>
-                  <span className="text-[10px] text-on-surface-variant line-clamp-2">{p.description}</span>
+                  <span className="text-xxs text-on-surface-variant line-clamp-2">{p.description}</span>
                 </button>
               )
             })}
@@ -127,7 +127,7 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
 
         <div className="p-4 bg-gradient-to-r from-primary/10 via-secondary/10 to-transparent rounded-xl border border-primary/20 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+            <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
               <Zap size={15} className="text-secondary" /> Мгновенный тест-драйв микса (10с)
             </span>
             <Button variant="secondary" onClick={handleTestDrive} disabled={isPreviewing || !settings.enabled || !settings.customTrackPath} className="py-1 px-3 text-xs">
@@ -138,7 +138,7 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
           {previewAudioUrl && <audio src={previewAudioUrl} autoPlay controls className="w-full h-8 mt-1" />}
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+        <div className="flex items-center justify-between pt-2 border-t border-outline-variant/20">
           <button
             type="button"
             onClick={() => {
@@ -152,7 +152,7 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
         </div>
 
         {isProMode && (
-          <div className="flex flex-col gap-5 p-4 bg-surface-container-lowest/40 rounded-xl border border-white/5 animate-in fade-in duration-200">
+          <div className="flex flex-col gap-5 p-4 bg-surface-container-lowest/40 rounded-xl border border-outline-variant/20 animate-in fade-in duration-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FieldGroup label={`Громкость в паузах: ${Math.round(settings.baseVolume * 100)}%`}>
                 <Slider min={0.05} max={1.0} step={0.01} value={settings.baseVolume} onChange={(e) => setSettings({ ...settings, baseVolume: Number(e.target.value) })} />
@@ -169,8 +169,8 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
                 <Slider min={150} max={2000} step={50} value={settings.releaseMs} onChange={(e) => setSettings({ ...settings, releaseMs: Number(e.target.value) })} />
               </FieldGroup>
             </div>
-            <div className="pt-3 border-t border-white/5 flex flex-col gap-3">
-              <span className="text-[11px] font-mono uppercase text-on-surface-variant flex items-center gap-1">
+            <div className="pt-3 border-t border-outline-variant/20 flex flex-col gap-3">
+              <span className="text-2xs font-mono uppercase text-on-surface-variant flex items-center gap-1">
                 <AudioLines size={13} className="text-primary" /> Частотная изоляция речи (Speech Pocket EQ)
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -189,7 +189,7 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+        <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/40">
           <Button variant="ghost" onClick={onClose}>Отмена</Button>
           <Button variant="primary" onClick={handleSave} className="px-6">
             <Check size={16} className="mr-1.5" /> Сохранить настройки

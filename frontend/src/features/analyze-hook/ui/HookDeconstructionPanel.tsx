@@ -3,6 +3,7 @@ import { Sparkles, Brain, AlertTriangle, ArrowRight, Check, Zap } from 'lucide-r
 import type { HookAnalysisData, StolenHook } from '@shared/api'
 import { analyzeHook } from '@shared/api'
 import { WORDS_PER_SECOND } from '@shared/config'
+import { TextArea } from '@shared/ui'
 
 interface HookDeconstructionPanelProps {
   initialTranscript?: string
@@ -45,18 +46,18 @@ export const HookDeconstructionPanel = ({
   return (
     <div className="flex flex-col space-y-4 text-xs">
       <div className="flex flex-col space-y-1.5">
-        <div className="flex justify-between items-center text-[11px] text-white/60">
+        <div className="flex justify-between items-center text-2xs text-on-surface/60">
           <span>Транскрипт вступительных секунд ролика:</span>
           <span className="font-mono text-secondary">
             {wordCount} слов ≈ {estimatedSeconds} сек начитки
           </span>
         </div>
-        <textarea
+        <TextArea
           rows={3}
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
           placeholder="Вставьте первые 2-4 предложения видеоролика..."
-          className="w-full p-2.5 text-xs bg-surface-container-lowest border border-outline-variant rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-primary"
+          className="w-full p-2.5 text-xs bg-surface-container-lowest border border-outline-variant rounded-xl text-on-surface placeholder-white/30 focus:outline-none focus:border-primary"
         />
         <button
           onClick={handleRunAnalysis}
@@ -69,7 +70,7 @@ export const HookDeconstructionPanel = ({
       </div>
 
       {error && (
-        <div className="p-2.5 rounded-lg bg-error/10 border border-error/30 text-error text-[11px]">
+        <div className="p-2.5 rounded-lg bg-error/10 border border-error/30 text-error text-2xs">
           {error}
         </div>
       )}
@@ -82,7 +83,7 @@ export const HookDeconstructionPanel = ({
                 <Brain className="w-3.5 h-3.5" />
                 Психология удержания
               </div>
-              <p className="text-on-surface/80 leading-relaxed text-[11px]">{analysis.psychology}</p>
+              <p className="text-on-surface/80 leading-relaxed text-2xs">{analysis.psychology}</p>
             </div>
 
             <div className="p-3 bg-surface-container-low border border-error/20 rounded-xl flex flex-col gap-1">
@@ -90,12 +91,12 @@ export const HookDeconstructionPanel = ({
                 <AlertTriangle className="w-3.5 h-3.5" />
                 Слабые места оригинала
               </div>
-              <p className="text-on-surface/80 leading-relaxed text-[11px]">{analysis.flaws_identified}</p>
+              <p className="text-on-surface/80 leading-relaxed text-2xs">{analysis.flaws_identified}</p>
             </div>
           </div>
 
           <div>
-            <div className="text-[11px] font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1">
+            <div className="text-2xs font-bold text-on-surface uppercase tracking-wider mb-2 flex items-center gap-1">
               <Zap className="w-3.5 h-3.5 text-warning" />
               Адаптированные вирусные хуки (0-5s / 5-20s):
             </div>
@@ -110,7 +111,7 @@ export const HookDeconstructionPanel = ({
                     <span className="text-warning font-bold text-xs">Угол {idx + 1}: {h.angle}</span>
                     <button
                       onClick={() => handleApply(h, idx)}
-                      className="px-2.5 py-1 bg-secondary/20 hover:bg-secondary text-secondary hover:text-on-secondary font-semibold rounded-md transition-all flex items-center gap-1 text-[11px]"
+                      className="px-2.5 py-1 bg-secondary/20 hover:bg-secondary text-secondary hover:text-on-secondary font-semibold rounded-md transition-all flex items-center gap-1 text-2xs"
                     >
                       {appliedIndex === idx ? (
                         <>
@@ -124,17 +125,17 @@ export const HookDeconstructionPanel = ({
                     </button>
                   </div>
 
-                  <div className="p-2 rounded bg-black/40 border-l-2 border-error">
-                    <span className="text-[10px] text-error uppercase font-mono block">0:00 - 0:05 (Разрыв шаблона):</span>
-                    <span className="text-white font-medium">{h.hook_0_5s}</span>
+                  <div className="p-2 rounded bg-surface-container-lowest/40 border-l-2 border-error">
+                    <span className="text-xxs text-error uppercase font-mono block">0:00 - 0:05 (Разрыв шаблона):</span>
+                    <span className="text-on-surface font-medium">{h.hook_0_5s}</span>
                   </div>
 
-                  <div className="p-2 rounded bg-black/40 border-l-2 border-secondary">
-                    <span className="text-[10px] text-secondary uppercase font-mono block">0:05 - 0:20 (Закрепление интриги):</span>
+                  <div className="p-2 rounded bg-surface-container-lowest/40 border-l-2 border-secondary">
+                    <span className="text-xxs text-secondary uppercase font-mono block">0:05 - 0:20 (Закрепление интриги):</span>
                     <span className="text-on-surface">{h.hook_5_20s}</span>
                   </div>
 
-                  <div className="text-[10px] text-on-surface-variant/60 italic">
+                  <div className="text-xxs text-on-surface-variant/60 italic">
                     Почему это сработает: {h.why_it_converts}
                   </div>
                 </div>

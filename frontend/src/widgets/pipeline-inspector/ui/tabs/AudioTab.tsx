@@ -1,7 +1,7 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ProjectSettings } from '@entities/project'
-import { Button, FieldGroup, Select, Spinner, Switch } from '@shared/ui'
+import { Button, IconButton, FieldGroup, SegmentedControl, Select, Spinner, Switch } from '@shared/ui'
 import { SlidersHorizontal, MicVocal, Upload, Play, Download, Trash2, Volume2, AlignStartVertical, RotateCcw, Cpu, AudioLines } from 'lucide-react'
 import { DEFAULT_BACKGROUND_MUSIC } from '@shared/config'
 import { API, getProjectPath, isAudioDirty } from '@entities/project'
@@ -99,9 +99,9 @@ export const AudioTab = ({
         </Button>
         <FieldGroup label="Голосовая модель">
           <div className="flex items-center gap-2">
-            <button onClick={playVoiceSample} title="Прослушать сэмпл" className="p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-on-surface-variant hover:text-white shrink-0"><Play size={16} /></button>
-            <button onClick={onOpenAiSettings} title="Настройки TTS" className="p-1.5 bg-primary/10 hover:bg-primary/20 rounded border border-primary/30 text-primary hover:text-white shrink-0 transition-colors"><SlidersHorizontal size={16} /></button>
-            <button onClick={onOpenVoicebox} title="Voicebox (Клонирование)" className="p-1.5 bg-secondary/10 hover:bg-secondary/20 rounded border border-secondary/30 text-secondary hover:text-white shrink-0 transition-colors"><MicVocal size={16} /></button>
+            <IconButton icon={Play} size="md" accent="neutral" onClick={playVoiceSample} title="Прослушать сэмпл" className="border border-outline-variant/40" />
+            <IconButton icon={SlidersHorizontal} size="md" accent="primary" onClick={onOpenAiSettings} title="Настройки TTS" className="border border-primary/30 bg-primary/10" />
+            <IconButton icon={MicVocal} size="md" accent="secondary" onClick={onOpenVoicebox} title="Voicebox (Клонирование)" className="border border-secondary/30 bg-secondary/10" />
             <Select
               value={voiceModel}
               onChange={e => onChangeVoiceModel(e.target.value)}
@@ -136,11 +136,11 @@ export const AudioTab = ({
           </div>
         </FieldGroup>
         <div className="flex flex-wrap gap-2">
-          <Button variant="dashed" disabled={isGeneratingAudio} onClick={onRunVoiceGen} className={`flex-1 min-w-[140px] ${anyAudioDirty ? 'border-warning/50 text-warning hover:bg-warning/10 hover:border-warning' : ''}`}>
+          <Button variant="dashed" disabled={isGeneratingAudio} onClick={onRunVoiceGen} className={`flex-1 min-w-[var(--layout-action-sm)] ${anyAudioDirty ? 'border-warning/50 text-warning hover:bg-warning/10 hover:border-warning' : ''}`}>
             {isGeneratingAudio ? <Spinner /> : anyAudioDirty ? 'Обновить голос (⚠️)' : 'Сгенерировать голос'}
           </Button>
           <div className="flex gap-1 shrink-0">
-            <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors w-9 h-9 rounded hover:bg-white/5 border border-white/10" onClick={async () => {
+            <IconButton icon={Download} size="md" accent="primary" className="border border-outline-variant/40" onClick={async () => {
               const paths = project.scenes.flatMap(s => s.fragments.map(f => f.audioFileName)).filter(Boolean) as string[]
               if (paths.length === 0) { onShowNotification('Нет аудио', 'error'); return }
               try {
@@ -154,17 +154,17 @@ export const AudioTab = ({
                 a.click()
                 a.remove()
               } catch { onShowNotification('Сбой скачивания', 'error') }
-            }} title="Скачать все аудио проекта одним файлом"><Download size={18} /></button>
-            <button className="text-[11px] text-on-surface-variant hover:text-error flex items-center justify-center transition-colors w-9 h-9 rounded hover:bg-white/5 border border-white/10" onClick={onResetAudio} title="Сбросить все аудио"><Trash2 size={18} /></button>
+            }} title="Скачать все аудио проекта одним файлом" />
+            <IconButton icon={Trash2} size="md" accent="error" className="border border-outline-variant/40" onClick={onResetAudio} title="Сбросить все аудио" />
           </div>
         </div>
       </section>
-      <div className="h-px bg-white/5" />
+      <div className="h-px bg-on-surface/5" />
 
       {/* Background Music Section */}
       <section className="flex flex-col gap-3">
-        <div className="flex justify-between items-center bg-accent/10 p-2 rounded-lg border border-accent/20 gap-2">
-          <span className="font-label text-xs uppercase tracking-wide text-accent flex items-center gap-1.5 truncate">
+        <div className="flex justify-between items-center bg-secondary/10 p-2 rounded-lg border border-secondary/20 gap-2">
+          <span className="font-label text-xs uppercase tracking-wide text-secondary flex items-center gap-1.5 truncate">
             <Volume2 size={16} /> Фоновая музыка & Ducking
           </span>
           <Switch
@@ -175,17 +175,17 @@ export const AudioTab = ({
             })}
           />
         </div>
-        <div className="p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl flex flex-col gap-2.5">
+        <div className="p-3 bg-surface-container-lowest/40 border border-outline-variant/20 rounded-xl flex flex-col gap-2.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-on-surface-variant truncate max-w-[170px]">{project.backgroundMusic?.trackName || 'Не выбран'}</span>
-            <button onClick={() => onOpenMusicLibrary?.()} className="text-[11px] text-secondary hover:underline shrink-0">Изменить</button>
+            <span className="text-on-surface-variant truncate max-w-[var(--layout-label)]">{project.backgroundMusic?.trackName || 'Не выбран'}</span>
+            <Button variant="link" onClick={() => onOpenMusicLibrary?.()} className="shrink-0">Изменить</Button>
           </div>
           <Button variant="secondary" onClick={() => onOpenMusicSettings?.()} className="w-full text-xs py-1.5 font-medium">
             <SlidersHorizontal size={14} className="mr-1.5" /> Настроить Ducking & EQ
           </Button>
         </div>
       </section>
-      <div className="h-px bg-white/5" />
+      <div className="h-px bg-on-surface/5" />
 
       {/* Sync Section */}
       <section className="flex flex-col gap-3">
@@ -193,39 +193,44 @@ export const AudioTab = ({
           <span className="font-label text-xs uppercase tracking-wide text-secondary flex items-center gap-1.5 truncate"><AlignStartVertical size={16}/> Синхронизация</span>
           <div className="flex items-center gap-2 shrink-0">
             {project.scenes.some(s => s.fragments.some(f => f.startTime !== undefined)) && (
-              <button className="text-[11px] text-error hover:text-white flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded bg-error/10 border border-error/30" onClick={onResetAllSync} title="Сбросить все тайминги"><RotateCcw size={14} /></button>
+              <IconButton icon={RotateCcw} accent="error" className="bg-error/10 border border-error/30" onClick={onResetAllSync} title="Сбросить все тайминги" />
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-2.5 p-3 bg-surface-container-lowest/40 border border-white/5 rounded-xl">
-          <label className="flex items-center justify-between gap-2 text-xs text-on-surface-variant cursor-pointer">
+        <div className="flex flex-col gap-2.5 p-3 bg-surface-container-lowest/40 border border-outline-variant/20 rounded-xl">
+          <div className="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
             <span className="flex-1 leading-tight">WhisperX ИИ</span>
-            <input type="checkbox" checked={useWhisper} onChange={e => onChangeUseWhisper(e.target.checked)} className="accent-primary size-3.5 shrink-0" />
-          </label>
-          <label className="flex items-center justify-between gap-2 text-xs text-on-surface-variant cursor-pointer">
+            <Switch checked={useWhisper} onChange={onChangeUseWhisper} />
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
             <span className="flex-1 leading-tight">Авто-освобождение VRAM</span>
-            <input type="checkbox" checked={autoOffloadVram} onChange={e => onChangeAutoOffloadVram(e.target.checked)} className="accent-primary size-3.5 shrink-0" />
-          </label>
-          <button onClick={onUnloadVram} className="text-[11px] text-secondary hover:bg-secondary/10 px-2 py-0.5 rounded transition-all flex items-center gap-1 mt-1 self-start font-medium leading-tight h-auto text-left"><Cpu size={14} /> Очистить VRAM вручную</button>
+            <Switch checked={autoOffloadVram} onChange={onChangeAutoOffloadVram} />
+          </div>
+          <Button variant="link" icon={Cpu} onClick={onUnloadVram} className="mt-1 self-start">Очистить VRAM вручную</Button>
         </div>
         <Button variant="dashed" disabled={isSyncing} onClick={onRunSync} className="h-auto py-2 leading-tight">{isSyncing ? <Spinner /> : 'Синхронизировать тайминги'}</Button>
       </section>
-      <div className="h-px bg-white/5" />
+      <div className="h-px bg-on-surface/5" />
 
       {/* Mastering Section */}
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center bg-warning/10 p-2 rounded-lg border border-warning/20 gap-2">
           <span className="font-label text-xs uppercase tracking-wide text-warning flex items-center gap-1.5 truncate"><AudioLines size={16}/> Мастеринг аудио</span>
-          <div className="flex bg-surface-container-lowest border border-white/5 rounded-md p-0.5 shrink-0">
-            <button className={`text-[10px] px-2 py-1 rounded transition-colors ${processScope === 'scene' ? 'bg-warning/20 text-warning' : 'text-on-surface-variant hover:text-white'}`} onClick={() => setProcessScope('scene')}>Сцена</button>
-            <button className={`text-[10px] px-2 py-1 rounded transition-colors ${processScope === 'project' ? 'bg-warning/20 text-warning' : 'text-on-surface-variant hover:text-white'}`} onClick={() => setProcessScope('project')}>Проект</button>
-          </div>
+          <SegmentedControl
+            value={processScope}
+            onChange={setProcessScope}
+            options={[
+              { value: 'scene', label: 'Сцена', accent: 'warning' },
+              { value: 'project', label: 'Проект', accent: 'warning' },
+            ]}
+            className="shrink-0"
+          />
         </div>
         <Button variant="dashed" onClick={() => onProcessAudio('lavasr', processScope)} disabled={isGeneratingAudio} className="text-xs border-primary/30 hover:border-primary/60 hover:bg-primary/10 hover:text-primary h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">
           ✨ LavaSR 48kHz (AI BWE Апскейл)
         </Button>
-        <Button variant="dashed" onClick={() => onProcessAudio('mastering', processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-warning/50 hover:bg-warning/10 hover:text-warning h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">🎙️ Мастеринг (EQ + Normalize)</Button>
-        <Button variant="dashed" onClick={() => onProcessAdvancedSilence?.(processScope)} disabled={isGeneratingAudio} className="text-xs border-white/10 hover:border-accent/50 hover:bg-accent/10 hover:text-accent h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">✂️ Умная обрезка пауз (Pydub)</Button>
+        <Button variant="dashed" onClick={() => onProcessAudio('mastering', processScope)} disabled={isGeneratingAudio} className="text-xs border-outline-variant/40 hover:border-warning/50 hover:bg-warning/10 hover:text-warning h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">🎙️ Мастеринг (EQ + Normalize)</Button>
+        <Button variant="dashed" onClick={() => onProcessAdvancedSilence?.(processScope)} disabled={isGeneratingAudio} className="text-xs border-outline-variant/40 hover:border-secondary/50 hover:bg-secondary/10 hover:text-secondary h-auto py-2 leading-tight justify-center md:justify-start text-center md:text-left">✂️ Умная обрезка пауз (Pydub)</Button>
       </section>
     </>
   )

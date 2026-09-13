@@ -1,7 +1,7 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import React, { useState, useRef, type DragEvent } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
-import { Button, VoiceTagToolbar, useVoiceTagInserter } from '@shared/ui'
+import { Button, IconButton, Input, SegmentedControl, VoiceTagToolbar, useVoiceTagInserter, TextArea } from '@shared/ui'
 import { Logs, Plus, GripVertical, Minus, Mic, Download, Upload, Trash2, Copy, FileAudio, Sparkles, Video } from 'lucide-react'
 import { FragmentBrollControl } from '@features/manage-broll'
 import { getProjectPath, API, isAudioDirty, extractCleanVoiceText, getSceneTeleprompterScript, getProjectTeleprompterScript } from '@entities/project'
@@ -70,30 +70,26 @@ const FragmentCard = React.memo(({
         await uploadBRoll(file)
       }}
       className={`p-3 bg-surface-container-lowest/40 border transition-colors rounded-xl flex flex-col gap-2 relative group ${
-        dirtyAudio ? 'border-warning/30 hover:border-warning' : 'border-white/5 hover:border-secondary/30'
+        dirtyAudio ? 'border-warning/30 hover:border-warning' : 'border-outline-variant/20 hover:border-secondary/30'
       }`}
     >
       <GripVertical size={12} className="text-on-surface-variant/30 absolute -left-0.5 top-6 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
       <div className="flex justify-between items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1">
-          <button onClick={() => onNudgeTiming(frag.id, 'start', -0.1)} className="text-on-surface-variant hover:text-primary"><Minus size={12}/></button>
-          <span className="text-[10px] font-mono text-secondary font-medium">{frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s</span>
-          <button onClick={() => onNudgeTiming(frag.id, 'end', 0.1)} className="text-on-surface-variant hover:text-primary"><Plus size={12}/></button>
+          <IconButton icon={Minus} size="xs" accent="primary" onClick={() => onNudgeTiming(frag.id, 'start', -0.1)} title="Сдвинуть начало" />
+          <span className="text-xxs font-mono text-secondary font-medium">{frag.startTime?.toFixed(1) || '0'}s - {frag.endTime?.toFixed(1) || '0'}s</span>
+          <IconButton icon={Plus} size="xs" accent="primary" onClick={() => onNudgeTiming(frag.id, 'end', 0.1)} title="Сдвинуть конец" />
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button className="text-[11px] text-on-surface-variant hover:text-primary p-1 rounded hover:bg-white/5 transition-colors flex items-center" onClick={() => {
+          <IconButton icon={Copy} accent="primary" onClick={() => {
             const text = extractCleanVoiceText(frag.text, { keepEmotionTags: copyEmotionTags, keepPauseSoundTags: copyEmotionTags })
             void navigator.clipboard.writeText(text)
             onShowNotification(
               copyEmotionTags ? 'Текст фрагмента скопирован с [emotion]!' : 'Чистый текст фрагмента скопирован!',
               'success'
             )
-          }} title={copyEmotionTags ? 'Скопировать текст фрагмента с тегами [emotion]' : 'Скопировать чистый текст фрагмента без тегов'}>
-            <Copy size={13} />
-          </button>
-          <button className="text-[11px] text-on-surface-variant hover:text-primary p-1 rounded hover:bg-white/5 transition-colors flex items-center" onClick={() => onOpenCustomAudioModal?.('fragment', frag.id)} title="Загрузить свое аудио для этого фрагмента (с авто-выравниванием)">
-            <FileAudio size={13} />
-          </button>
+          }} title={copyEmotionTags ? 'Скопировать текст фрагмента с тегами [emotion]' : 'Скопировать чистый текст фрагмента без тегов'} />
+          <IconButton icon={FileAudio} accent="primary" onClick={() => onOpenCustomAudioModal?.('fragment', frag.id)} title="Загрузить свое аудио для этого фрагмента (с авто-выравниванием)" />
           <FragmentBrollControl
             brollFilename={frag.bRollFileName}
             onOpenStockModal={() => onOpenBRollModal?.('fragment', frag.id)}
@@ -101,22 +97,18 @@ const FragmentCard = React.memo(({
             onUploadFile={uploadBRoll}
             onUnlink={() => onUnlinkFragmentBRoll(frag.id)}
           />
-          <button className={`text-[11px] flex items-center gap-0.5 ${dirtyAudio ? 'text-warning hover:text-warning/80' : 'text-on-surface-variant hover:text-primary'}`} onClick={() => onRunVoiceGenFragment(frag.id)} title={dirtyAudio ? 'Аудио устарело. Нажмите для переозвучки' : 'Переозвучить'}>
-            <Mic size={14} />
-          </button>
+          <IconButton icon={Mic} accent={dirtyAudio ? 'warning' : 'primary'} onClick={() => onRunVoiceGenFragment(frag.id)} title={dirtyAudio ? 'Аудио устарело. Нажмите для переозвучки' : 'Переозвучить'} />
           {frag.audioFileName && (
-            <button className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5" onClick={() => {
+            <IconButton icon={Download} accent="primary" onClick={() => {
               const a = document.createElement('a')
               a.href = `${API}/api/v1/render/media?path=${encodeURIComponent(frag.audioFileName!)}`
               a.download = `Audio_Frag_${frag.id.slice(0,6)}.wav`
               document.body.appendChild(a)
               a.click()
               a.remove()
-            }} title="Скачать аудио">
-              <Download size={14} />
-            </button>
+            }} title="Скачать аудио" />
           )}
-          <label className="text-[11px] text-on-surface-variant hover:text-primary flex items-center gap-0.5 cursor-pointer" title="Заменить аудио">
+          <label className="text-2xs text-on-surface-variant hover:text-primary flex items-center gap-0.5 cursor-pointer" title="Заменить аудио">
             <Upload size={14} />
             <input type="file" className="hidden" accept="audio/*" onChange={async (e) => {
               const file = e.target.files?.[0]
@@ -133,14 +125,12 @@ const FragmentCard = React.memo(({
               e.target.value = ''
             }} />
           </label>
-          <button className="text-on-surface-variant hover:text-error transition-colors p-1" onClick={() => onDeleteFragment(frag.id)} title="Удалить фрагмент">
-            <Trash2 size={13} />
-          </button>
+          <IconButton icon={Trash2} accent="error" onClick={() => onDeleteFragment(frag.id)} title="Удалить фрагмент" />
         </div>
       </div>
 
-      <input
-        className="w-full bg-surface-container-lowest border border-white/5 rounded-md px-2 py-1 text-xs text-secondary outline-none focus:border-secondary/50 font-mono placeholder-secondary/30"
+      <Input
+        className="rounded-md px-2 py-1 text-xs text-secondary focus:border-secondary/50 font-mono"
         value={frag.visualNote}
         onChange={e => onFragmentTextChange(frag.id, frag.text, e.target.value)}
         placeholder="*(Визуальная ремарка)*"
@@ -152,9 +142,9 @@ const FragmentCard = React.memo(({
             <VoiceTagToolbar onInsertTag={insertTag} onToggleCaps={toggleCaps} hasSelection={hasSelection} />
           </div>
         )}
-        <textarea
+        <TextArea
           ref={textRef}
-          className="w-full bg-surface-container-lowest border border-white/5 rounded-md p-2 text-xs text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
+          className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-md p-2 text-xs text-on-surface resize-none outline-none focus:border-primary/50 custom-scrollbar"
           rows={2}
           value={frag.text}
           onChange={e => onFragmentTextChange(frag.id, e.target.value)}
@@ -199,15 +189,13 @@ export const ContentTab = ({
         <span className="font-label text-sm font-semibold text-on-surface flex items-center gap-2 truncate">
           <Logs size={18} className="text-primary"/> Фрагменты сцены
         </span>
-        <button className="text-[11px] text-primary bg-primary/10 border border-primary/30 hover:bg-primary/20 px-2 py-1 rounded transition-all flex items-center gap-1 font-medium active:scale-95 shrink-0" onClick={onAddFragment}>
-          <Plus size={14} /> Добавить
-        </button>
+        <Button variant="secondary" icon={Plus} onClick={onAddFragment} className="shrink-0 py-1 px-3">Добавить</Button>
       </div>
 
       {/* Auto B-Roll Card */}
       <div className="flex flex-col gap-2 p-3 bg-surface-container-lowest/50 rounded-xl border border-secondary/20 shadow-inner">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
             <Video size={15} className="text-secondary" /> B-Roll Управление
           </span>
           <Button variant="secondary" onClick={() => onOpenBRollModal?.('scene')} className="text-xs py-1 px-3">
@@ -224,30 +212,25 @@ export const ContentTab = ({
       </div>
 
       {/* Teleprompter copy block */}
-      <div className="flex flex-col gap-2 bg-surface-container-lowest/40 p-2.5 rounded-xl border border-white/5 shadow-inner">
+      <div className="flex flex-col gap-2 bg-surface-container-lowest/40 p-2.5 rounded-xl border border-outline-variant/20 shadow-inner">
         <div className="flex items-center justify-between gap-2 px-1">
-          <span className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
+          <span className="text-xxs font-mono text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
             <Copy size={12} className="text-secondary" /> Режим копирования:
           </span>
-          <div className="flex bg-surface-container-lowest border border-white/10 rounded-lg p-0.5">
-            <button
-              onClick={() => onToggleCopyEmotionTags(false)}
-              className={`text-[10px] px-2 py-0.5 rounded transition-all font-medium ${!copyEmotionTags ? 'bg-primary/20 text-primary border border-primary/30' : 'text-on-surface-variant hover:text-white'}`}
-              title="Копировать чистый текст без тегов и ремарок"
-            >
-              Чистый текст
-            </button>
-            <button
-              onClick={() => onToggleCopyEmotionTags(true)}
-              className={`text-[10px] px-2 py-0.5 rounded transition-all font-medium ${copyEmotionTags ? 'bg-secondary/20 text-secondary border border-secondary/30' : 'text-on-surface-variant hover:text-white'}`}
-              title="Сохранять теги [emotion: ...] и паузы <#1.0#>, но без [instruct]"
-            >
-              + [emotion]
-            </button>
-          </div>
+          <SegmentedControl
+            value={copyEmotionTags ? 'tags' : 'clean'}
+            onChange={(v) => onToggleCopyEmotionTags(v === 'tags')}
+            options={[
+              { value: 'clean', label: 'Чистый текст' },
+              { value: 'tags', label: '+ [emotion]', accent: 'secondary' },
+            ]}
+          />
         </div>
         <div className="grid grid-cols-2 gap-2 mt-1">
-          <button
+          <Button
+            variant="outline"
+            icon={Copy}
+            className="justify-center"
             onClick={() => {
               if (!activeScene) return
               const text = getSceneTeleprompterScript(activeScene, { keepEmotionTags: copyEmotionTags, keepPauseSoundTags: copyEmotionTags })
@@ -257,11 +240,13 @@ export const ContentTab = ({
                 'success'
               )
             }}
-            className="py-1.5 px-2 rounded-lg bg-white/5 hover:bg-primary/20 border border-white/10 hover:border-primary/40 text-[11px] text-on-surface hover:text-primary transition-all flex items-center justify-center gap-1 font-medium"
           >
-            <Copy size={13} /> Суфлер сцены
-          </button>
-          <button
+            Суфлер сцены
+          </Button>
+          <Button
+            variant="outline"
+            icon={Copy}
+            className="justify-center"
             onClick={() => {
               const text = getProjectTeleprompterScript(project, { keepEmotionTags: copyEmotionTags, keepPauseSoundTags: copyEmotionTags })
               void navigator.clipboard.writeText(text)
@@ -270,10 +255,9 @@ export const ContentTab = ({
                 'success'
               )
             }}
-            className="py-1.5 px-2 rounded-lg bg-white/5 hover:bg-primary/20 border border-white/10 hover:border-primary/40 text-[11px] text-on-surface hover:text-primary transition-all flex items-center justify-center gap-1 font-medium"
           >
-            <Copy size={13} /> Суфлер проекта
-          </button>
+            Суфлер проекта
+          </Button>
         </div>
       </div>
 

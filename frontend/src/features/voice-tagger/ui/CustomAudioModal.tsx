@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Modal, Button, FieldGroup, Select, Switch } from '@shared/ui'
+import { Modal, Button, FieldGroup, Select, Switch, TextArea } from '@shared/ui'
 import { Upload, AudioLines, FileAudio, Layers } from 'lucide-react'
 import type { ProjectSettings, Scene } from '@entities/project'
 
@@ -118,7 +118,7 @@ export const CustomAudioModal = ({
         </FieldGroup>
 
         {isBatch ? (
-          <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex items-start gap-3">
+          <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-outline-variant/20 flex items-start gap-3">
             <Layers size={18} className="text-primary mt-0.5 shrink-0" />
             <div className="text-xs text-secondary leading-relaxed">
               <p className="font-medium text-on-surface mb-1">{project.scenes.length} сцен в проекте</p>
@@ -131,7 +131,7 @@ export const CustomAudioModal = ({
             </div>
           </div>
         ) : (
-          <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-white/5 flex flex-col gap-4">
+          <div className="bg-surface-container-lowest/50 p-4 rounded-xl border border-outline-variant/20 flex flex-col gap-4">
             <Switch
               label="Авто-распознавание текста через Whisper (Transcribe)"
               checked={transcribeWithWhisper}
@@ -139,8 +139,8 @@ export const CustomAudioModal = ({
             />
 
             <FieldGroup label="Или эталонный текст (Ref Text / если уже начитан по сценарию)">
-              <textarea
-                className="w-full bg-background border border-white/10 rounded-lg p-3 text-xs text-on-surface resize-none focus:border-primary/50 outline-none"
+              <TextArea
+                className="w-full bg-background border border-outline-variant/40 rounded-lg p-3 text-xs text-on-surface resize-none focus:border-primary/50 outline-none"
                 rows={3}
                 value={manualRefText}
                 onChange={e => setManualRefText(e.target.value)}

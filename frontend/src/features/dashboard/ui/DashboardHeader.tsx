@@ -24,30 +24,30 @@ export const DashboardHeader: React.FC<Props> = ({ onOpenSettings }) => {
       : 'RAM Engine'
 
   return (
-    <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-2xl px-8 flex items-center justify-between sticky top-0 z-30 select-none">
+    <header className="h-16 border-b border-outline-variant/80 bg-surface-container-lowest/80 backdrop-blur-2xl px-8 flex items-center justify-between sticky top-0 z-30 select-none">
       <div
         className="flex items-center gap-3 cursor-pointer group"
         onClick={() => setCurrentView('dashboard')}
       >
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20 group-hover:scale-105 transition-transform">
-          <Sparkles size={16} className="text-white" />
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-secondary to-primary flex items-center justify-center shadow-lg shadow-secondary/20 group-hover:scale-105 transition-transform">
+          <Sparkles size={16} className="text-on-surface" />
         </div>
-        <span className="font-black text-xl tracking-tight text-white group-hover:text-sky-300 transition-colors">
+        <span className="font-black text-xl tracking-tight text-on-surface group-hover:text-secondary transition-colors">
           Vidora
         </span>
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-medium text-slate-300 shadow-sm">
-          <Cpu size={14} className={isCuda ? 'text-emerald-400' : 'text-slate-400'} />
-          <span className="font-semibold text-white">{isLoading ? 'Инициализация...' : deviceShortName}</span>
-          <span className="text-slate-600">•</span>
-          <span className="font-mono text-slate-400 text-[11px]">{vramDisplay}</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-low/80 border border-outline-variant text-xs font-medium text-on-surface shadow-sm">
+          <Cpu size={14} className={isCuda ? 'text-success' : 'text-on-surface-variant'} />
+          <span className="font-semibold text-on-surface">{isLoading ? 'Инициализация...' : deviceShortName}</span>
+          <span className="text-outline">•</span>
+          <span className="font-mono text-on-surface-variant text-2xs">{vramDisplay}</span>
         </div>
 
         <button
           onClick={onOpenSettings}
-          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+          className="p-2 rounded-xl bg-surface-container-low/80 hover:bg-surface-container-high border border-outline-variant text-on-surface-variant hover:text-on-surface transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
           title="Глобальные настройки (AI, API, Промпты)"
         >
           <Settings size={15} />

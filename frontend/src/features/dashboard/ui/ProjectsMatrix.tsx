@@ -5,10 +5,10 @@ import {
   Layers,
   MoreVertical,
   Plus,
-  Search,
   Trash2,
   Volume2,
 } from 'lucide-react'
+import { SearchInput } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
 const timeAgo = (iso: string) => {
@@ -47,24 +47,24 @@ export const ProjectsMatrix: React.FC = () => {
 
   return (
     <section className="space-y-5 pt-2">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-outline-variant/80">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-white tracking-tight">Мои проекты</h2>
-            <span className="text-xs bg-slate-800/80 text-slate-400 font-semibold px-2 py-0.5 rounded-full">
+            <h2 className="text-lg font-bold text-on-surface tracking-tight">Мои проекты</h2>
+            <span className="text-xs bg-surface-container-high/80 text-on-surface-variant font-semibold px-2 py-0.5 rounded-full">
               {filtered.length}
             </span>
           </div>
 
-          <div className="bg-slate-900 p-1 rounded-xl flex items-center gap-1 border border-slate-800">
+          <div className="bg-surface-container-low p-1 rounded-xl flex items-center gap-1 border border-outline-variant">
             {(['all', '16:9', '9:16'] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => setFormatFilter(fmt)}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                   formatFilter === fmt
-                    ? 'bg-sky-500 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-secondary text-on-surface shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
                 {fmt === 'all' ? 'Все' : fmt}
@@ -73,14 +73,13 @@ export const ProjectsMatrix: React.FC = () => {
           </div>
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-          <input
-            type="text"
+        <div className="w-full sm:w-64">
+          <SearchInput
             placeholder="Поиск по названию..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900/90 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-colors shadow-inner"
+            onClear={() => setSearchQuery('')}
+            className="text-xs"
           />
         </div>
       </div>
@@ -88,16 +87,16 @@ export const ProjectsMatrix: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
         <div
           onClick={() => openModal('new_project', formatFilter === '9:16' ? '9:16' : '16:9')}
-          className="group cursor-pointer rounded-3xl border border-dashed border-slate-800 hover:border-sky-500/50 bg-slate-950/40 hover:bg-slate-900/40 p-6 flex flex-col items-center justify-center text-center gap-3 transition-all min-h-[220px]"
+          className="group cursor-pointer rounded-3xl border border-dashed border-outline-variant hover:border-secondary/50 bg-surface-container-lowest/40 hover:bg-surface-container-low/40 p-6 flex flex-col items-center justify-center text-center gap-3 transition-all min-h-[var(--layout-card)]"
         >
-          <div className="w-11 h-11 rounded-2xl bg-slate-900 group-hover:bg-sky-500/10 border border-slate-800 group-hover:border-sky-500/30 flex items-center justify-center text-slate-400 group-hover:text-sky-400 transition-all">
+          <div className="w-11 h-11 rounded-2xl bg-surface-container-low group-hover:bg-secondary/10 border border-outline-variant group-hover:border-secondary/30 flex items-center justify-center text-on-surface-variant group-hover:text-secondary transition-all">
             <Plus size={20} />
           </div>
           <div className="space-y-0.5">
-            <span className="font-bold text-sm text-white group-hover:text-sky-300 transition-colors">
+            <span className="font-bold text-sm text-on-surface group-hover:text-secondary transition-colors">
               Новый проект
             </span>
-            <p className="text-xs text-slate-500">С чистого листа</p>
+            <p className="text-xs text-outline">С чистого листа</p>
           </div>
         </div>
 
@@ -108,31 +107,31 @@ export const ProjectsMatrix: React.FC = () => {
           return (
             <div
               key={proj.id}
-              className="group relative rounded-3xl bg-slate-900/70 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700 shadow-xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:-translate-y-1"
+              className="group relative rounded-3xl bg-surface-container-low/70 hover:bg-surface-container-low border border-outline-variant/80 hover:border-outline-variant shadow-xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:-translate-y-1"
             >
               <div
                 onClick={() => openProject(proj.id)}
-                className="cursor-pointer h-32 bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-950 p-4 flex flex-col justify-between relative overflow-hidden"
+                className="cursor-pointer h-32 bg-gradient-to-tr from-surface-container-lowest via-surface-container-low to-surface-container-lowest p-4 flex flex-col justify-between relative overflow-hidden"
               >
                 <div className="flex items-center justify-between z-10">
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm ${
+                    className={`text-xxs font-bold px-2 py-0.5 rounded-full border shadow-sm ${
                       isShorts
-                        ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
-                        : 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                        ? 'bg-error/10 text-error border-error/30'
+                        : 'bg-secondary/10 text-secondary border-secondary/30'
                     }`}
                   >
                     {proj.format}
                   </span>
 
                   {proj.has_audio && (
-                    <span className="p-1 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20" title="Озвучка готова">
+                    <span className="p-1 rounded-md bg-warning/10 text-warning border border-warning/20" title="Озвучка готова">
                       <Volume2 size={12} />
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 z-10">
+                <div className="flex items-center gap-2 text-xs font-mono text-on-surface-variant z-10">
                   <Clock size={12} />
                   <span>{formatDuration(proj.duration_sec)}</span>
                   <span>•</span>
@@ -140,30 +139,30 @@ export const ProjectsMatrix: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-900/90 border-t border-slate-800/80 flex items-center justify-between">
+              <div className="p-4 bg-surface-container-low/90 border-t border-outline-variant/80 flex items-center justify-between">
                 <div className="cursor-pointer space-y-0.5 flex-1 pr-2" onClick={() => openProject(proj.id)}>
-                  <h3 className="font-bold text-sm text-white group-hover:text-sky-300 transition-colors truncate">
+                  <h3 className="font-bold text-sm text-on-surface group-hover:text-secondary transition-colors truncate">
                     {proj.name}
                   </h3>
-                  <span className="text-[11px] text-slate-500">{timeAgo(proj.updated_at)}</span>
+                  <span className="text-2xs text-outline">{timeAgo(proj.updated_at)}</span>
                 </div>
 
                 <div className="relative">
                   <button
                     onClick={() => setActiveMenuId(isMenuOpen ? null : proj.id)}
-                    className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors"
                   >
                     <MoreVertical size={15} />
                   </button>
 
                   {isMenuOpen && (
-                    <div className="absolute right-0 bottom-8 z-30 w-36 rounded-2xl bg-slate-950 border border-slate-800 p-1.5 shadow-2xl space-y-0.5 text-xs font-semibold">
+                    <div className="absolute right-0 bottom-8 z-30 w-36 rounded-2xl bg-surface-container-lowest border border-outline-variant p-1.5 shadow-2xl space-y-0.5 text-xs font-semibold">
                       <button
                         onClick={() => {
                           setActiveMenuId(null)
                           openProject(proj.id)
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-slate-900 text-slate-300 hover:text-white flex items-center gap-2 text-left"
+                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-surface-container-low text-on-surface hover:text-on-surface flex items-center gap-2 text-left"
                       >
                         <FolderOpen size={13} /> <span>Открыть</span>
                       </button>
@@ -172,7 +171,7 @@ export const ProjectsMatrix: React.FC = () => {
                           setActiveMenuId(null)
                           duplicateProject(proj.id)
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-slate-900 text-slate-300 hover:text-white flex items-center gap-2 text-left"
+                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-surface-container-low text-on-surface hover:text-on-surface flex items-center gap-2 text-left"
                       >
                         <Layers size={13} /> <span>Дублировать</span>
                       </button>
@@ -181,7 +180,7 @@ export const ProjectsMatrix: React.FC = () => {
                           setActiveMenuId(null)
                           deleteProject(proj.id)
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 flex items-center gap-2 text-left"
+                        className="w-full px-2.5 py-1.5 rounded-lg hover:bg-error/20 text-error flex items-center gap-2 text-left"
                       >
                         <Trash2 size={13} /> <span>Удалить</span>
                       </button>

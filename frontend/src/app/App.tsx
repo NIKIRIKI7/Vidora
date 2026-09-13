@@ -24,7 +24,7 @@ const NotificationToast = ({ notification }: { notification: { message: string; 
   }
 
   return (
-    <div className="fixed top-20 right-6 z-[100] w-[420px] max-w-[90vw] animate-in fade-in slide-in-from-right-8 duration-300">
+    <div className="fixed top-20 right-6 z-[100] w-[var(--layout-toast)] max-w-[90vw] animate-in fade-in slide-in-from-right-8 duration-300">
       <div className={`px-4 py-3 rounded-lg shadow-xl border flex flex-col gap-2 backdrop-blur-xl
         ${notification.type === 'success' ? 'bg-secondary/10 border-secondary/50 text-secondary' :
           notification.type === 'error' ? 'bg-error/10 border-error/50 text-error' :
@@ -41,19 +41,19 @@ const NotificationToast = ({ notification }: { notification: { message: string; 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowDetails(v => !v)}
-                className="px-2 py-1 rounded bg-black/20 hover:bg-black/40 text-[11px] font-mono flex items-center gap-1 transition-colors"
+                className="px-2 py-1 rounded bg-surface-container-lowest/20 hover:bg-surface-container-lowest/40 text-2xs font-mono flex items-center gap-1 transition-colors"
               >
                 {showDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Подробнее
               </button>
               <button
                 onClick={copy}
-                className="px-2 py-1 rounded bg-black/20 hover:bg-black/40 text-[11px] font-mono flex items-center gap-1 transition-colors"
+                className="px-2 py-1 rounded bg-surface-container-lowest/20 hover:bg-surface-container-lowest/40 text-2xs font-mono flex items-center gap-1 transition-colors"
               >
                 {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Скопировано' : 'Копировать'}
               </button>
             </div>
             {showDetails && (
-              <pre className="p-2.5 rounded-lg bg-black/70 text-rose-300 font-mono text-[11px] leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap custom-scrollbar">
+              <pre className="p-2.5 rounded-lg bg-surface-container-lowest/70 text-error font-mono text-2xs leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap custom-scrollbar">
                 {notification.details}
               </pre>
             )}

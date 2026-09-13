@@ -35,7 +35,7 @@ export const DashboardView: React.FC<Props> = ({
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col select-none">
+    <div className="min-h-screen bg-surface-container-lowest text-on-surface flex flex-col select-none">
       <DashboardHeader onOpenSettings={onOpenSettings} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-10">

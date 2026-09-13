@@ -91,17 +91,17 @@ export const MusicLibraryModal = ({ isOpen, onClose, project, activeTrackId, onS
     <div
       key={t.id}
       className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
-        activeTrackId === t.id ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-container-lowest border-white/5 hover:border-white/20 text-on-surface'
+        activeTrackId === t.id ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-container-lowest border-outline-variant/20 hover:border-outline-variant/80 text-on-surface'
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <button type="button" onClick={() => togglePlay(t.path)} className="p-1.5 rounded-full bg-white/5 hover:bg-white/20 text-white shrink-0">
+        <button type="button" onClick={() => togglePlay(t.path)} className="p-1.5 rounded-full bg-on-surface/5 hover:bg-on-surface/20 text-on-surface shrink-0">
           {playingTrackPath === t.path ? <Square size={13} /> : <Play size={13} className="fill-current" />}
         </button>
         <div className="flex flex-col min-w-0">
           <span className="text-xs font-medium truncate">{t.name}</span>
           {t.duration > 0 && (
-            <span className="text-[10px] opacity-60 font-mono">
+            <span className="text-xxs opacity-60 font-mono">
               {Math.floor(t.duration / 60)}:{String(Math.floor(t.duration % 60)).padStart(2, '0')} {t.bpm ? `• ${t.bpm} BPM` : ''}
             </span>
           )}
@@ -137,7 +137,7 @@ export const MusicLibraryModal = ({ isOpen, onClose, project, activeTrackId, onS
           <div className="flex flex-col gap-6 max-h-[55vh] overflow-y-auto custom-scrollbar pr-1">
             {customTracks.length > 0 && (
               <div className="flex flex-col gap-2">
-                <span className="text-xs font-mono uppercase text-accent font-bold">Ваши загруженные треки</span>
+                <span className="text-xs font-mono uppercase text-secondary font-bold">Ваши загруженные треки</span>
                 <div className="flex flex-col gap-1.5">{customTracks.map(renderTrackRow)}</div>
               </div>
             )}
