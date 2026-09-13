@@ -124,6 +124,97 @@ public sealed class YouTubeSearchIngestor : IYouTubeSearchIngestor
         return stats.SubscriberCount;
     }
 
+    public async Task<ChannelRef?> ResolveChannelAsync(
+        string channelNameOrHandleOrUrl,
+        string lang = "ru",
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelNameOrHandleOrUrl)) return null;
+        var input = channelNameOrHandleOrUrl.Trim();
+
+        // Прямой channelId (UC...): URL /channel/UC... или чистая строка.
+        var directId = Regex.Match(input, @"UC[\w-]{22}");
+        if (directId.Success)
+        {
+            return new ChannelRef(directId.Value, input);
+        }
+
+        // @handle: ищем по самому handle, а не по всей строке.
+        var handleMatch = Regex.Match(input, @"@([\w.\-]+)");
+        var searchTerm = handleMatch.Success ? handleMatch.Groups[1].Value : input;
+
+        var candidates = await SearchTopicCandidatesAsync(searchTerm, maxResults: 25, daysBack: 0, lang: lang, ct: ct);
+        if (candidates.Count == 0) return null;
+
+        var best = candidates
+            .Where(c => !string.IsNullOrWhiteSpace(c.ChannelId))
+            .GroupBy(c => c.ChannelId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new
+            {
+                ChannelId = g.Key,
+                Title = g.GroupBy(x => x.ChannelTitle)
+                         .OrderByDescending(t => t.Count())
+                         .Select(t => t.Key)
+                         .FirstOrDefault() ?? string.Empty,
+                Score = g.Count() + g.Sum(x => (double)x.ViewCount) / 1_000_000.0
+            })
+            .OrderByDescending(x => x.Score)
+            .FirstOrDefault();
+
+        if (best == null) return null;
+
+        return new ChannelRef(
+            best.ChannelId,
+            string.IsNullOrWhiteSpace(best.Title) ? input : best.Title);
+    }
+
+    public async Task<IReadOnlyList<RawVideoSearchResult>> GetChannelCandidatesAsync(
+        ChannelRef channel,
+        int maxResults = 25,
+        int daysBack = 0,
+        string lang = "ru",
+        CancellationToken ct = default)
+    {
+        if (channel == null || string.IsNullOrWhiteSpace(channel.ChannelId)) return [];
+
+        var cacheKey = $"yt_channel_{channel.ChannelId}_{maxResults}_{daysBack}_{lang}";
+        var cached = await _cache.GetAsync<IReadOnlyList<RawVideoSearchResult>>(cacheKey, ct);
+        if (cached != null && cached.Count > 0) return cached;
+
+        _logger.LogInformation(
+            "[YouTubeIngestor] Сканирование канала {ChannelId} ({Title})", channel.ChannelId, channel.ChannelTitle);
+
+        var uploads = await _youTubeClient.GetChannelRecentUploadsAsync(channel.ChannelId, maxResults, lang, ct);
+
+        var results = new List<RawVideoSearchResult>();
+        foreach (var u in uploads)
+        {
+            var publishedAt = Integrations.YouTube.Scraper.InnerTubeMetadataScraper.ParseRelativePublishedTime(u.PublishedText)
+                ?? (daysBack > 0
+                    ? DateTimeOffset.UtcNow.AddDays(-Math.Max(1.0, daysBack * 0.5))
+                    : DateTimeOffset.UtcNow.AddDays(-7));
+
+            results.Add(new RawVideoSearchResult(
+                VideoId: u.VideoId,
+                Title: u.Title,
+                ChannelTitle: channel.ChannelTitle,
+                ChannelId: channel.ChannelId,
+                SubscriberCount: 0,
+                ViewCount: u.ViewCount,
+                PublishedAt: publishedAt,
+                DurationSeconds: u.DurationSeconds,
+                ThumbnailUrl: u.ThumbnailUrl,
+                TopComments: []));
+        }
+
+        if (results.Count > 0)
+        {
+            await _cache.SetAsync(cacheKey, (IReadOnlyList<RawVideoSearchResult>)results, TimeSpan.FromHours(2), ct);
+        }
+
+        return results;
+    }
+
     private static List<RawVideoSearchResult> MapToResults(IReadOnlyList<YouTubeVideoMetadata> videos, int daysBack)
     {
         var results = new List<RawVideoSearchResult>();

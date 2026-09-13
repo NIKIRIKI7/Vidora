@@ -134,32 +134,47 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                // Интеграция конкурентов в поисковые запросы
+                // Конкуренты: разрешаем в channelId и сканируем каналы напрямую (точный режим)
                 bool isCompetitorMode = options.SearchMode?.Equals("competitors", StringComparison.OrdinalIgnoreCase) == true;
+                var resolvedCompetitors = new List<ChannelRef>();
 
                 if (options.CompetitorChannels != null && options.CompetitorChannels.Count > 0)
                 {
-                    var compQueries = options.CompetitorChannels
+                    var compInputs = options.CompetitorChannels
                         .Where(c => !string.IsNullOrWhiteSpace(c))
                         .Select(c => c.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    if (compQueries.Count > 0)
+                    foreach (var comp in compInputs)
                     {
-                        // Ставим каналы конкурентов в самый приоритет (в начало списка запросов)
-                        searchQueries.InsertRange(0, compQueries);
+                        if (ct.IsCancellationRequested) break;
+                        try
+                        {
+                            var channelRef = await _ytIngestor.ResolveChannelAsync(comp, options.Language, ct);
+                            if (channelRef != null) resolvedCompetitors.Add(channelRef);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            _logger.LogDebug(ex, "Competitor resolve failed: {Comp}", comp);
+                        }
+                    }
 
+                    resolvedCompetitors = resolvedCompetitors
+                        .DistinctBy(c => c.ChannelId, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (resolvedCompetitors.Count > 0)
+                    {
+                        await EmitLog(EmitAsync, $"🎯 Распознаны каналы-конкуренты: {string.Join(", ", resolvedCompetitors.Take(6).Select(c => c.ChannelTitle))}", "info");
+                    }
+                    else if (compInputs.Count > 0)
+                    {
+                        // Фолбэк: каналы не разрешились — используем имена как поисковые запросы
+                        searchQueries.InsertRange(0, compInputs);
                         if (isCompetitorMode)
-                        {
-                            // Если выбран режим "Конкуренты", отсекаем большую часть "широких" запросов,
-                            // чтобы не тратить лимиты и сосредоточиться на конкурентах.
-                            searchQueries = searchQueries.Take(compQueries.Count + 3).ToList();
-                            await EmitLog(EmitAsync, $"🎯 Режим 'Конкуренты'. Сканируем каналы: {string.Join(", ", compQueries)}", "info");
-                        }
-                        else
-                        {
-                            await EmitLog(EmitAsync, $"🎯 В поиск добавлены каналы конкурентов: {string.Join(", ", compQueries.Take(3))}...", "info");
-                        }
+                            searchQueries = searchQueries.Take(compInputs.Count + 3).ToList();
+                        await EmitLog(EmitAsync, $"🎯 Каналы не распознаны, использую имена в поиске: {string.Join(", ", compInputs.Take(3))}...", "warning");
                     }
                 }
 
@@ -194,28 +209,65 @@ public sealed class YouTubeDeepTrendStreamingPipeline
                     return top;
                 }
 
-                // 3. Сканирование YouTube
-                foreach (var sq in searchQueries)
+                // 3a. Прямое сканирование каналов конкурентов (точно по channelId)
+                if (resolvedCompetitors.Count > 0)
                 {
-                    if (ct.IsCancellationRequested) break;
-                    try
+                    foreach (var comp in resolvedCompetitors)
                     {
-                        var found = await _ytIngestor.SearchTopicCandidatesAsync(sq, 25, options.DaysBack, options.Language, ct);
-                        foreach (var v in found)
+                        if (ct.IsCancellationRequested) break;
+                        try
                         {
-                            if (seenVideoIds.Add(v.VideoId))
+                            var found = await _ytIngestor.GetChannelCandidatesAsync(comp, 25, options.DaysBack, options.Language, ct);
+                            foreach (var v in found)
                             {
-                                candidatePool.Add(v);
-                                var m = _momentumEngine.CalculateMomentum(v.ViewCount, v.PublishedAt, v.SubscriberCount);
-                                double p = (m.IsRocket ? 1000 : 0) + m.ViewsPerHour;
-                                EnqueueSeed(v.VideoId, p);
+                                if (seenVideoIds.Add(v.VideoId))
+                                {
+                                    candidatePool.Add(v);
+                                    var m = _momentumEngine.CalculateMomentum(v.ViewCount, v.PublishedAt, v.SubscriberCount);
+                                    double p = (m.IsRocket ? 1000 : 0) + m.ViewsPerHour;
+                                    EnqueueSeed(v.VideoId, p);
+                                }
                             }
                         }
-                        if (candidatePool.Count >= 250) break;
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            _logger.LogDebug(ex, "Channel scan failed: {ChannelId}", comp.ChannelId);
+                        }
                     }
-                    catch (Exception ex)
+
+                    await EmitLog(EmitAsync, $"🎯 Прямое сканирование каналов: собрано {candidatePool.Count} видео.", "info");
+                }
+
+                // 3b. Поисковые запросы. В режиме "Конкуренты" с успешным резолвом широкий поиск пропускаем.
+                bool skipBroadSearch = isCompetitorMode && resolvedCompetitors.Count > 0 && candidatePool.Count > 0;
+                if (skipBroadSearch)
+                {
+                    await EmitLog(EmitAsync, "🎯 Режим 'Конкуренты': широкий поиск пропущен, работаем только по каналам.", "info");
+                }
+                else
+                {
+                    foreach (var sq in searchQueries)
                     {
-                        _logger.LogDebug(ex, "Search query failed: {Query}", sq);
+                        if (ct.IsCancellationRequested) break;
+                        try
+                        {
+                            var found = await _ytIngestor.SearchTopicCandidatesAsync(sq, 25, options.DaysBack, options.Language, ct);
+                            foreach (var v in found)
+                            {
+                                if (seenVideoIds.Add(v.VideoId))
+                                {
+                                    candidatePool.Add(v);
+                                    var m = _momentumEngine.CalculateMomentum(v.ViewCount, v.PublishedAt, v.SubscriberCount);
+                                    double p = (m.IsRocket ? 1000 : 0) + m.ViewsPerHour;
+                                    EnqueueSeed(v.VideoId, p);
+                                }
+                            }
+                            if (candidatePool.Count >= 250) break;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Search query failed: {Query}", sq);
+                        }
                     }
                 }
 

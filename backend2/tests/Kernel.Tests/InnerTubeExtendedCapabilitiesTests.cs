@@ -887,6 +887,81 @@ public sealed class InnerTubeExtendedCapabilitiesTests
         Assert.Empty(result);
     }
 
+    [Fact]
+    public async Task InnerTubeClient_GetChannelRecentUploadsAsync_ParsesLockupViewModel()
+    {
+        var client = CreateInnerTubeClient(out var mockTransport);
+        var root = JsonDocument.Parse("""
+        {
+          "contents": {
+            "twoColumnBrowseResultsRenderer": {
+              "tabs": [
+                {
+                  "tabRenderer": {
+                    "content": {
+                      "richGridRenderer": {
+                        "contents": [
+                          {
+                            "richItemRenderer": {
+                              "content": {
+                                "lockupViewModel": {
+                                  "contentId": "q2cg1gEYWJQ",
+                                  "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                                  "metadata": {
+                                    "lockupMetadataViewModel": {
+                                      "title": { "content": "Test Channel Video" },
+                                      "metadata": {
+                                        "contentMetadataViewModel": {
+                                          "metadataRows": [
+                                            { "metadataParts": [ { "text": { "content": "The Diary Of A CEO" } } ] },
+                                            { "metadataParts": [ { "text": { "content": "1.4M views" } }, { "text": { "content": "3 days ago" } } ] }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "contentImage": {
+                                    "thumbnailViewModel": {
+                                      "image": { "sources": [ { "url": "https://i.ytimg.com/vi/q2cg1gEYWJQ/hq720.jpg" } ] },
+                                      "overlays": [
+                                        {
+                                          "thumbnailBottomOverlayViewModel": {
+                                            "badges": [ { "thumbnailBadgeViewModel": { "text": "2:26:26" } } ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+        """).RootElement;
+        mockTransport.Setup(t => t.SendBrowseAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>(), It.IsAny<string?>()))
+            .ReturnsAsync(root);
+
+        var uploads = await client.GetChannelRecentUploadsAsync("UCGq-a57w-aPwyi3pW7XLiHw", 10, "en");
+
+        Assert.Single(uploads);
+        Assert.Equal("q2cg1gEYWJQ", uploads[0].VideoId);
+        Assert.Equal("Test Channel Video", uploads[0].Title);
+        Assert.Equal(1_400_000, uploads[0].ViewCount);
+        Assert.Equal("3 days ago", uploads[0].PublishedText);
+        Assert.Equal(8786, uploads[0].DurationSeconds);
+        Assert.Equal("https://i.ytimg.com/vi/q2cg1gEYWJQ/hq720.jpg", uploads[0].ThumbnailUrl);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // 8. InnerTubeClient — SearchVideosFilteredAsync
     // ═══════════════════════════════════════════════════════════════════════
