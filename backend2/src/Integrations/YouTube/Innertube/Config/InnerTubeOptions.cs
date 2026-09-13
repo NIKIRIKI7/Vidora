@@ -48,6 +48,8 @@ public sealed class InnerTubeClientProfile
     public string ClientVersion { get; set; } = string.Empty;
     public string? ApiKey { get; set; }
     public int? AndroidSdkVersion { get; set; }
+    public string? OsName { get; set; }
+    public string? OsVersion { get; set; }
     public string? UserAgent { get; set; }
     public string[]? AcceptContentTypes { get; set; }
     public bool IsDefault { get; set; }

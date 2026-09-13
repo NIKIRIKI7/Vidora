@@ -114,6 +114,9 @@ public sealed class PlayerResponseExtractor : IPlayerResponseExtractor
         var points = new List<InnerTubeHeatmapPoint>();
         if (root.ValueKind != JsonValueKind.Object) return points;
 
+        ExtractHeatmapFromFrameworkUpdates(root, points);
+        if (points.Count > 0) return points;
+
         JsonElement renderer = default;
 
         if (root.TryGetProperty("playerHeatmapRenderer", out var hm))
@@ -139,20 +142,68 @@ public sealed class PlayerResponseExtractor : IPlayerResponseExtractor
                 !point.TryGetProperty("intensity", out var intensityEl))
                 continue;
 
-            var startMs = startEl.ValueKind == JsonValueKind.String
-                ? double.Parse(startEl.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                : startEl.GetDouble();
-            var endMs = endEl.ValueKind == JsonValueKind.String
-                ? double.Parse(endEl.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                : endEl.GetDouble();
-            var intensity = intensityEl.ValueKind == JsonValueKind.String
-                ? double.Parse(intensityEl.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                : intensityEl.GetDouble();
-
-            points.Add(new InnerTubeHeatmapPoint(startMs / 1000.0, endMs / 1000.0, intensity));
+            points.Add(new InnerTubeHeatmapPoint(
+                ParseDouble(startEl) / 1000.0,
+                ParseDouble(endEl) / 1000.0,
+                ParseDouble(intensityEl)));
         }
 
         return points;
+    }
+
+    private static void ExtractHeatmapFromFrameworkUpdates(JsonElement root, List<InnerTubeHeatmapPoint> points)
+    {
+        if (!root.TryGetProperty("frameworkUpdates", out var frameworkUpdates) ||
+            !frameworkUpdates.TryGetProperty("entityBatchUpdate", out var batchUpdate) ||
+            !batchUpdate.TryGetProperty("mutations", out var mutations) ||
+            mutations.ValueKind != JsonValueKind.Array)
+            return;
+
+        foreach (var mutation in mutations.EnumerateArray())
+        {
+            if (!mutation.TryGetProperty("payload", out var payload) ||
+                !payload.TryGetProperty("macroMarkersListEntity", out var entity) ||
+                !entity.TryGetProperty("markersList", out var markersList))
+                continue;
+
+            if (markersList.TryGetProperty("markerType", out var markerType) &&
+                markerType.GetString() != "MARKER_TYPE_HEATMAP")
+                continue;
+
+            if (!markersList.TryGetProperty("markers", out var markers) ||
+                markers.ValueKind != JsonValueKind.Array)
+                continue;
+
+            foreach (var marker in markers.EnumerateArray())
+            {
+                if (!marker.TryGetProperty("startMillis", out var startEl) ||
+                    !marker.TryGetProperty("durationMillis", out var durationEl))
+                    continue;
+
+                var startMs = ParseDouble(startEl);
+                var durationMs = ParseDouble(durationEl);
+                var intensity = marker.TryGetProperty("intensityScoreNormalized", out var intensityEl)
+                    ? ParseDouble(intensityEl)
+                    : 0.0;
+
+                points.Add(new InnerTubeHeatmapPoint(
+                    startMs / 1000.0,
+                    (startMs + durationMs) / 1000.0,
+                    intensity));
+            }
+        }
+    }
+
+    private static double ParseDouble(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number => element.GetDouble(),
+            JsonValueKind.String => double.TryParse(
+                element.GetString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0.0,
+            _ => 0.0
+        };
     }
 
     public IReadOnlyList<InnerTubeWordTimestamp> ExtractWordTimestamps(JsonElement root)

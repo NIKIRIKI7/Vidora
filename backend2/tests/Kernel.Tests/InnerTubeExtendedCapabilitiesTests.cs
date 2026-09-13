@@ -113,6 +113,46 @@ public sealed class InnerTubeExtendedCapabilitiesTests
         Assert.Empty(heatmap);
     }
 
+    [Fact]
+    public void PlayerExtractor_ExtractHeatmap_FromFrameworkUpdates()
+    {
+        var json = """
+        {
+          "frameworkUpdates": {
+            "entityBatchUpdate": {
+              "mutations": [
+                {
+                  "payload": {
+                    "macroMarkersListEntity": {
+                      "externalVideoId": "dQw4w9WgXcQ",
+                      "markersList": {
+                        "markerType": "MARKER_TYPE_HEATMAP",
+                        "markers": [
+                          { "startMillis": "0", "durationMillis": "2140", "intensityScoreNormalized": 1 },
+                          { "startMillis": "2140", "durationMillis": "2140", "intensityScoreNormalized": 0.0052 }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+        """;
+        var doc = JsonDocument.Parse(json);
+        var extractor = new PlayerResponseExtractor(new InnerTubeSchemaConfig());
+
+        var heatmap = extractor.ExtractHeatmap(doc.RootElement);
+
+        Assert.Equal(2, heatmap.Count);
+        Assert.Equal(0.0, heatmap[0].StartSeconds);
+        Assert.Equal(2.14, heatmap[0].EndSeconds, 2);
+        Assert.Equal(1.0, heatmap[0].Intensity, 2);
+        Assert.Equal(2.14, heatmap[1].StartSeconds, 2);
+        Assert.Equal(4.28, heatmap[1].EndSeconds, 2);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // 2. PlayerResponseExtractor — WordTimestamps
     // ═══════════════════════════════════════════════════════════════════════
@@ -432,6 +472,265 @@ public sealed class InnerTubeExtendedCapabilitiesTests
         Assert.Empty(comments);
     }
 
+    [Fact]
+    public void WatchNextExtractor_ExtractCommentsFromContinuation_ModernEntitySchema()
+    {
+        var json = """
+        {
+          "frameworkUpdates": {
+            "entityBatchUpdate": {
+              "mutations": [
+                {
+                  "payload": {
+                    "commentEntityPayload": {
+                      "key": "COMMENT_KEY_1",
+                      "properties": {
+                        "commentId": "Ugx123",
+                        "content": { "content": "Do you like these types of conversations?" },
+                        "publishedTime": "2 weeks ago"
+                      },
+                      "author": {
+                        "channelId": "UCGq-a57w-aPwyi3pW7XLiHw",
+                        "displayName": "@TheDiaryOfACEO"
+                      },
+                      "toolbar": { "likeCountLiked": "1.4K", "replyCount": "319" }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "onResponseReceivedEndpoints": [
+            {
+              "reloadContinuationItemsCommand": {
+                "targetId": "comments-section",
+                "continuationItems": [
+                  {
+                    "commentThreadRenderer": {
+                      "commentViewModel": {
+                        "commentViewModel": {
+                          "commentKey": "COMMENT_KEY_1",
+                          "commentId": "Ugx123"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """;
+        var doc = JsonDocument.Parse(json);
+        var extractor = new WatchNextResponseExtractor(new InnerTubeSchemaConfig());
+
+        var comments = extractor.ExtractCommentsFromContinuation(doc.RootElement, 50);
+
+        Assert.Single(comments);
+        Assert.Equal("@TheDiaryOfACEO", comments[0].AuthorName);
+        Assert.Equal("UCGq-a57w-aPwyi3pW7XLiHw", comments[0].AuthorChannelId);
+        Assert.Equal("Do you like these types of conversations?", comments[0].Text);
+        Assert.Equal(1400, comments[0].LikeCount);
+        Assert.Equal("2 weeks ago", comments[0].PublishedTime);
+        Assert.Equal("Ugx123", comments[0].CommentId);
+    }
+
+    [Fact]
+    public void WatchNextExtractor_ExtractCommentsContinuationToken_PrefersCommentSection()
+    {
+        var json = """
+        {
+          "contents": {
+            "twoColumnWatchNextResults": {
+              "results": {
+                "results": {
+                  "contents": [
+                    {
+                      "itemSectionRenderer": {
+                        "sectionIdentifier": "related-item-section",
+                        "contents": [
+                          {
+                            "continuationItemRenderer": {
+                              "continuationEndpoint": {
+                                "continuationCommand": { "token": "RELATED_TOKEN" }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "itemSectionRenderer": {
+                        "sectionIdentifier": "comment-item-section",
+                        "contents": [
+                          {
+                            "continuationItemRenderer": {
+                              "continuationEndpoint": {
+                                "continuationCommand": { "token": "COMMENT_TOKEN" }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """;
+        var doc = JsonDocument.Parse(json);
+        var extractor = new WatchNextResponseExtractor(new InnerTubeSchemaConfig());
+
+        var token = extractor.ExtractCommentsContinuationToken(doc.RootElement);
+
+        Assert.Equal("COMMENT_TOKEN", token);
+    }
+
+    [Fact]
+    public void WatchNextExtractor_ExtractChapters_FromPlayerOverlayMarkers()
+    {
+        var json = """
+        {
+          "playerOverlays": {
+            "playerOverlayRenderer": {
+              "decoratedPlayerBarRenderer": {
+                "decoratedPlayerBarRenderer": {
+                  "playerBar": {
+                    "multiMarkersPlayerBarRenderer": {
+                      "markersMap": [
+                        {
+                          "key": "DESCRIPTION_CHAPTERS",
+                          "value": {
+                            "chapters": [
+                              {
+                                "chapterRenderer": {
+                                  "title": { "simpleText": "Intro" },
+                                  "timeRangeStartMillis": 0,
+                                  "thumbnail": {
+                                    "thumbnails": [
+                                      { "url": "https://i.ytimg.com/vi/Lf5oqGOCRCM/hqdefault_20000.jpg" }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "chapterRenderer": {
+                                  "title": { "simpleText": "AI Is A Con" },
+                                  "timeRangeStartMillis": 156000
+                                }
+                              },
+                              {
+                                "chapterRenderer": {
+                                  "title": { "simpleText": "Outro" },
+                                  "timeRangeStartMillis": 300000
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """;
+        var doc = JsonDocument.Parse(json);
+        var extractor = new WatchNextResponseExtractor(new InnerTubeSchemaConfig());
+
+        var chapters = extractor.ExtractChapters(doc.RootElement);
+
+        Assert.Equal(3, chapters.Count);
+        Assert.Equal("Intro", chapters[0].Title);
+        Assert.Equal(0, chapters[0].StartSeconds);
+        Assert.Equal(156, chapters[0].EndSeconds);
+        Assert.Equal("https://i.ytimg.com/vi/Lf5oqGOCRCM/hqdefault_20000.jpg", chapters[0].ThumbnailUrl);
+        Assert.Equal("AI Is A Con", chapters[1].Title);
+        Assert.Equal(156, chapters[1].StartSeconds);
+        Assert.Equal(300, chapters[1].EndSeconds);
+        Assert.Equal(300, chapters[2].StartSeconds);
+    }
+
+    [Fact]
+    public void WatchNextExtractor_ExtractUploadDate_FromDateText()
+    {
+        var json = """
+        {
+          "contents": {
+            "twoColumnWatchNextResults": {
+              "results": {
+                "results": {
+                  "contents": [
+                    {
+                      "videoPrimaryInfoRenderer": {
+                        "dateText": { "simpleText": "Aug 27, 2026" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """;
+        var doc = JsonDocument.Parse(json);
+        var extractor = new WatchNextResponseExtractor(new InnerTubeSchemaConfig());
+
+        var uploadDate = extractor.ExtractUploadDate(doc.RootElement);
+
+        Assert.Equal("Aug 27, 2026", uploadDate);
+    }
+
+    [Fact]
+    public void WatchNextExtractor_ExtractUploadDate_PrefersMicroformat()
+    {
+        var json = """
+        {
+          "microformat": {
+            "microformatDataRenderer": { "uploadDate": "2026-08-27" }
+          }
+        }
+        """;
+        var doc = JsonDocument.Parse(json);
+        var extractor = new WatchNextResponseExtractor(new InnerTubeSchemaConfig());
+
+        var uploadDate = extractor.ExtractUploadDate(doc.RootElement);
+
+        Assert.Equal("2026-08-27", uploadDate);
+    }
+
+    [Fact]
+    public async Task InnerTubeClient_GetVideoUploadDateAsync_ReturnsDate()
+    {
+        var client = CreateInnerTubeClient(out var mockTransport);
+        var root = JsonDocument.Parse("""
+        {
+          "contents": {
+            "twoColumnWatchNextResults": {
+              "results": {
+                "results": {
+                  "contents": [
+                    { "videoPrimaryInfoRenderer": { "dateText": { "simpleText": "Sep 1, 2026" } } }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """).RootElement;
+        mockTransport.Setup(t => t.SendNextAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(root);
+
+        var uploadDate = await client.GetVideoUploadDateAsync("abc12345678");
+
+        Assert.Equal("Sep 1, 2026", uploadDate);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // 6. InnerTubeSearchParamsBuilder
     // ═══════════════════════════════════════════════════════════════════════
@@ -628,8 +927,8 @@ public sealed class InnerTubeExtendedCapabilitiesTests
           }
         }
         """).RootElement;
-        mockTransport.Setup(t => t.SendPlayerAsync(
-            It.IsAny<string>(), It.IsAny<InnerTubeClientType>(), It.IsAny<CancellationToken>()))
+        mockTransport.Setup(t => t.SendNextAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(root);
         var heatmap = await client.GetVideoHeatmapAsync("testVid123");
 

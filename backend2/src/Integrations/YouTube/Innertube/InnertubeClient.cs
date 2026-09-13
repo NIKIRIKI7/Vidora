@@ -24,6 +24,7 @@ public interface IInnerTubeClient
     Task<IReadOnlyList<InnerTubeChannelUpload>> GetChannelRecentUploadsAsync(string channelId, int maxUploads = 15, string lang = "en", CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeSubtitleTrack>> GetSubtitleTracksAsync(string videoId, CancellationToken ct = default);
     Task<InnerTubeVideoItem?> GetVideoDetailsAsync(string videoId, CancellationToken ct = default);
+    Task<string?> GetVideoUploadDateAsync(string videoId, CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeHeatmapPoint>> GetVideoHeatmapAsync(string videoId, CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeVideoChapter>> GetVideoChaptersAsync(string videoId, CancellationToken ct = default);
     Task<IReadOnlyList<InnerTubeWordTimestamp>> GetWordTimestampsAsync(string videoId, CancellationToken ct = default);
@@ -124,11 +125,24 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
         try
         {
             var root = await _transport.SendBrowseAsync(_options.BrowseIds.Trending, lang, region, ct);
-            return ExtractBrowseVideos(root);
+            var videos = ExtractBrowseVideos(root);
+            if (videos.Count > 0) return videos;
+
+            _logger.LogDebug("[InnerTube] Trending feed empty, falling back to home feed");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogDebug(ex, "[InnerTube] Trending feed fetch failed");
+            _logger.LogDebug(ex, "[InnerTube] Trending feed fetch failed, falling back to home feed");
+        }
+
+        try
+        {
+            var homeRoot = await _transport.SendBrowseAsync(_options.BrowseIds.HomeFeed, lang, region, ct);
+            return ExtractHomeFeedVideos(homeRoot);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Home feed fallback fetch failed");
             return [];
         }
     }
@@ -193,7 +207,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
         try
         {
-            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Android, ct);
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Ios, ct);
             return _playerExtractor.ExtractSubtitleTracks(root);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -209,13 +223,29 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
         try
         {
-            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Android, ct);
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Ios, ct);
             var items = _playerExtractor.ExtractVideoItems(root, 1);
             return items.FirstOrDefault();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "[InnerTube] Video details fetch failed for {VideoId}", videoId);
+            return null;
+        }
+    }
+
+    public async Task<string?> GetVideoUploadDateAsync(string videoId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return null;
+
+        try
+        {
+            var root = await _transport.SendNextAsync(videoId, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
+            return _watchNextExtractor.ExtractUploadDate(root);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "[InnerTube] Upload date fetch failed for {VideoId}", videoId);
             return null;
         }
     }
@@ -268,7 +298,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
         try
         {
-            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Web, ct);
+            var root = await _transport.SendNextAsync(videoId, _options.Defaults.DefaultLanguage, _options.Defaults.DefaultRegion, ct);
             return _playerExtractor.ExtractHeatmap(root);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -300,7 +330,7 @@ public sealed partial class InnerTubeClient : IInnerTubeClient
 
         try
         {
-            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Web, ct);
+            var root = await _transport.SendPlayerAsync(videoId, InnerTubeClientType.Ios, ct);
             return _playerExtractor.ExtractWordTimestamps(root);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

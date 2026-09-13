@@ -65,7 +65,16 @@ public sealed class SearchResponseExtractor : ISearchResponseExtractor
 
         var channelTitle = "";
         var channelId = "";
-        if (vr.TryGetProperty("ownerText", out var ot) && ot.TryGetProperty("runs", out var otr) && otr.GetArrayLength() > 0)
+
+        // YouTube A/B-тестирует интерфейс: канал может лежать в ownerText или в shortBylineText.
+        var ownerNode = vr.TryGetProperty("ownerText", out var ot)
+            ? ot
+            : vr.TryGetProperty("shortBylineText", out var sbt) ? sbt : default;
+
+        if (ownerNode.ValueKind == JsonValueKind.Object &&
+            ownerNode.TryGetProperty("runs", out var otr) &&
+            otr.ValueKind == JsonValueKind.Array &&
+            otr.GetArrayLength() > 0)
         {
             channelTitle = otr[0].TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
             if (otr[0].TryGetProperty("navigationEndpoint", out var nav) &&

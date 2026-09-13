@@ -4,7 +4,8 @@ public enum InnerTubeClientType
 {
     Web,
     Android,
-    Tv
+    Tv,
+    Ios
 }
 
 public sealed record InnerTubeVideoItem(

@@ -52,15 +52,25 @@ public sealed class InnerTubeModuleTests
             new InnerTubeClientProfile
             {
                 ClientName = "ANDROID",
-                ClientVersion = "19.29.35",
-                AndroidSdkVersion = 30,
+                ClientVersion = "20.10.38",
+                AndroidSdkVersion = 34,
+                OsName = "Android",
+                OsVersion = "14",
+                Priority = 3
+            },
+            new InnerTubeClientProfile
+            {
+                ClientName = "IOS",
+                ClientVersion = "20.10.4",
+                OsName = "iOS",
+                OsVersion = "18.3.1.22D72",
                 Priority = 2
             },
             new InnerTubeClientProfile
             {
                 ClientName = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
                 ClientVersion = "2.20240825.01.00",
-                Priority = 3
+                Priority = 4
             }
         ]
     };
@@ -75,6 +85,11 @@ public sealed class InnerTubeModuleTests
     [InlineData("1 234 подписчика", 1234)]
     [InlineData("500K подписчиков", 500000)]
     [InlineData("100K subscribers", 100000)]
+    [InlineData("1,5 тыс. просмотров", 1500)]
+    [InlineData("2,3 млн просмотров", 2300000)]
+    [InlineData("1,2 млрд просмотров", 1200000000)]
+    [InlineData("12,5K views", 12500)]
+    [InlineData("1 234 просмотра", 1234)]
     [InlineData("", 0)]
     [InlineData(null, 0)]
     [InlineData("0", 0)]
@@ -205,6 +220,52 @@ public sealed class InnerTubeModuleTests
         Assert.Equal(1234567, results[0].ViewCount);
         Assert.Equal(754, results[0].DurationSeconds);
         Assert.Equal("2 days ago", results[0].PublishedText);
+    }
+
+    [Fact]
+    public void SearchExtractor_ParsesShortBylineTextFallback()
+    {
+        var json = """
+        {
+          "contents": {
+            "twoColumnSearchResultsRenderer": {
+              "primaryContents": {
+                "sectionListRenderer": {
+                  "contents": [
+                    {
+                      "itemSectionRenderer": {
+                        "contents": [
+                          {
+                            "videoRenderer": {
+                              "videoId": "abc12345678",
+                              "title": { "runs": [{ "text": "Test Video Title" }] },
+                              "shortBylineText": { "runs": [{ "text": "ShortChannel", "navigationEndpoint": { "browseEndpoint": { "browseId": "UCshort123" } } }] },
+                              "viewCountText": { "simpleText": "1,5 тыс. просмотров" },
+                              "lengthText": { "simpleText": "12:34" },
+                              "publishedTimeText": { "simpleText": "2 days ago" },
+                              "ownerBadges": []
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """;
+
+        var doc = JsonDocument.Parse(json);
+        var extractor = new SearchResponseExtractor(new InnerTubeSchemaConfig());
+
+        var results = extractor.Extract(doc.RootElement, 10);
+
+        Assert.Single(results);
+        Assert.Equal("ShortChannel", results[0].ChannelTitle);
+        Assert.Equal("UCshort123", results[0].ChannelId);
+        Assert.Equal(1500, results[0].ViewCount);
     }
 
     [Fact]
@@ -544,6 +605,59 @@ public sealed class InnerTubeModuleTests
         Assert.Equal(0, count);
     }
 
+    [Fact]
+    public async Task InnerTubeClient_TrendingFallsBackToHomeFeed()
+    {
+        var mockTransport = new Mock<IInnerTubeHttpTransport>();
+        mockTransport.Setup(t => t.SendBrowseAsync(
+                "FEtrending", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()))
+            .ThrowsAsync(new HttpRequestException("400 invalid argument"));
+
+        var homeFeed = JsonDocument.Parse("""
+        {
+          "contents": {
+            "twoColumnBrowseResultsRenderer": {
+              "tabs": [
+                {
+                  "tabRenderer": {
+                    "content": {
+                      "richGridRenderer": {
+                        "contents": [
+                          {
+                            "richItemRenderer": {
+                              "content": {
+                                "videoRenderer": {
+                                  "videoId": "homeVid0001",
+                                  "title": { "runs": [{ "text": "Home Video" }] },
+                                  "ownerText": { "runs": [{ "text": "HomeChannel" }] },
+                                  "viewCountText": { "simpleText": "1,000 views" },
+                                  "lengthText": { "simpleText": "3:00" }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+        """).RootElement;
+        mockTransport.Setup(t => t.SendBrowseAsync(
+                "FEwhat_to_watch", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()))
+            .ReturnsAsync(homeFeed);
+
+        var client = CreateInnerTubeClient(out _, mockTransport.Object);
+
+        var videos = await client.GetTrendingVideosAsync("en");
+
+        Assert.Single(videos);
+        Assert.Equal("homeVid0001", videos[0].VideoId);
+    }
+
     // ─── Options Default Profiles ──────────────────────────────────────────
 
     [Fact]
@@ -553,6 +667,7 @@ public sealed class InnerTubeModuleTests
 
         Assert.NotEmpty(options.ClientProfiles);
         Assert.Contains(options.ClientProfiles, p => p.ClientName == "WEB");
+        Assert.Contains(options.ClientProfiles, p => p.ClientName == "IOS");
         Assert.Contains(options.ClientProfiles, p => p.ClientName == "ANDROID");
         Assert.Contains(options.ClientProfiles, p => p.ClientName == "TVHTML5_SIMPLY_EMBEDDED_PLAYER");
     }
@@ -586,8 +701,69 @@ public sealed class InnerTubeModuleTests
         Assert.InRange(options.Timeouts.SubtitleFetchSeconds, 3, 30);
     }
 
-    // ─── InnerTube Service Extensions ──────────────────────────────────────
+    // ─── Transport ─────────────────────────────────────────────────────────
 
+    [Fact]
+    public async Task Transport_PlayerUsesIosProfileAndContext()
+    {
+        var options = CreateDefaultOptions();
+        var handler = new RecordingHandler();
+        var transport = CreateTransport(options, handler);
+
+        var root = await transport.SendPlayerAsync("dQw4w9WgXcQ", InnerTubeClientType.Ios, CancellationToken.None);
+
+        Assert.True(root.TryGetProperty("videoDetails", out _));
+
+        var client = handler.RequestBodies.Single()
+            .GetProperty("context").GetProperty("client");
+        Assert.Equal("IOS", client.GetProperty("clientName").GetString());
+        Assert.Equal("20.10.4", client.GetProperty("clientVersion").GetString());
+        Assert.Equal("iOS", client.GetProperty("osName").GetString());
+        Assert.False(client.TryGetProperty("androidSdkVersion", out _));
+    }
+
+    [Fact]
+    public async Task Transport_FallbackRewritesClientProfileInContext()
+    {
+        var options = CreateDefaultOptions();
+        options.ClientProfiles =
+        [
+            new InnerTubeClientProfile
+            {
+                ClientName = "IOS",
+                ClientVersion = "20.10.4",
+                OsName = "iOS",
+                OsVersion = "18.3.1.22D72",
+                Priority = 1
+            },
+            new InnerTubeClientProfile
+            {
+                ClientName = "ANDROID",
+                ClientVersion = "20.10.38",
+                AndroidSdkVersion = 34,
+                OsName = "Android",
+                OsVersion = "14",
+                Priority = 2
+            }
+        ];
+
+        var handler = new RecordingHandler(failFirst: true);
+        var transport = CreateTransport(options, handler);
+
+        var root = await transport.SendPlayerAsync("dQw4w9WgXcQ", InnerTubeClientType.Ios, CancellationToken.None);
+
+        Assert.True(root.TryGetProperty("videoDetails", out _));
+        Assert.Equal(2, handler.RequestBodies.Count);
+
+        var retryClient = handler.RequestBodies[1]
+            .GetProperty("context").GetProperty("client");
+        Assert.Equal("ANDROID", retryClient.GetProperty("clientName").GetString());
+        Assert.Equal("20.10.38", retryClient.GetProperty("clientVersion").GetString());
+        Assert.Equal(34, retryClient.GetProperty("androidSdkVersion").GetInt32());
+        Assert.Equal("Android", retryClient.GetProperty("osName").GetString());
+    }
+
+    // ─── InnerTube Service Extensions ──────────────────────────────────────
     [Fact]
     public void ServiceExtensions_RegistersAllComponents()
     {
@@ -659,5 +835,45 @@ public sealed class InnerTubeModuleTests
             diagnostics,
             options,
             NullLogger<InnerTubeClient>.Instance);
+    }
+
+    private static InnerTubeHttpTransport CreateTransport(InnerTubeOptions options, HttpMessageHandler handler)
+    {
+        return new InnerTubeHttpTransport(
+            new HttpClient(handler),
+            Options.Create(options),
+            NullLogger<InnerTubeHttpTransport>.Instance);
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        private readonly bool _failFirst;
+
+        public RecordingHandler(bool failFirst = false) => _failFirst = failFirst;
+
+        public List<JsonElement> RequestBodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var json = request.Content is null
+                ? "{}"
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(json);
+            RequestBodies.Add(doc.RootElement.Clone());
+
+            if (_failFirst && RequestBodies.Count == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent("{\"error\":{\"message\":\"Precondition check failed.\"}}")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"videoDetails\":{\"videoId\":\"dQw4w9WgXcQ\",\"title\":\"t\"}}")
+            };
+        }
     }
 }

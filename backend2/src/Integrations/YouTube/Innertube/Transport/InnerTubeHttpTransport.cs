@@ -94,22 +94,59 @@ public sealed class InnerTubeHttpTransport : IInnerTubeHttpTransport
         return await _httpClient.GetStringAsync(url, cts.Token);
     }
 
-    private Dictionary<string, object> BuildContextPayload(InnerTubeClientProfile profile, string lang, string region)
+    private static Dictionary<string, object> BuildContextPayload(InnerTubeClientProfile profile, string lang, string region)
     {
+        var client = new Dictionary<string, object>
+        {
+            ["hl"] = lang,
+            ["gl"] = region,
+            ["clientName"] = profile.ClientName,
+            ["clientVersion"] = profile.ClientVersion
+        };
+
+        if (profile.AndroidSdkVersion.HasValue)
+            client["androidSdkVersion"] = profile.AndroidSdkVersion.Value;
+        if (!string.IsNullOrEmpty(profile.OsName))
+            client["osName"] = profile.OsName;
+        if (!string.IsNullOrEmpty(profile.OsVersion))
+            client["osVersion"] = profile.OsVersion;
+
         return new Dictionary<string, object>
         {
-            ["context"] = new
+            ["context"] = new Dictionary<string, object>
             {
-                client = new
-                {
-                    hl = lang,
-                    gl = region,
-                    clientName = profile.ClientName,
-                    clientVersion = profile.ClientVersion,
-                    androidSdkVersion = profile.AndroidSdkVersion
-                }
+                ["client"] = client
             }
         };
+    }
+
+    private static void ApplyProfileToContext(Dictionary<string, object> payload, InnerTubeClientProfile profile)
+    {
+        if (!payload.TryGetValue("context", out var ctx) ||
+            ctx is not Dictionary<string, object> ctxDict ||
+            !ctxDict.TryGetValue("client", out var clientObj) ||
+            clientObj is not Dictionary<string, object> clientDict)
+        {
+            return;
+        }
+
+        clientDict["clientName"] = profile.ClientName;
+        clientDict["clientVersion"] = profile.ClientVersion;
+
+        if (profile.AndroidSdkVersion.HasValue)
+            clientDict["androidSdkVersion"] = profile.AndroidSdkVersion.Value;
+        else
+            clientDict.Remove("androidSdkVersion");
+
+        if (!string.IsNullOrEmpty(profile.OsName))
+            clientDict["osName"] = profile.OsName;
+        else
+            clientDict.Remove("osName");
+
+        if (!string.IsNullOrEmpty(profile.OsVersion))
+            clientDict["osVersion"] = profile.OsVersion;
+        else
+            clientDict.Remove("osVersion");
     }
 
     private async Task<JsonElement> PostAsync(
@@ -200,16 +237,7 @@ public sealed class InnerTubeHttpTransport : IInnerTubeHttpTransport
                 cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
                 var fallbackPayload = new Dictionary<string, object>(payload);
-                if (fallbackPayload.TryGetValue("context", out var ctx) && ctx is Dictionary<string, object> ctxDict)
-                {
-                    if (ctxDict.TryGetValue("client", out var clientObj) && clientObj is Dictionary<string, object> clientDict)
-                    {
-                        clientDict["clientName"] = fallback.ClientName;
-                        clientDict["clientVersion"] = fallback.ClientVersion;
-                        if (fallback.AndroidSdkVersion.HasValue)
-                            clientDict["androidSdkVersion"] = fallback.AndroidSdkVersion.Value;
-                    }
-                }
+                ApplyProfileToContext(fallbackPayload, fallback);
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
                 request.Content = new StringContent(JsonSerializer.Serialize(fallbackPayload), Encoding.UTF8, "application/json");
@@ -239,6 +267,7 @@ public sealed class InnerTubeHttpTransport : IInnerTubeHttpTransport
         {
             InnerTubeClientType.Android => "ANDROID",
             InnerTubeClientType.Tv => "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+            InnerTubeClientType.Ios => "IOS",
             _ => "WEB"
         };
 
@@ -254,16 +283,27 @@ public sealed class InnerTubeHttpTransport : IInnerTubeHttpTransport
             "ANDROID" => new InnerTubeClientProfile
             {
                 ClientName = "ANDROID",
-                ClientVersion = "19.29.35",
-                AndroidSdkVersion = 30,
+                ClientVersion = "20.10.38",
+                AndroidSdkVersion = 34,
+                OsName = "Android",
+                OsVersion = "14",
+                Priority = 3,
+                UserAgent = "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip"
+            },
+            "IOS" => new InnerTubeClientProfile
+            {
+                ClientName = "IOS",
+                ClientVersion = "20.10.4",
+                OsName = "iOS",
+                OsVersion = "18.3.1.22D72",
                 Priority = 2,
-                UserAgent = "com.google.android.youtube/19.29.35 (Linux; U; Android 11) gzip"
+                UserAgent = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_1 like Mac OS X)"
             },
             "TVHTML5_SIMPLY_EMBEDDED_PLAYER" => new InnerTubeClientProfile
             {
                 ClientName = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
                 ClientVersion = "2.20240825.01.00",
-                Priority = 3,
+                Priority = 4,
                 UserAgent = "Mozilla/5.0"
             },
             _ => new InnerTubeClientProfile

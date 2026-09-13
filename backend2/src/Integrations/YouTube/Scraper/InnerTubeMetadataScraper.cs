@@ -69,6 +69,27 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
                 {
                 }
 
+                string? uploadDate = null;
+                DateTimeOffset? publishedAt = null;
+                try
+                {
+                    var dateText = await _innerTubeClient.GetVideoUploadDateAsync(videoId, cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(dateText))
+                    {
+                        uploadDate = dateText;
+                        if (DateTimeOffset.TryParse(
+                                dateText, CultureInfo.InvariantCulture,
+                                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                                out var parsed))
+                        {
+                            publishedAt = parsed;
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
                 return new YouTubeVideoMetadata
                 {
                     VideoId = item.VideoId,
@@ -79,6 +100,8 @@ public sealed class InnerTubeMetadataScraper : IYouTubeMetadataScraper
                     SubscriberCount = subscribers,
                     ViewCount = item.ViewCount,
                     Duration = TimeSpan.FromSeconds(item.DurationSeconds),
+                    UploadDate = uploadDate,
+                    PublishedAt = publishedAt,
                     ThumbnailUrl = item.ThumbnailUrl,
                     Comments = comments
                 };
