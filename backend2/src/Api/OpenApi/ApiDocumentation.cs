@@ -1,5 +1,6 @@
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using System.Text.Json.Nodes;
 
 namespace Api.OpenApi;
 
@@ -157,6 +158,24 @@ public static class ApiDocumentation
             ["settings"] = "Настройки поиска/агента.",
             ["exclude_video_ids"] = "Исключаемые видео.",
             ["llm_engine"] = "Движок LLM.",
+            ["days_back"] = "Глубина поиска в днях (0 — без ограничения по дате).",
+            ["min_subs"] = "Минимум подписчиков у канала.",
+            ["max_subs"] = "Максимум подписчиков у канала.",
+            ["min_ratio"] = "Минимальное отношение просмотров к подписчикам.",
+            ["search_mode"] = "Режим поиска: trending | search | channels.",
+            ["search_engine"] = "Движок поиска: auto | youtube | google.",
+            ["ideas_count"] = "Сколько контент-идей сгенерировать.",
+            ["channels"] = "Список каналов-конкурентов (@handle или UC-id).",
+            ["exclude_queries"] = "Исключаемые поисковые запросы.",
+            ["is_expand_search"] = "Расширять ли поиск смежными запросами.",
+            ["target_duration"] = "Целевая длительность видео в минутах.",
+            ["elevenlabs"] = "API-ключ ElevenLabs.",
+            ["anthropic"] = "API-ключ Anthropic.",
+            ["openai"] = "API-ключ OpenAI.",
+            ["routerai"] = "API-ключ RouterAI.",
+            ["aitunnel"] = "API-ключ AITunnel.",
+            ["youtube"] = "API-ключ YouTube Data API.",
+            ["pexels"] = "API-ключ Pexels.",
 
             // Настройки / навыки
             ["key"] = "Ключ настройки.",
@@ -191,6 +210,29 @@ public static class ApiDocumentation
             ["created_at"] = "Дата создания.",
         };
 
+
+    /// <summary>
+    /// Примеры тела запроса по простому имени CLR-типа (request DTO).
+    /// Подставляются в схему Swagger, чтобы «Try it out» был сразу готов к запуску.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> RequestExamples =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["MoreVideosRequest"] =
+                """{"query":"ai productivity tools","language":"en","settings":{"days_back":30,"min_subs":1000,"max_subs":90000,"min_ratio":1.5,"search_mode":"trending","search_engine":"auto","language":"en","video_type":"all","ideas_count":5,"is_expand_search":false}}""",
+            ["DownloadMetaRequest"] =
+                """{"url":"https://www.youtube.com/watch?v=jNQXAC9IVRw","project_path":"my-project"}""",
+            ["AnalyzeHookRequest"] =
+                """{"video_id":"Lf5oqGOCRCM","language":"en"}""",
+            ["AnalyzeChannelRequest"] =
+                """{"url_or_name":"https://www.youtube.com/@MrBeast","language":"en"}""",
+            ["SuggestCompetitorsRequest"] =
+                """{"niche":"AI productivity tools","language":"en"}""",
+            ["DraftScriptRequest"] =
+                """{"title":"Why AI changes everything","idea_description":"A deep dive into AI economics","video_type":"long","target_duration":"3","language":"en"}""",
+            ["StreamAgentRequest"] =
+                """{"query":"ai tools","project_path":"my-project","settings":{"days_back":30,"min_subs":1000,"max_subs":90000,"min_ratio":1.5,"search_mode":"trending","search_engine":"auto","language":"en","video_type":"all","ideas_count":5,"is_expand_search":false}}""",
+        };
 
     public static readonly IReadOnlyDictionary<string, ApiEndpointDoc> Endpoints =
         new Dictionary<string, ApiEndpointDoc>(StringComparer.OrdinalIgnoreCase)
@@ -852,6 +894,13 @@ public sealed class ApiPropertyDocumentationSchemaFilter : ISchemaFilter
 {
     public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
     {
+        if (context.Type is not null &&
+            ApiDocumentation.RequestExamples.TryGetValue(context.Type.Name, out var example) &&
+            schema is OpenApiSchema openApiSchema)
+        {
+            openApiSchema.Example = JsonNode.Parse(example);
+        }
+
         if (schema.Properties is null || schema.Properties.Count == 0)
         {
             return;
