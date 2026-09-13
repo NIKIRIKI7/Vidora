@@ -32,7 +32,7 @@ const categoryConfig: Record<FrictionCategory, { icon: typeof HelpCircle; label:
   general: {
     icon: HelpCircle,
     label: 'Инсайт',
-    colors: 'bg-white/10 text-on-surface/70 border-outline-variant',
+    colors: 'bg-on-surface/10 text-on-surface/70 border-outline-variant',
   },
 }
 
@@ -41,7 +41,7 @@ export const FrictionBadge = ({ category, text, className = '' }: FrictionBadgeP
   const Icon = config.icon
 
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${config.colors} ${className}`}>
+    <span className={`inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full border ${config.colors} ${className}`}>
       <Icon className="w-3 h-3" />
       {text ?? config.label}
     </span>

@@ -65,8 +65,20 @@
   --font-mono: "Geist Mono", monospace;
   --font-label: "Geist", sans-serif;
 
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Geist Mono", monospace;
+  --font-label: "Geist", sans-serif;
+
+  --text-4xs: 0.5rem;
+  --text-4xs--line-height: 0.75rem;
+  --text-3xs: 0.5625rem;
+  --text-3xs--line-height: 0.75rem;
   --text-xxs: 0.625rem;
-  --text-xxs--line-height: 0.75rem;
+  --text-xxs--line-height: 0.875rem;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-13: 0.8125rem;
+  --text-13--line-height: 1.125rem;
 
   --radius-sm: 0.25rem;
   --radius-default: 0.5rem;
@@ -74,6 +86,28 @@
   --radius-lg: 1rem;
   --radius-xl: 1.5rem;
   --radius-full: 9999px;
+}
+
+/* ── Layout-константы (вместо хардкода px в компонентах) ─────────────── */
+:root {
+  --layout-toast: 420px;
+  --layout-sidebar-lg: 380px;
+  --layout-sidebar: 340px;
+  --layout-sidebar-sm: 310px;
+  --layout-sidebar-xs: 280px;
+  --layout-modal: 480px;
+  --layout-card: 220px;
+  --layout-list: 480px;
+  --layout-code: 720px;
+  --layout-chip: 104px;
+  --layout-search: 200px;
+  --layout-action: 120px;
+  --layout-action-sm: 140px;
+  --layout-tooltip: 220px;
+  --layout-label: 170px;
+  --layout-label-lg: 180px;
+  --layout-chart: 150px;
+  --layout-chart-sm: 120px;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -128,16 +162,16 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--color-outline) 40%, transparent);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--color-outline) 60%, transparent);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-outline) 40%, transparent) transparent;
 }

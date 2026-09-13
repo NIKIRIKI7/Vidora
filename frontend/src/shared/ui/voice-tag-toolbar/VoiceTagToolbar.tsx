@@ -55,18 +55,18 @@ export const VoiceTagToolbar = ({
   ]
 
   return (
-    <div className={`flex items-center gap-1 p-1 rounded-lg bg-surface-container-lowest/80 border border-white/10 select-none flex-wrap ${className}`} onMouseDown={preventBlur}>
+    <div className={`flex items-center gap-1 p-1 rounded-lg bg-surface-container-lowest/80 border border-outline-variant/40 select-none flex-wrap ${className}`} onMouseDown={preventBlur}>
       <button
         type="button"
         onMouseDown={preventBlur}
         onClick={onToggleCaps}
-        className={`px-2 py-1 rounded text-[11px] font-bold transition-colors border ${hasSelection ? 'bg-warning/20 text-warning border-warning/40 hover:bg-warning/30' : 'bg-white/5 text-on-surface-variant border-white/5 hover:text-white hover:bg-white/10'}`}
+        className={`px-2 py-1 rounded text-2xs font-bold transition-colors border ${hasSelection ? 'bg-warning/20 text-warning border-warning/40 hover:bg-warning/30' : 'bg-on-surface/5 text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:bg-on-surface/10'}`}
         title={hasSelection ? 'Сделать выделение ЗАГЛАВНЫМ — ударение в TTS (повторный клик — обратно)' : 'Выделите слово или гласную букву для ударения'}
       >
         🔠 КАПС
       </button>
 
-      <div className="h-4 w-px bg-white/10 mx-0.5" />
+      <div className="h-4 w-px bg-on-surface/10 mx-0.5" />
 
       {PAUSES.map(p => (
         <button
@@ -74,14 +74,14 @@ export const VoiceTagToolbar = ({
           type="button"
           onMouseDown={preventBlur}
           onClick={() => onInsertTag(p.tag)}
-          className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary/20 transition-colors"
+          className="px-1.5 py-0.5 rounded text-2xs font-mono bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary/20 transition-colors"
           title={`Пауза ${p.tag}`}
         >
           {p.label}
         </button>
       ))}
 
-      <div className="h-4 w-px bg-white/10 mx-0.5" />
+      <div className="h-4 w-px bg-on-surface/10 mx-0.5" />
 
       {dropdowns.map(({ key, label, items }) => (
         <div key={key} className="relative">
@@ -89,19 +89,19 @@ export const VoiceTagToolbar = ({
             type="button"
             onMouseDown={preventBlur}
             onClick={() => setOpen(open === key ? null : key)}
-            className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${open === key ? 'bg-primary/20 text-primary border-primary/40' : 'bg-white/5 text-on-surface-variant border-white/5 hover:text-white hover:bg-white/10'}`}
+            className={`px-2 py-0.5 rounded text-2xs border transition-colors ${open === key ? 'bg-primary/20 text-primary border-primary/40' : 'bg-on-surface/5 text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:bg-on-surface/10'}`}
           >
-            {label} <span className="text-[8px]">{open === key ? '▲' : '▼'}</span>
+            {label} <span className="text-4xs">{open === key ? '▲' : '▼'}</span>
           </button>
           {open === key && (
-            <div className="absolute left-0 top-full mt-1 z-50 p-1.5 bg-surface-container-high border border-white/15 rounded-lg shadow-2xl flex flex-wrap gap-1 w-48">
+            <div className="absolute left-0 top-full mt-1 z-50 p-1.5 bg-surface-container-high border border-outline-variant/60 rounded-lg shadow-2xl flex flex-wrap gap-1 w-48">
               {items.map(it => (
                 <button
                   key={it.tag}
                   type="button"
                   onMouseDown={preventBlur}
                   onClick={() => { onInsertTag(it.tag); setOpen(null) }}
-                  className="flex-1 min-w-[45%] flex items-center gap-1 px-1.5 py-1 rounded text-[11px] text-on-surface hover:bg-primary/20 hover:text-primary transition-colors"
+                  className="flex-1 min-w-[45%] flex items-center gap-1 px-1.5 py-1 rounded text-2xs text-on-surface hover:bg-primary/20 hover:text-primary transition-colors"
                   title={it.tag}
                 >
                   {it.label}

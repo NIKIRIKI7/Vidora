@@ -42,7 +42,7 @@ export const Dropdown = ({
 
       {isOpen && (
         <div
-          className={`absolute z-[100] ${verticalClass} min-w-[14rem] bg-[#171f33] border border-white/15 rounded-xl shadow-2xl py-1.5 animate-in fade-in duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
+          className={`absolute z-[100] ${verticalClass} min-w-[14rem] bg-surface-container border border-outline-variant/50 rounded-xl shadow-2xl py-1.5 animate-in fade-in duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
           onClick={() => setIsOpen(false)}
         >
           {children}
@@ -54,7 +54,7 @@ export const Dropdown = ({
 
 export const DropdownItem = ({ children, onClick, className = '', danger = false }: { children: ReactNode, onClick?: () => void, className?: string, danger?: boolean }) => (
   <button
-    className={`w-full text-left px-4 py-2 font-label text-sm transition-colors ${danger ? 'text-error hover:bg-error/10' : 'text-on-surface hover:bg-white/10'} ${className}`}
+    className={`w-full text-left px-4 py-2 font-label text-sm transition-colors cursor-pointer ${danger ? 'text-error hover:bg-error/10' : 'text-on-surface hover:bg-on-surface/10'} ${className}`}
     onClick={onClick}
   >
     {children}
