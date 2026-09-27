@@ -6,7 +6,6 @@ export { NewProjectModal } from './ui/NewProjectModal'
 
 export type { StudioModuleId } from './ui/StudioLaunchpad'
 export type {
-  HardwareInfo,
   ProjectItem,
   ProjectCreatePayload,
 } from './model/types'

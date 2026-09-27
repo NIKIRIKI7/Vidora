@@ -11,9 +11,5 @@ public interface IMotionModule
     Task<SceneCodeDto> UpdateManualCodeAsync(string sceneCodeId, UpdateSceneCodeManualRequest request, CancellationToken ct = default);
     Task<SceneCodeDto> SaveSceneCodeAsync(SaveSceneCodeRequest request, CancellationToken ct = default);
     Task<SceneCodeDto> RollbackRevisionAsync(string sceneCodeId, RollbackSceneCodeRequest request, CancellationToken ct = default);
-
-    Task<RenderJobDto> StartRenderAsync(string sceneCodeId, StartRenderRequest request, CancellationToken ct = default);
-    Task<RenderJobDto> GetRenderStatusAsync(string renderJobId, CancellationToken ct = default);
-    Task CancelRenderAsync(string renderJobId, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetAvailableCapabilitiesAsync(CancellationToken ct = default);
 }

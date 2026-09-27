@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import { useProjectStore } from '@entities/project'
 import type { FPS, ProjectSettings } from '@entities/project'
-import { dashboardApi } from '../api/dashboardApi'
-import type { HardwareInfo, ProjectCreatePayload, ProjectItem } from './types'
+import type { ProjectCreatePayload, ProjectItem } from './types'
 
 const calculateProjectDuration = (p: ProjectSettings): number => {
   let totalSec = 0
@@ -65,7 +64,6 @@ const buildRealProject = (payload: ProjectCreatePayload): ProjectSettings => ({
 type DashboardModal = 'new_project' | 'trend_agent' | 'voice_lab' | 'script_lab'
 
 interface DashboardState {
-  hardware: HardwareInfo | null
   projects: ProjectItem[]
   searchQuery: string
   formatFilter: 'all' | '16:9' | '9:16'
@@ -88,7 +86,6 @@ interface DashboardState {
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
-  hardware: null,
   projects: [],
   searchQuery: '',
   formatFilter: 'all',
@@ -102,11 +99,10 @@ export const useDashboardStore = create<DashboardState>((set) => ({
     set({ isLoading: true })
     localStorage.removeItem('vidora_projects_meta')
 
-    const hardware = await dashboardApi.getHardwareInfo()
     const realProjects = useProjectStore.getState().projects
     const projects = realProjects.map(toProjectItem)
 
-    set({ hardware, projects, isLoading: false })
+    set({ projects, isLoading: false })
   },
 
   setSearchQuery: (query: string) => set({ searchQuery: query }),

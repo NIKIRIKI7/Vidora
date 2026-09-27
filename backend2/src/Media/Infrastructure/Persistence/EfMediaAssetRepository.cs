@@ -26,7 +26,9 @@ public sealed class EfMediaAssetRepository : IMediaAssetRepository
             query = query.Where(m => m.Type == filterType.Value);
         }
 
-        return await query.OrderByDescending(m => m.CreatedAt).ToListAsync(ct);
+        // ponytail: SQLite не умеет ORDER BY по DateTimeOffset — сортируем на клиенте.
+        var assets = await query.ToListAsync(ct);
+        return assets.OrderByDescending(m => m.CreatedAt).ToList();
     }
 
     public async Task<IReadOnlyList<MediaAsset>> GetPagedAsync(MediaType? filterType, int skip, int take, CancellationToken ct = default)
@@ -37,11 +39,9 @@ public sealed class EfMediaAssetRepository : IMediaAssetRepository
             query = query.Where(m => m.Type == filterType.Value);
         }
 
-        return await query
-            .OrderByDescending(m => m.CreatedAt)
-            .Skip(skip)
-            .Take(take)
-            .ToListAsync(ct);
+        // ponytail: SQLite не умеет ORDER BY по DateTimeOffset — сортируем на клиенте.
+        var assets = await query.ToListAsync(ct);
+        return assets.OrderByDescending(m => m.CreatedAt).Skip(skip).Take(take).ToList();
     }
 
     public async Task<int> CountAsync(MediaType? filterType, CancellationToken ct = default)

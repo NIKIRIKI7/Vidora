@@ -81,9 +81,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Стриминг медиа (compat)
+         * @description **Что делает:** Совместимый с фронтендом стриминг файла; умеет находить ассеты в temp/voice и проектах.
+         *
+         *     **Вход:** query: path
+         *
+         *     **Выход:** binary stream
+         */
         get: {
             parameters: {
                 query: {
+                    /** @description Путь к файлу (абсолютный или относительно data_storage/проекта). */
                     path: string;
                 };
                 header?: never;
@@ -118,10 +127,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Поиск стока (compat)
+         * @description **Что делает:** Совместимый с фронтендом поиск стоковых видео.
+         *
+         *     **Вход:** query: query, orientation
+         *
+         *     **Выход:** StockVideoDto[]
+         */
         get: {
             parameters: {
                 query: {
+                    /** @description Поисковый запрос. */
                     query: string;
+                    /** @description Ориентация видео: landscape или portrait. */
                     orientation?: string;
                 };
                 header?: never;
@@ -158,6 +177,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Скачать сток (compat)
+         * @description **Что делает:** Совместимость с фронтендом: скачивает стоковое видео по URL и filename.
+         *
+         *     **Вход:** body: { url, filename, project_path?, folder? }
+         *
+         *     **Выход:** { status, path }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -165,6 +192,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: { url, filename, project_path?, folder? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Media.DownloadStockCompatRequest"];
@@ -195,6 +223,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Музыкальная библиотека (compat)
+         * @description **Что делает:** Совместимость с фронтендом: категории треков и пользовательские треки.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** MediaMusicLibraryResponse { status, categories[], custom_tracks[] }
+         */
         get: {
             parameters: {
                 query?: never;
@@ -232,6 +268,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Озвучка (compat)
+         * @description **Что делает:** Совместимый с фронтендом синтез речи; возвращает имя аудио и длительность.
+         *
+         *     **Вход:** body: SynthesizeSpeechRequest
+         *
+         *     **Выход:** { status, audio_url, duration }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -239,6 +283,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: SynthesizeSpeechRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Voice.SynthesizeSpeechRequest"];
@@ -271,6 +316,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Синхронизация (compat)
+         * @description **Что делает:** Совместимая с фронтендом синхронизация таймингов по аудио.
+         *
+         *     **Вход:** body: AlignSpeechRequest
+         *
+         *     **Выход:** AlignSpeechResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -278,6 +331,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: AlignSpeechRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.AlignSpeechRequest"];
@@ -310,6 +364,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Обработка аудио (compat)
+         * @description **Что делает:** Совместимая с фронтендом DSP-обработка аудио.
+         *
+         *     **Вход:** body: ProcessAudioDspRequest
+         *
+         *     **Выход:** ProcessAudioDspResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -317,6 +379,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ProcessAudioDspRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.ProcessAudioDspRequest"];
@@ -349,6 +412,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Умная обрезка пауз (compat)
+         * @description **Что делает:** Совместимая обработка: удаляет длинные паузы из аудио.
+         *
+         *     **Вход:** body: ProcessAudioDspRequest
+         *
+         *     **Выход:** ProcessAudioDspResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -356,6 +427,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ProcessAudioDspRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.ProcessAudioDspRequest"];
@@ -388,6 +460,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Транскрибация (compat)
+         * @description **Что делает:** Совместимое распознавание речи из аудио.
+         *
+         *     **Вход:** body: TranscribeAudioRequest
+         *
+         *     **Выход:** TranscribeAudioResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -395,6 +475,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: TranscribeAudioRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.TranscribeAudioRequest"];
@@ -427,6 +508,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Склейка аудио (compat)
+         * @description **Что делает:** Совместимая конкатенация аудиофайлов.
+         *
+         *     **Вход:** body: ConcatAudioRequest
+         *
+         *     **Выход:** { status, output_path }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -434,6 +523,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ConcatAudioRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.ConcatAudioRequest"];
@@ -466,6 +556,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Выгрузка VRAM (compat)
+         * @description **Что делает:** Совместимая выгрузка VRAM.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** { status }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -501,6 +599,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Превью дакинга
+         * @description **Что делает:** Собирает короткий предпросмотр микса голос + музыка.
+         *
+         *     **Вход:** body: PreviewDuckingRequest
+         *
+         *     **Выход:** DuckingPreviewResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -508,6 +614,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: PreviewDuckingRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Voice.PreviewDuckingRequest"];
@@ -540,6 +647,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Пакетная загрузка аудио сцен
+         * @description **Что делает:** Загружает несколько аудиофайлов и сопоставляет их со сценами по имени.
+         *
+         *     **Вход:** multipart: project_path, scene_ids[] (JSON), files[]
+         *
+         *     **Выход:** BatchUploadScenesResponse { status, matches[], unmatched_files[] }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -575,6 +690,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Генерация TSX (compat)
+         * @description **Что делает:** Совместимый с фронтендом эндпоинт кодогенерации сцены: собирает системный промпт из скилов и возможностей.
+         *
+         *     **Вход:** body: CodeGenerateCompatRequest { prompt, target_id?, project_path?, engine?, project_data?, api_keys? }
+         *
+         *     **Выход:** CodeGenerateResponse { status, tsx_code, applied_stage, included_skills[] }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -582,6 +705,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: CodeGenerateCompatRequest { prompt, target_id?, project_path?, engine?, project_data?, api_keys? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Motion.CodeGenerateCompatRequest"];
@@ -605,121 +729,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/render/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["Api.Endpoints.Motion.RenderStartCompatRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Api.Endpoints.Motion.RenderStartResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/render/cancel/{jobId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    jobId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Api.Endpoints.Motion.MotionStatusResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/render/concat-video": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["Api.Endpoints.Production.ConcatVideoCompatRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Api.Endpoints.Production.ProductionStatusResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/render/export": {
         parameters: {
             query?: never;
@@ -729,6 +738,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Экспорт проекта (compat)
+         * @description **Что делает:** Совместимость с фронтендом: упаковывает SCENARIO.md в zip-архив.
+         *
+         *     **Вход:** body: ExportProjectCompatRequest { project_name, markdown }
+         *
+         *     **Выход:** application/zip
+         */
         post: {
             parameters: {
                 query?: never;
@@ -736,6 +753,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ExportProjectCompatRequest { project_name, markdown } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Production.ExportProjectCompatRequest"];
@@ -766,11 +784,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Список медиа-ассетов
+         * @description **Что делает:** Постранично возвращает загруженные ассеты (видео/аудио/изображения) с необязательным фильтром по типу.
+         *
+         *     **Вход:** query: type, page, pageSize
+         *
+         *     **Выход:** PagedResult<MediaAssetDto>
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Фильтр типа медиа: Video, Audio, Image. */
                     type?: string;
+                    /** @description Номер страницы (с 1). */
                     page?: number;
+                    /** @description Размер страницы. */
                     pageSize?: number;
                 };
                 header?: never;
@@ -805,11 +834,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Медиа-ассет по ID
+         * @description **Что делает:** Возвращает метаданные одного ассета.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** MediaAssetDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -829,11 +867,20 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        /**
+         * Удаление медиа
+         * @description **Что делает:** Удаляет ассет и связанный физический файл.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** 204 No Content
+         */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -863,6 +910,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Загрузка медиа
+         * @description **Что делает:** Принимает файл (multipart/form-data), определяет тип и сохраняет ассет в хранилище.
+         *
+         *     **Вход:** multipart: file (binary), title, type
+         *
+         *     **Выход:** MediaUploadResult (status, path, filename, duration, ...)
+         */
         post: {
             parameters: {
                 query?: never;
@@ -870,6 +925,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description multipart: file (binary), title, type */
             requestBody?: {
                 content: {
                     "multipart/form-data": {
@@ -907,6 +963,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Загрузка аудио
+         * @description **Что делает:** Совместимость с фронтендом: загружает аудио-ассет и возвращает путь, имя файла и длительность.
+         *
+         *     **Вход:** multipart: file (binary, audio)
+         *
+         *     **Выход:** MediaUploadResult
+         */
         post: {
             parameters: {
                 query?: never;
@@ -914,6 +978,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description multipart: file (binary, audio) */
             requestBody?: {
                 content: {
                     "multipart/form-data": {
@@ -949,6 +1014,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Загрузка музыки
+         * @description **Что делает:** Загружает пользовательский музыкальный трек в аудиотеку проекта.
+         *
+         *     **Вход:** multipart: file (binary, audio)
+         *
+         *     **Выход:** MediaUploadResult
+         */
         post: {
             parameters: {
                 query?: never;
@@ -956,6 +1029,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description multipart: file (binary, audio) */
             requestBody?: {
                 content: {
                     "multipart/form-data": {
@@ -991,15 +1065,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Нормализация B-Roll
+         * @description **Что делает:** Приводит B-Roll видео к заданному разрешению/FPS (перекодирование, обрезка, letterbox).
+         *
+         *     **Вход:** path: id; body: { width, height, fps }
+         *
+         *     **Выход:** NormalizedBrollDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: { width, height, fps } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Media.NormalizeBrollRequest"];
@@ -1030,9 +1114,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Каталог музыки
+         * @description **Что делает:** Возвращает встроенную музыкальную библиотеку с необязательным фильтром по настроению.
+         *
+         *     **Вход:** query: mood
+         *
+         *     **Выход:** MusicTrackDto[]
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Фильтр музыкального каталога по настроению. */
                     mood?: string;
                 };
                 header?: never;
@@ -1067,12 +1160,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Поиск стокового видео
+         * @description **Что делает:** Ищет B-Roll на Pexels по запросу и ориентации.
+         *
+         *     **Вход:** query: query, orientation, page, perPage
+         *
+         *     **Выход:** StockVideoDto[]
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Поисковый запрос. */
                     query?: string;
+                    /** @description Ориентация видео: landscape или portrait. */
                     orientation?: string;
+                    /** @description Номер страницы (с 1). */
                     page?: number;
+                    /** @description Количество элементов на странице. */
                     perPage?: number;
                 };
                 header?: never;
@@ -1109,6 +1214,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Импорт стокового видео
+         * @description **Что делает:** Скачивает стоковое видео по ссылке и регистрирует его как медиа-ассет.
+         *
+         *     **Вход:** body: ImportStockVideoRequest { download_url, title }
+         *
+         *     **Выход:** 201 Created: MediaAssetDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1116,6 +1229,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ImportStockVideoRequest { download_url, title } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Media.ImportStockVideoRequest"];
@@ -1148,6 +1262,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Обработка B-Roll
+         * @description **Что делает:** Выполняет пост-обработку B-Roll: кроп/фит, FPS, длительность, извлечение аудио.
+         *
+         *     **Вход:** body: ProcessBrollCommand
+         *
+         *     **Выход:** ProcessBrollResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1155,6 +1277,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ProcessBrollCommand */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["MediaContext.Contracts.ProcessBrollCommand"];
@@ -1187,6 +1310,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * AI-автоподбор B-Roll
+         * @description **Что делает:** По визуальным ремаркам фрагментов подбирает подходящие B-Roll футажи (LLM + сток).
+         *
+         *     **Вход:** body: AutoBrollCommand { project_path, format, engine, api_keys, fragments[] }
+         *
+         *     **Выход:** AutoBrollResponse { status, results[] }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1194,6 +1325,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: AutoBrollCommand { project_path, format, engine, api_keys, fragments[] } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["MediaContext.Contracts.AutoBrollCommand"];
@@ -1224,9 +1356,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Стриминг медиа
+         * @description **Что делает:** Отдаёт файл с поддержкой HTTP Range (206) для скраббинга видео/аудио.
+         *
+         *     **Вход:** query: path
+         *
+         *     **Выход:** binary stream (Range)
+         */
         get: {
             parameters: {
                 query: {
+                    /** @description Путь к файлу (абсолютный или относительно data_storage/проекта). */
                     path: string;
                 };
                 header?: never;
@@ -1261,6 +1402,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Возможности Remotion
+         * @description **Что делает:** Возвращает доступные пакеты/возможности рендера сцен.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** string[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1296,11 +1445,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Код сцены по ID
+         * @description **Что делает:** Возвращает агрегат SceneCode с активной ревизией и композицией.
+         *
+         *     **Вход:** path: id (SceneCodeId)
+         *
+         *     **Выход:** SceneCodeDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -1318,15 +1476,25 @@ export interface paths {
                 };
             };
         };
+        /**
+         * Ручное сохранение кода сцены
+         * @description **Что делает:** Добавляет вручную отредактированную ревизию TSX-кода.
+         *
+         *     **Вход:** path: id; body: UpdateSceneCodeManualRequest { code }
+         *
+         *     **Выход:** SceneCodeDto
+         */
         put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: UpdateSceneCodeManualRequest { code } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["MotionContext.Contracts.UpdateSceneCodeManualRequest"];
@@ -1358,12 +1526,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Код сцены по проекту
+         * @description **Что делает:** Находит SceneCode по паре (projectId, sceneId).
+         *
+         *     **Вход:** path: projectId, sceneId
+         *
+         *     **Выход:** SceneCodeDto | 404
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор проекта (slug/имя проекта). */
                     projectId: string;
+                    /** @description Идентификатор сцены внутри проекта. */
                     sceneId: string;
                 };
                 cookie?: never;
@@ -1396,12 +1574,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Ревизия кода сцены
+         * @description **Что делает:** Возвращает конкретную ревизию TSX-кода сцены.
+         *
+         *     **Вход:** path: id, revision
+         *
+         *     **Выход:** SceneRevisionDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
+                    /** @description Номер ревизии кода сцены (целое число). */
                     revision: number;
                 };
                 cookie?: never;
@@ -1436,6 +1624,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Генерация кода сцены (LLM)
+         * @description **Что делает:** Генерирует TSX-код сцены через LLM с учётом темы, композиции и возможностей; сохраняет как AiGenerated-ревизию.
+         *
+         *     **Вход:** body: GenerateSceneCodeRequest { project_id, scene_id, visual_description, voice_text, duration_seconds, width, height, fps, montage_settings, capabilities }
+         *
+         *     **Выход:** 201 Created: SceneCodeDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1443,6 +1639,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: GenerateSceneCodeRequest { project_id, scene_id, visual_description, voice_text, duration_seconds, width, height, fps, montage_settings, capabilities } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["MotionContext.Contracts.GenerateSceneCodeRequest"];
@@ -1475,15 +1672,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Откат ревизии сцены
+         * @description **Что делает:** Откатывает активную ревизию кода к указанному номеру.
+         *
+         *     **Вход:** path: id; body: RollbackSceneCodeRequest { target_revision }
+         *
+         *     **Выход:** SceneCodeDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: RollbackSceneCodeRequest { target_revision } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["MotionContext.Contracts.RollbackSceneCodeRequest"];
@@ -1507,121 +1714,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/motion/scenes/{id}/render": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["MotionContext.Contracts.StartRenderRequest"];
-                };
-            };
-            responses: {
-                /** @description Accepted */
-                202: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["MotionContext.Contracts.RenderJobDto"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/motion/renders/{jobId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    jobId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["MotionContext.Contracts.RenderJobDto"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/motion/renders/{jobId}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    jobId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Api.Endpoints.Motion.MotionMessageResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/production/projects": {
         parameters: {
             query?: never;
@@ -1629,10 +1721,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Список проектов
+         * @description **Что делает:** Постранично возвращает проекты производства.
+         *
+         *     **Вход:** query: page, pageSize
+         *
+         *     **Выход:** PagedResult<ProjectSummaryDto>
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Номер страницы (с 1). */
                     page?: number;
+                    /** @description Размер страницы. */
                     pageSize?: number;
                 };
                 header?: never;
@@ -1653,6 +1755,14 @@ export interface paths {
             };
         };
         put?: never;
+        /**
+         * Создать проект
+         * @description **Что делает:** Создаёт новый проект производства.
+         *
+         *     **Вход:** body: CreateProjectRequest
+         *
+         *     **Выход:** 201 Created: ProjectDetailsDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1660,6 +1770,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: CreateProjectRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["ProductionContext.Contracts.CreateProjectRequest"];
@@ -1690,11 +1801,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Проект по ID
+         * @description **Что делает:** Возвращает полные данные проекта производства.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** ProjectDetailsDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -1714,11 +1834,20 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        /**
+         * Удалить проект
+         * @description **Что делает:** Удаляет проект производства.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** 204 No Content
+         */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -1748,15 +1877,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Разбор сценария
+         * @description **Что делает:** Парсит Markdown-сценарий и сохраняет сцены/фрагменты в проект.
+         *
+         *     **Вход:** path: id; body: ParseScenarioRequest
+         *
+         *     **Выход:** ProjectDetailsDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: ParseScenarioRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["ProductionContext.Contracts.ParseScenarioRequest"];
@@ -1788,16 +1927,27 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /**
+         * Обновить сцену
+         * @description **Что делает:** Обновляет данные сцены проекта.
+         *
+         *     **Вход:** path: id, sceneId; body: UpdateSceneRequest
+         *
+         *     **Выход:** ProjectDetailsDto
+         */
         put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
+                    /** @description Идентификатор сцены внутри проекта. */
                     sceneId: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id, sceneId; body: UpdateSceneRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["ProductionContext.Contracts.UpdateSceneRequest"];
@@ -1831,15 +1981,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Собрать проект
+         * @description **Что делает:** Запускает полную сборку проекта (озвучка → синхронизация → код → рендер).
+         *
+         *     **Вход:** path: id; body: BuildProjectRequest?
+         *
+         *     **Выход:** 202 Accepted: BuildStatusDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: BuildProjectRequest? */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["ProductionContext.Contracts.BuildProjectRequest"];
@@ -1870,11 +2030,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Статус сборки
+         * @description **Что делает:** Возвращает статус текущей сборки проекта.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** BuildStatusDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -1909,11 +2078,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Отменить сборку
+         * @description **Что делает:** Отменяет активную сборку проекта.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** { message }
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -1944,11 +2122,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Экспорт моста проекта
+         * @description **Что делает:** Возвращает нормализованный снапшот проекта (G3 bridge) для внешних контуров.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** ProjectDataDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -1983,6 +2170,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Запустить исследование
+         * @description **Что делает:** Создаёт сессию DeepTrend-исследования (YouTube-ниша, тренды).
+         *
+         *     **Вход:** body: StartResearchRequest
+         *
+         *     **Выход:** 202 Accepted: ResearchRunSummaryDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1990,6 +2185,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: StartResearchRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Research.Contracts.StartResearchRequest"];
@@ -2020,10 +2216,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Список исследований
+         * @description **Что делает:** Постраничный список сессий исследования.
+         *
+         *     **Вход:** query: page, pageSize
+         *
+         *     **Выход:** PagedResult<ResearchRunSummaryDto>
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Номер страницы (с 1). */
                     page?: number;
+                    /** @description Размер страницы. */
                     pageSize?: number;
                 };
                 header?: never;
@@ -2058,11 +2264,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Детали исследования
+         * @description **Что делает:** Возвращает подробности прогона исследования.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** ResearchRunDetailsDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2095,11 +2310,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Возможности прогона
+         * @description **Что делает:** Возвращает найденные контентные возможности (идеи/тренды).
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** OpportunityDto[]
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2132,11 +2356,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Экспорт исследования (xlsx)
+         * @description **Что делает:** Формирует Excel-отчёт по результатам прогона.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** xlsx binary
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2171,6 +2404,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Ad-hoc экспорт (xlsx)
+         * @description **Что делает:** Экспортирует произвольные данные исследования в Excel.
+         *
+         *     **Вход:** body: AdHocExportData
+         *
+         *     **Выход:** xlsx binary
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2178,6 +2419,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: AdHocExportData */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Research.Domain.Ports.AdHocExportData"];
@@ -2210,11 +2452,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Отмена исследования
+         * @description **Что делает:** Отменяет активный прогон исследования.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** { message }
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2245,11 +2496,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * SSE-поток исследования
+         * @description **Что делает:** Отдаёт Server-Sent Events с шагами выполнения DAG-пайплайна.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** text/event-stream
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2284,15 +2544,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Синхронизация Markdown ⇄ AST
+         * @description **Что делает:** Двусторонняя синхронизация сценария IDE: парсит Markdown, пересобирает AST и блоки, сохраняет в БД.
+         *
+         *     **Вход:** path: projectId; body: EngineSyncRequest { markdown }
+         *
+         *     **Выход:** EngineSyncEnvelopeResponse { status, data }
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор проекта (slug/имя проекта). */
                     projectId: string;
                 };
                 cookie?: never;
             };
+            /** @description path: projectId; body: EngineSyncRequest { markdown } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Production.EngineSyncRequest"];
@@ -2325,6 +2595,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Линт черновика
+         * @description **Что делает:** Stateless-проверка черновика сценария (парсер + линтер), без сохранения.
+         *
+         *     **Вход:** body: EngineSyncRequest { markdown }
+         *
+         *     **Выход:** DraftLintEnvelopeResponse { status, data }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2332,6 +2610,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: EngineSyncRequest { markdown } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Production.EngineSyncRequest"];
@@ -2364,11 +2643,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Режиссёрский линтер
+         * @description **Что делает:** Эвристический линтер проекта (без LLM): находит проблемы ритма, структуры и удержания.
+         *
+         *     **Вход:** path: projectId
+         *
+         *     **Выход:** ScenarioLintResponse { status, issues[], summary }
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор проекта (slug/имя проекта). */
                     projectId: string;
                 };
                 cookie?: never;
@@ -2401,15 +2689,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * ИИ-рерайтинг фрагмента
+         * @description **Что делает:** LLM-копайлот предлагает варианты переписывания фрагмента по команде (короче, кликбейтнее и т.п.).
+         *
+         *     **Вход:** path: projectId; body: CopilotRewriteRequest { fragment_id, command, include_trend_context? }
+         *
+         *     **Выход:** CopilotRewriteResponse { status, suggestions[] }
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор проекта (slug/имя проекта). */
                     projectId: string;
                 };
                 cookie?: never;
             };
+            /** @description path: projectId; body: CopilotRewriteRequest { fragment_id, command, include_trend_context? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Production.CopilotRewriteRequest"];
@@ -2440,10 +2738,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Список скилов
+         * @description **Что делает:** Возвращает скилы (навыки ИИ) с фильтром по стадии пайплайна и признаку включённости.
+         *
+         *     **Вход:** query: stage, only_enabled
+         *
+         *     **Выход:** SkillDto[]
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Стадия пайплайна: ScenarioDrafting, SceneCodeGeneration, BRollMatching, TtsVoice, HookAnalysis и др. */
                     stage?: string;
+                    /** @description true — вернуть только включённые скилы. */
                     only_enabled?: boolean;
                     onlyEnabled?: boolean;
                 };
@@ -2465,6 +2773,14 @@ export interface paths {
             };
         };
         put?: never;
+        /**
+         * Создать скил
+         * @description **Что делает:** Создаёт новый пользовательский скил.
+         *
+         *     **Вход:** body: CreateSkillRequest { id, name, description, stage, content, priority?, tags? }
+         *
+         *     **Выход:** 201 Created: SkillDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2472,6 +2788,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: CreateSkillRequest { id, name, description, stage, content, priority?, tags? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Skills.CreateSkillRequest"];
@@ -2502,16 +2819,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Бандл промптов по стадии
+         * @description **Что делает:** Собирает системный промпт из активных скилов стадии с учётом лимита токенов.
+         *
+         *     **Вход:** path: stage; query: max_tokens, custom_header
+         *
+         *     **Выход:** SkillBundleDto
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Лимит токенов для бандла скилов. */
                     max_tokens?: number;
                     maxTokens?: number;
+                    /** @description Дополнительные инструкции в заголовке системного промпта. */
                     custom_header?: string;
                     customHeader?: string;
                 };
                 header?: never;
                 path: {
+                    /** @description Стадия пайплайна: ScenarioDrafting, SceneCodeGeneration, BRollMatching, TtsVoice, HookAnalysis и др. */
                     stage: string;
                 };
                 cookie?: never;
@@ -2544,11 +2872,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Скил по ID
+         * @description **Что делает:** Возвращает один скил.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** SkillDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2566,15 +2903,25 @@ export interface paths {
                 };
             };
         };
+        /**
+         * Обновить скил
+         * @description **Что делает:** Обновляет поля скила (name, description, content, priority, is_enabled, tags).
+         *
+         *     **Вход:** path: id; body: UpdateSkillRequest
+         *
+         *     **Выход:** SkillDto
+         */
         put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: UpdateSkillRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Skills.UpdateSkillRequest"];
@@ -2593,11 +2940,20 @@ export interface paths {
             };
         };
         post?: never;
+        /**
+         * Удалить скил
+         * @description **Что делает:** Удаляет пользовательский скил.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** 204 No Content
+         */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2615,15 +2971,25 @@ export interface paths {
         };
         options?: never;
         head?: never;
+        /**
+         * Частично обновить скил
+         * @description **Что делает:** Алиас PUT: обновляет поля скила.
+         *
+         *     **Вход:** path: id; body: UpdateSkillRequest
+         *
+         *     **Выход:** SkillDto
+         */
         patch: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: UpdateSkillRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Skills.UpdateSkillRequest"];
@@ -2652,11 +3018,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Сбросить скил
+         * @description **Что делает:** Сбрасывает базовый скил к системному шаблону.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** SkillDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2687,6 +3062,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Профили дикторов
+         * @description **Что делает:** Все профили дикторов из БД: BuiltIn, Designed, Cloned.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** SpeakerProfileDto[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2722,11 +3105,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Профиль диктора
+         * @description **Что делает:** Возвращает профиль диктора по ID.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** SpeakerProfileDto | 404
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2744,15 +3136,25 @@ export interface paths {
                 };
             };
         };
+        /**
+         * Обновить профиль диктора
+         * @description **Что делает:** Переименовывает профиль диктора.
+         *
+         *     **Вход:** path: id; body: UpdateSpeakerRequest { name }
+         *
+         *     **Выход:** SpeakerProfileDto
+         */
         put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: UpdateSpeakerRequest { name } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.UpdateSpeakerRequest"];
@@ -2771,11 +3173,20 @@ export interface paths {
             };
         };
         post?: never;
+        /**
+         * Удалить профиль диктора
+         * @description **Что делает:** Удаляет профиль и связанные файлы (.pt/.wav).
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** 204 No Content
+         */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -2805,6 +3216,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Клонировать голос
+         * @description **Что делает:** Создаёт клон голоса по референсному аудио (локально OmniVoice или в облаке MiniMax).
+         *
+         *     **Вход:** multipart: name, engine, referenceAudio (binary), referenceText?, language?, localEngineId?
+         *
+         *     **Выход:** 201 Created: SpeakerProfileDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2812,6 +3231,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description multipart: name, engine, referenceAudio (binary), referenceText?, language?, localEngineId? */
             requestBody?: {
                 content: {
                     "multipart/form-data": {
@@ -2852,6 +3272,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Voice Design
+         * @description **Что делает:** Создаёт голос по текстовому описанию тембра (локальный OmniVoice).
+         *
+         *     **Вход:** body: CreateDesignedSpeakerRequest { name, engine, prompt, local_engine_id? }
+         *
+         *     **Выход:** 201 Created: SpeakerProfileDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2859,6 +3287,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: CreateDesignedSpeakerRequest { name, engine, prompt, local_engine_id? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.CreateDesignedSpeakerRequest"];
@@ -2891,15 +3320,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Превью диктора
+         * @description **Что делает:** Генерирует превью-сэмпл для профиля диктора.
+         *
+         *     **Вход:** path: id; body: GeneratePreviewRequest
+         *
+         *     **Выход:** VoiceJobDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
             };
+            /** @description path: id; body: GeneratePreviewRequest */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.GeneratePreviewRequest"];
@@ -2930,6 +3369,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Статус железа
+         * @description **Что делает:** Метрики CPU, RAM, VRAM и загрузки процессов.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** SystemHardwareStatusDto
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2965,6 +3412,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Настройки системы
+         * @description **Что делает:** Список системных настроек (key/value).
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** SystemSettingDto[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3000,11 +3455,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Настройка по ключу
+         * @description **Что делает:** Возвращает значение настройки по ключу.
+         *
+         *     **Вход:** path: key
+         *
+         *     **Выход:** SystemSettingDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Ключ настройки системы. */
                     key: string;
                 };
                 cookie?: never;
@@ -3022,15 +3486,25 @@ export interface paths {
                 };
             };
         };
+        /**
+         * Обновить настройку
+         * @description **Что делает:** Устанавливает значение системной настройки.
+         *
+         *     **Вход:** path: key; body: UpdateSettingRequest { value }
+         *
+         *     **Выход:** SystemSettingDto
+         */
         put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Ключ настройки системы. */
                     key: string;
                 };
                 cookie?: never;
             };
+            /** @description path: key; body: UpdateSettingRequest { value } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.System.UpdateSettingRequest"];
@@ -3062,6 +3536,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * AI модели
+         * @description **Что делает:** Каталог доступных локальных/облачных AI-моделей и их статус загрузки.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** AiModelDto[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3097,9 +3579,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Каталог моделей по ролям
+         * @description **Что делает:** Единый каталог моделей с ролями конвейера и доступностью.
+         *
+         *     **Вход:** query: role
+         *
+         *     **Выход:** ModelCatalogEntryDto[]
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Роль модели в пайплайне (ModelTaskRole). */
                     role?: components["schemas"]["SystemContext.Domain.ModelTaskRole"];
                 };
                 header?: never;
@@ -3136,11 +3627,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Скачать модель
+         * @description **Что делает:** Запускает загрузку весов модели.
+         *
+         *     **Вход:** path: modelId
+         *
+         *     **Выход:** 202 Accepted: AiModelDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор модели (например, gemma3:4b или diarization-модель). */
                     modelId: string;
                 };
                 cookie?: never;
@@ -3173,6 +3673,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Очистить temp
+         * @description **Что делает:** Удаляет временные файлы системы.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** { message }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3206,6 +3714,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * DLQ шины событий
+         * @description **Что делает:** Возвращает неуспешно обработанные события (dead letters).
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** DeadLetterResponse[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3241,10 +3757,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Системные логи
+         * @description **Что делает:** Возвращает последние структурированные логи с фильтром по уровню.
+         *
+         *     **Вход:** query: limit, level
+         *
+         *     **Выход:** SystemLogEntryDto[]
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Максимальное количество записей. */
                     limit?: number;
+                    /** @description Фильтр уровня логов: Information, Warning, Error. */
                     level?: string;
                 };
                 header?: never;
@@ -3281,6 +3807,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Сохранить ревизию TSX (compat)
+         * @description **Что делает:** Совместимость: сохраняет ручную ревизию TSX-кода сцены.
+         *
+         *     **Вход:** body: SaveCodeRevisionRequest { project_id, scene_id, tsx_code }
+         *
+         *     **Выход:** { status }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3288,6 +3822,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: SaveCodeRevisionRequest { project_id, scene_id, tsx_code } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.System.SaveCodeRevisionRequest"];
@@ -3318,12 +3853,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * История ревизий сцены
+         * @description **Что делает:** Список ревизий TSX-кода сцены.
+         *
+         *     **Вход:** path: projectId, sceneId
+         *
+         *     **Выход:** { revisions[] }
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор проекта (slug/имя проекта). */
                     projectId: string;
+                    /** @description Идентификатор сцены внутри проекта. */
                     sceneId: string;
                 };
                 cookie?: never;
@@ -3356,13 +3901,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Ревизия сцены (compat)
+         * @description **Что делает:** Возвращает TSX-код конкретной ревизии.
+         *
+         *     **Вход:** path: projectId, sceneId, revisionId
+         *
+         *     **Выход:** { tsx_code }
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор проекта (slug/имя проекта). */
                     projectId: string;
+                    /** @description Идентификатор сцены внутри проекта. */
                     sceneId: string;
+                    /** @description Номер ревизии кода сцены (целое число). */
                     revisionId: string;
                 };
                 cookie?: never;
@@ -3395,6 +3951,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Информация о железе
+         * @description **Что делает:** Краткая информация об устройстве: GPU/CPU, VRAM, RAM.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** SystemHardwareInfoDto
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3432,6 +3996,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Pull модели
+         * @description **Что делает:** Запускает скачивание модели через внешний менеджер (Ollama/HF).
+         *
+         *     **Вход:** body: PullModelRequest { engine }
+         *
+         *     **Выход:** 202 Accepted: AiModelDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3439,6 +4011,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: PullModelRequest { engine } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["SystemContext.Contracts.PullModelRequest"];
@@ -3471,11 +4044,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Сбросить скил (compat)
+         * @description **Что делает:** Совместимость: сбрасывает скил к системному шаблону.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** SkillDto
+         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -3506,6 +4088,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Движки озвучки
+         * @description **Что делает:** Список TTS-движков (локальные/облачные) с поддержкой клонирования и дизайна.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** VoiceEngineInfoDto[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3543,6 +4133,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Синтез речи
+         * @description **Что делает:** Синтезирует речь по тексту и диктору; опционально выравнивает слова (Whisper).
+         *
+         *     **Вход:** body: SynthesizeSpeechRequest { text, speaker_id, engine?, speed?, pitch?, guidance_scale?, num_steps?, alignment_engine?, reference_audio_path? }
+         *
+         *     **Выход:** VoiceJobDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3550,6 +4148,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: SynthesizeSpeechRequest { text, speaker_id, engine?, speed?, pitch?, guidance_scale?, num_steps?, alignment_engine?, reference_audio_path? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Voice.SynthesizeSpeechRequest"];
@@ -3582,6 +4181,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Пакетный синтез
+         * @description **Что делает:** Синтезирует несколько реплик за один вызов.
+         *
+         *     **Вход:** body: BatchSynthesizeRequest { items[], filters? }
+         *
+         *     **Выход:** BatchVoiceResultDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3589,6 +4196,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: BatchSynthesizeRequest { items[], filters? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Voice.BatchSynthesizeRequest"];
@@ -3619,11 +4227,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Статус TTS-задачи
+         * @description **Что делает:** Возвращает статус и результат задачи синтеза.
+         *
+         *     **Вход:** path: id
+         *
+         *     **Выход:** VoiceJobDto
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Уникальный идентификатор ресурса. */
                     id: string;
                 };
                 cookie?: never;
@@ -3658,6 +4275,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Дакинг музыки
+         * @description **Что делает:** Микширует голос и фоновую музыку с sidechain-дакингом.
+         *
+         *     **Вход:** body: DuckingRequest { voice_asset_id, bgm_asset_id, music_attenuation_db?, attack_ms?, release_ms? }
+         *
+         *     **Выход:** DuckedAudioResultDto
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3665,6 +4290,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: DuckingRequest { voice_asset_id, bgm_asset_id, music_attenuation_db?, attack_ms?, release_ms? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Voice.DuckingRequest"];
@@ -3695,6 +4321,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Дикторы
+         * @description **Что делает:** Список доступных дикторов (id, имя, движок, язык, пол).
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** VoiceSpeakerDto[]
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3732,6 +4366,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Выравнивание слов
+         * @description **Что делает:** Выравнивает фрагменты текста по аудио (forced alignment).
+         *
+         *     **Вход:** body: AlignSpeechRequest { audio_path, fragments[] }
+         *
+         *     **Выход:** AlignSpeechResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3739,6 +4381,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: AlignSpeechRequest { audio_path, fragments[] } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.AlignSpeechRequest"];
@@ -3771,6 +4414,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Транскрибация
+         * @description **Что делает:** Распознаёт речь из аудиофайла (Whisper).
+         *
+         *     **Вход:** body: TranscribeAudioRequest { audio_path }
+         *
+         *     **Выход:** TranscribeAudioResponse { status, text }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3778,6 +4429,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: TranscribeAudioRequest { audio_path } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.TranscribeAudioRequest"];
@@ -3810,6 +4462,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * DSP-обработка аудио
+         * @description **Что делает:** Пост-обработка аудио (мастеринг/шумоподавление/обрезка тишины).
+         *
+         *     **Вход:** body: ProcessAudioDspRequest { audio_path, action, threshold_db?, min_silence_ms?, max_silence_ms? }
+         *
+         *     **Выход:** ProcessAudioDspResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3817,6 +4477,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ProcessAudioDspRequest { audio_path, action, threshold_db?, min_silence_ms?, max_silence_ms? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.ProcessAudioDspRequest"];
@@ -3849,6 +4510,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Склейка аудио
+         * @description **Что делает:** Конкатенирует несколько аудиофайлов в один.
+         *
+         *     **Вход:** body: ConcatAudioRequest { audio_paths[], output_path }
+         *
+         *     **Выход:** { status, output_path }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3856,6 +4525,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: ConcatAudioRequest { audio_paths[], output_path } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Voice.Contracts.ConcatAudioRequest"];
@@ -3888,6 +4558,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Выгрузить VRAM
+         * @description **Что делает:** Освобождает VRAM локального ML-воркера и GPU-стека.
+         *
+         *     **Вход:** —
+         *
+         *     **Выход:** { status }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3923,6 +4601,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Стриминг агента
+         * @description **Что делает:** Запускает DAG-пайплайн DeepTrend-агента и стримит шаги в NDJSON.
+         *
+         *     **Вход:** body: StreamAgentRequest { query, project_path?, settings?, youtube_key?, llm_engine?, api_keys? }
+         *
+         *     **Выход:** NDJSON stream
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3930,6 +4616,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: StreamAgentRequest { query, project_path?, settings?, youtube_key?, llm_engine?, api_keys? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.StreamAgentRequest"];
@@ -3962,6 +4649,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Подбор конкурентов
+         * @description **Что делает:** LLM предлагает список популярных каналов в нише.
+         *
+         *     **Вход:** body: SuggestCompetitorsRequest { niche, engine?, language?, api_keys? }
+         *
+         *     **Выход:** { status, channels[] }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3969,6 +4664,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: SuggestCompetitorsRequest { niche, engine?, language?, api_keys? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.SuggestCompetitorsRequest"];
@@ -4001,6 +4697,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Анализ канала
+         * @description **Что делает:** Собирает контекст канала/ниши (позиционирование, темы) для генерации.
+         *
+         *     **Вход:** body: AnalyzeChannelRequest { url_or_name, engine?, language?, youtube_key?, api_keys? }
+         *
+         *     **Выход:** AnalyzeChannelResponse { status, context }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4008,6 +4712,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: AnalyzeChannelRequest { url_or_name, engine?, language?, youtube_key?, api_keys? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.AnalyzeChannelRequest"];
@@ -4040,6 +4745,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Анализ хука
+         * @description **Что делает:** Анализирует вступление видео: психология хука, ошибки, готовые «украденные» хуки и heatmap удержания.
+         *
+         *     **Вход:** body: AnalyzeHookRequest { transcript?, video_id?, video_url?, engine?, language?, api_keys? }
+         *
+         *     **Выход:** AnalyzeHookResponse { status, data: HookAnalysisDto }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4047,6 +4760,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: AnalyzeHookRequest { transcript?, video_id?, video_url?, engine?, language?, api_keys? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.AnalyzeHookRequest"];
@@ -4079,6 +4793,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Черновик сценария
+         * @description **Что делает:** Генерирует Markdown-сценарий по теме с учётом правил парсинга Vidora.
+         *
+         *     **Вход:** body: DraftScriptRequest { title, idea_description?, channel_context?, engine?, language?, target_duration?, video_type?, custom_prompt?, audio_engine? }
+         *
+         *     **Выход:** DraftScriptResponse { status, markdown }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4086,6 +4808,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: DraftScriptRequest { title, idea_description?, channel_context?, engine?, language?, target_duration?, video_type?, custom_prompt?, audio_engine? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.DraftScriptRequest"];
@@ -4118,6 +4841,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Ещё видео
+         * @description **Что делает:** Возвращает дополнительные видео по запросу (пагинация трендов).
+         *
+         *     **Вход:** body: MoreVideosRequest { query, exclude_video_ids?, settings?, language?, youtube_key?, api_keys? }
+         *
+         *     **Выход:** MoreVideosResponse { status, results[] }
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4125,6 +4856,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: MoreVideosRequest { query, exclude_video_ids?, settings?, language?, youtube_key?, api_keys? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.MoreVideosRequest"];
@@ -4157,6 +4889,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Скачать метаданные видео
+         * @description **Что делает:** Скачивает метаданные/субтитры видео для импорта в IDE.
+         *
+         *     **Вход:** body: DownloadMetaRequest { url, project_path? }
+         *
+         *     **Выход:** DownloadMetaDataResponse
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4164,6 +4904,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description body: DownloadMetaRequest { url, project_path? } */
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["Api.Endpoints.Research.DownloadMetaRequest"];
@@ -4194,11 +4935,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Тепловая карта удержания
+         * @description **Что делает:** Возвращает heatmap удержания зрителей по видео.
+         *
+         *     **Вход:** path: videoId
+         *
+         *     **Выход:** VideoHeatmapResponse
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор YouTube-видео (11-символьный ID или URL). */
                     videoId: string;
                 };
                 cookie?: never;
@@ -4231,11 +4981,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Главы видео
+         * @description **Что делает:** Возвращает главы видео с таймкодами и превью.
+         *
+         *     **Вход:** path: videoId
+         *
+         *     **Выход:** VideoChaptersResponse
+         */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description Идентификатор YouTube-видео (11-символьный ID или URL). */
                     videoId: string;
                 };
                 cookie?: never;
@@ -4268,13 +5027,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Комментарии видео
+         * @description **Что делает:** Возвращает детальные комментарии с категоризацией.
+         *
+         *     **Вход:** path: videoId; query: maxComments
+         *
+         *     **Выход:** VideoCommentsResponse
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Максимум комментариев к загрузке (1–100). */
                     maxComments?: number;
                 };
                 header?: never;
                 path: {
+                    /** @description Идентификатор YouTube-видео (11-символьный ID или URL). */
                     videoId: string;
                 };
                 cookie?: never;
@@ -4307,13 +5076,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Глубокий анализ видео
+         * @description **Что делает:** Параллельно собирает метаданные, heatmap, главы и комментарии по видео.
+         *
+         *     **Вход:** path: videoId; query: maxComments
+         *
+         *     **Выход:** VideoDeepDiveDto
+         */
         get: {
             parameters: {
                 query?: {
+                    /** @description Максимум комментариев к загрузке (1–100). */
                     maxComments?: number;
                 };
                 header?: never;
                 path: {
+                    /** @description Идентификатор YouTube-видео (11-символьный ID или URL). */
                     videoId: string;
                 };
                 cookie?: never;
@@ -4344,49 +5123,77 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         "Api.Endpoints.Media.DownloadStockCompatRequest": {
+            /** @description URL ресурса. */
             url?: string | null;
+            /** @description Имя файла. */
             filename?: string | null;
+            /** @description Путь проекта внутри хранилища (обычно имя проекта). */
             project_path?: string | null;
+            /** @description Целевая папка. */
             folder?: string | null;
         };
         "Api.Endpoints.Media.ImportStockVideoRequest": {
+            /** @description Прямая ссылка на скачивание. */
             download_url?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
         };
         "Api.Endpoints.Media.MediaDownloadStockResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             path?: string | null;
         };
         "Api.Endpoints.Media.MediaMusicLibraryResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             categories?: components["schemas"]["Api.Endpoints.Media.MusicCategoryResponse"][] | null;
             custom_tracks?: components["schemas"]["MediaContext.Contracts.MusicTrackDto"][] | null;
         };
         "Api.Endpoints.Media.MediaSearchStockResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             videos?: components["schemas"]["MediaContext.Contracts.StockVideoDto"][] | null;
         };
         "Api.Endpoints.Media.MediaUploadResult": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             type?: components["schemas"]["MediaContext.Domain.MediaType"];
             source?: components["schemas"]["MediaContext.Domain.AssetSource"];
             storage_path?: string | null;
             path?: string | null;
+            /** @description Имя файла. */
             filename?: string | null;
             extension?: string | null;
             /** Format: int64 */
             file_size_bytes?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, сек.
+             */
             duration?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
         };
         "Api.Endpoints.Media.MusicCategoryResponse": {
@@ -4395,84 +5202,80 @@ export interface components {
             tracks?: components["schemas"]["MediaContext.Contracts.MusicTrackDto"][] | null;
         };
         "Api.Endpoints.Media.NormalizeBrollRequest": {
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Кадров в секунду.
+             */
             fps?: number;
         };
         "Api.Endpoints.Motion.CodeGenerateCompatRequest": {
+            /** @description Текст промпта для LLM. */
             prompt?: string | null;
+            /** @description Идентификатор цели операции (сцена/фрагмент). */
             target_id?: string | null;
+            /** @description Путь проекта внутри хранилища (обычно имя проекта). */
             project_path?: string | null;
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
             project_data?: components["schemas"]["Kernel.Contracts.ProjectDataPayloadDto"];
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Motion.CodeGenerateResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Исходный TSX-код сцены. */
             tsx_code?: string | null;
             applied_stage?: string | null;
             included_skills?: string[] | null;
         };
-        "Api.Endpoints.Motion.MotionMessageResponse": {
-            message?: string | null;
-        };
-        "Api.Endpoints.Motion.MotionStatusResponse": {
-            status?: string | null;
-        };
-        "Api.Endpoints.Motion.RenderStartCompatRequest": {
-            target_id?: string | null;
-            project_id?: string | null;
-            target?: string | null;
-            project_path?: string | null;
-            tsx_code?: string | null;
-            audio_path?: string | null;
-            broll_sources?: string[] | null;
-            background_music?: components["schemas"]["Kernel.Contracts.BackgroundMusicSettingsDto"];
-            render_quality?: string | null;
-        };
-        "Api.Endpoints.Motion.RenderStartResponse": {
-            status?: string | null;
-            task_id?: string | null;
-        };
-        "Api.Endpoints.Production.ConcatVideoCompatRequest": {
-            video_paths?: string[] | null;
-            output_path?: string | null;
-            project_path?: string | null;
-        };
         "Api.Endpoints.Production.CopilotRewriteRequest": {
+            /** @description Идентификатор фрагмента. */
             fragment_id?: string | null;
+            /** @description Команда для ИИ-копилота (например, «короче», «кликбейтнее»). */
             command?: string | null;
+            /** @description Учитывать ли тренд-контекст при рерайте. */
             include_trend_context?: boolean | null;
         };
         "Api.Endpoints.Production.CopilotRewriteResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             suggestions?: components["schemas"]["ProductionContext.Application.Services.ScenarioRewriteSuggestion"][] | null;
         };
         "Api.Endpoints.Production.DraftLintEnvelopeResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             data?: components["schemas"]["ProductionContext.Application.Services.DraftLintResponse"];
         };
         "Api.Endpoints.Production.EngineSyncEnvelopeResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             data?: components["schemas"]["ProductionContext.Application.Services.EngineSyncResponse"];
         };
         "Api.Endpoints.Production.EngineSyncRequest": {
+            /** @description Markdown-сценарий. */
             markdown?: string | null;
         };
         "Api.Endpoints.Production.ExportProjectCompatRequest": {
             project_name?: string | null;
+            /** @description Markdown-сценарий. */
             markdown?: string | null;
         };
         "Api.Endpoints.Production.ProductionMessageResponse": {
+            /** @description Текстовое сообщение. */
             message?: string | null;
         };
-        "Api.Endpoints.Production.ProductionStatusResponse": {
-            status?: string | null;
-        };
         "Api.Endpoints.Production.ScenarioLintResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             issues?: components["schemas"]["ProductionContext.Domain.Services.ScenarioIssue"][] | null;
             summary?: components["schemas"]["Api.Endpoints.Production.ScenarioLintSummaryResponse"];
@@ -4485,55 +5288,108 @@ export interface components {
             /** Format: double */
             estimated_duration_seconds?: number;
         };
+        /**
+         * @example {
+         *       "url_or_name": "https://www.youtube.com/@MrBeast",
+         *       "language": "en"
+         *     }
+         */
         "Api.Endpoints.Research.AnalyzeChannelRequest": {
+            /** @description URL или имя канала. */
             url_or_name?: string | null;
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
+            /** @description Язык (например, ru). */
             language?: string | null;
+            /** @description API-ключ YouTube Data API. */
             youtube_key?: string | null;
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.AnalyzeChannelResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             context?: string | null;
         };
+        /**
+         * @example {
+         *       "video_id": "Lf5oqGOCRCM",
+         *       "language": "en"
+         *     }
+         */
         "Api.Endpoints.Research.AnalyzeHookRequest": {
+            /** @description Транскрипт вступления видео. */
             transcript?: string | null;
+            /** @description Идентификатор YouTube-видео. */
             video_id?: string | null;
+            /** @description URL видео. */
             video_url?: string | null;
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
+            /** @description Язык (например, ru). */
             language?: string | null;
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.AnalyzeHookResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             data?: components["schemas"]["Api.Endpoints.Research.HookAnalysisDto"];
         };
         "Api.Endpoints.Research.DownloadMetaDataResponse": {
+            /** @description Заголовок. */
             title?: string | null;
             channel?: string | null;
             transcript_full?: string | null;
         };
+        /**
+         * @example {
+         *       "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+         *       "project_path": "my-project"
+         *     }
+         */
         "Api.Endpoints.Research.DownloadMetaRequest": {
+            /** @description URL ресурса. */
             url?: string | null;
+            /** @description Путь проекта внутри хранилища (обычно имя проекта). */
             project_path?: string | null;
         };
         "Api.Endpoints.Research.DownloadMetaResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             data?: components["schemas"]["Api.Endpoints.Research.DownloadMetaDataResponse"];
         };
+        /**
+         * @example {
+         *       "title": "Why AI changes everything",
+         *       "idea_description": "A deep dive into AI economics",
+         *       "video_type": "long",
+         *       "target_duration": "3",
+         *       "language": "en"
+         *     }
+         */
         "Api.Endpoints.Research.DraftScriptRequest": {
+            /** @description Заголовок. */
             title?: string | null;
+            /** @description Описание идеи видео. */
             idea_description?: string | null;
+            /** @description Контекст канала. */
             channel_context?: string | null;
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
+            /** @description Язык (например, ru). */
             language?: string | null;
+            /** @description Целевая длительность видео в минутах. */
             target_duration?: string | null;
+            /** @description Тип видео: short / long / all. */
             video_type?: string | null;
+            /** @description Дополнительный пользовательский промпт. */
             custom_prompt?: string | null;
+            /** @description Движок озвучки для сценария. */
             audio_engine?: string | null;
         };
         "Api.Endpoints.Research.DraftScriptResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Markdown-сценарий. */
             markdown?: string | null;
         };
         "Api.Endpoints.Research.HookAnalysisDto": {
@@ -4545,7 +5401,9 @@ export interface components {
             heatmap?: components["schemas"]["Research.Domain.Ports.HeatmapPointDto"][] | null;
         };
         "Api.Endpoints.Research.MoreVideoItemResponse": {
+            /** @description Идентификатор YouTube-видео. */
             video_id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             channel?: string | null;
             /** Format: int64 */
@@ -4556,6 +5414,7 @@ export interface components {
             ratio?: number;
             /** Format: double */
             vph?: number;
+            /** @description URL ресурса. */
             url?: string | null;
             thumbnail_url?: string | null;
             published_at?: string | null;
@@ -4569,19 +5428,43 @@ export interface components {
             is_rocket?: boolean;
             acceleration_pct?: string | null;
         };
+        /**
+         * @example {
+         *       "query": "ai productivity tools",
+         *       "language": "en",
+         *       "settings": {
+         *         "days_back": 30,
+         *         "min_subs": 1000,
+         *         "max_subs": 90000,
+         *         "min_ratio": 1.5,
+         *         "search_mode": "trending",
+         *         "search_engine": "auto",
+         *         "language": "en",
+         *         "video_type": "all",
+         *         "ideas_count": 5,
+         *         "is_expand_search": false
+         *       }
+         *     }
+         */
         "Api.Endpoints.Research.MoreVideosRequest": {
+            /** @description Поисковый запрос. */
             query?: string | null;
+            /** @description Исключаемые видео. */
             exclude_video_ids?: string[] | null;
             settings?: components["schemas"]["Api.Endpoints.Research.StreamAgentSettings"];
+            /** @description Язык (например, ru). */
             language?: string | null;
+            /** @description API-ключ YouTube Data API. */
             youtube_key?: string | null;
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.MoreVideosResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             results?: components["schemas"]["Api.Endpoints.Research.MoreVideoItemResponse"][] | null;
         };
         "Api.Endpoints.Research.ResearchMessageResponse": {
+            /** @description Текстовое сообщение. */
             message?: string | null;
         };
         "Api.Endpoints.Research.StolenHookDto": {
@@ -4590,43 +5473,100 @@ export interface components {
             hook_5_20s?: string | null;
             why_it_converts?: string | null;
         };
+        /**
+         * @example {
+         *       "query": "ai tools",
+         *       "project_path": "my-project",
+         *       "settings": {
+         *         "days_back": 30,
+         *         "min_subs": 1000,
+         *         "max_subs": 90000,
+         *         "min_ratio": 1.5,
+         *         "search_mode": "trending",
+         *         "search_engine": "auto",
+         *         "language": "en",
+         *         "video_type": "all",
+         *         "ideas_count": 5,
+         *         "is_expand_search": false
+         *       }
+         *     }
+         */
         "Api.Endpoints.Research.StreamAgentRequest": {
+            /** @description Поисковый запрос. */
             query?: string | null;
+            /** @description Путь проекта внутри хранилища (обычно имя проекта). */
             project_path?: string | null;
             settings?: components["schemas"]["Api.Endpoints.Research.StreamAgentSettings"];
+            /** @description API-ключ YouTube Data API. */
             youtube_key?: string | null;
+            /** @description Движок LLM. */
             llm_engine?: string | null;
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.StreamAgentSettings": {
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Глубина поиска в днях (0 — без ограничения по дате).
+             */
             days_back?: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Минимум подписчиков у канала.
+             */
             min_subs?: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Максимум подписчиков у канала.
+             */
             max_subs?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Минимальное отношение просмотров к подписчикам.
+             */
             min_ratio?: number;
+            /** @description Режим поиска: trending | search | channels. */
             search_mode?: string | null;
+            /** @description Движок поиска: auto | youtube | google. */
             search_engine?: string | null;
+            /** @description Язык (например, ru). */
             language?: string | null;
+            /** @description Тип видео: short / long / all. */
             video_type?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Сколько контент-идей сгенерировать.
+             */
             ideas_count?: number;
+            /** @description Контекст канала. */
             channel_context?: string | null;
+            /** @description Список каналов-конкурентов (@handle или UC-id). */
             channels?: string[] | null;
+            /** @description Исключаемые видео. */
             exclude_video_ids?: string[] | null;
+            /** @description Исключаемые поисковые запросы. */
             exclude_queries?: string[] | null;
+            /** @description Расширять ли поиск смежными запросами. */
             is_expand_search?: boolean;
         };
+        /**
+         * @example {
+         *       "niche": "AI productivity tools",
+         *       "language": "en"
+         *     }
+         */
         "Api.Endpoints.Research.SuggestCompetitorsRequest": {
+            /** @description Ниша/тематика канала. */
             niche?: string | null;
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
+            /** @description Язык (например, ru). */
             language?: string | null;
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
         };
         "Api.Endpoints.Research.SuggestCompetitorsResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Список каналов-конкурентов (@handle или UC-id). */
             channels?: string[] | null;
         };
         "Api.Endpoints.Research.VideoChaptersResponse": {
@@ -4639,23 +5579,40 @@ export interface components {
             heatmap?: components["schemas"]["Research.Domain.Ports.HeatmapPointDto"][] | null;
         };
         "Api.Endpoints.Skills.CreateSkillRequest": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
+            /** @description Стадия пайплайна. */
             stage?: string | null;
+            /** @description Содержимое скила (промпт). */
             content?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Приоритет применения (чем больше, тем выше).
+             */
             priority?: number | null;
+            /** @description Теги. */
             tags?: string[] | null;
         };
         "Api.Endpoints.Skills.UpdateSkillRequest": {
+            /** @description Человекочитаемое имя. */
             name?: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
+            /** @description Содержимое скила (промпт). */
             content?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Приоритет применения (чем больше, тем выше).
+             */
             priority?: number;
+            /** @description Включён ли скил. */
             is_enabled?: boolean | null;
             isEnabled?: boolean | null;
+            /** @description Теги. */
             tags?: string[] | null;
         };
         "Api.Endpoints.System.DeadLetterResponse": {
@@ -4663,14 +5620,19 @@ export interface components {
             event_id?: string;
             event_type?: string | null;
             handler?: string | null;
+            /** @description Текст ошибки. */
             error?: string | null;
             /** Format: date-time */
             failed_at?: string;
         };
         "Api.Endpoints.System.SaveCodeRevisionRequest": {
+            /** @description Идентификатор проекта. */
             project_id?: string | null;
+            /** @description Идентификатор сцены. */
             scene_id?: string | null;
+            /** @description Исходный TSX-код сцены. */
             tsx_code?: string | null;
+            /** @description Текст промпта для LLM. */
             prompt?: string | null;
         };
         "Api.Endpoints.System.SystemHistoryRevisionItem": {
@@ -4684,39 +5646,64 @@ export interface components {
             revisions?: components["schemas"]["Api.Endpoints.System.SystemHistoryRevisionItem"][] | null;
         };
         "Api.Endpoints.System.SystemMessageResponse": {
+            /** @description Текстовое сообщение. */
             message?: string | null;
         };
         "Api.Endpoints.System.SystemRevisionCodeResponse": {
+            /** @description Исходный TSX-код сцены. */
             tsx_code?: string | null;
         };
         "Api.Endpoints.System.SystemStatusResponse": {
+            /** @description Статус операции. */
             status?: string | null;
         };
         "Api.Endpoints.System.UpdateSettingRequest": {
+            /** @description Новое значение настройки. */
             value?: string | null;
         };
         "Api.Endpoints.Voice.AudioConcatResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Путь к выходному файлу. */
             output_path?: string | null;
         };
         "Api.Endpoints.Voice.AudioGenerateResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Имя сгенерированного аудиофайла. */
             audio_url?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, сек.
+             */
             duration?: number;
         };
         "Api.Endpoints.Voice.BatchSynthesizeItemRequest": {
+            /** @description Текст для синтеза речи. */
             text?: string | null;
+            /** @description Идентификатор диктора (speaker_id профиля). */
             speaker_id?: string | null;
             engine?: components["schemas"]["Voice.Domain.VoiceEngineType"];
             alignment_engine?: components["schemas"]["Voice.Domain.AlignmentEngineType"];
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Скорость речи (0.2–4.0).
+             */
             speed?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Высота тона (0.5–2.0).
+             */
             pitch?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description CFG-масштаб диффузии (1.0–10.0).
+             */
             guidance_scale?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Число шагов диффузии (8–128).
+             */
             num_steps?: number;
         };
         "Api.Endpoints.Voice.BatchSynthesizeRequest": {
@@ -4724,17 +5711,29 @@ export interface components {
             filters?: components["schemas"]["Voice.Domain.ValueObjects.AudioFilterSpec"];
         };
         "Api.Endpoints.Voice.DuckingPreviewResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             preview_url?: string | null;
         };
         "Api.Endpoints.Voice.DuckingRequest": {
+            /** @description ID аудио-ассета голоса. */
             voice_asset_id?: string | null;
+            /** @description ID аудио-ассета фоновой музыки. */
             bgm_asset_id?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Ослабление музыки под голосом, дБ.
+             */
             music_attenuation_db?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Время атаки дакинга, мс.
+             */
             attack_ms?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Время восстановления дакинга, мс.
+             */
             release_ms?: number | null;
         };
         "Api.Endpoints.Voice.PreviewDuckingRequest": {
@@ -4755,30 +5754,54 @@ export interface components {
             releaseMs?: number;
         };
         "Api.Endpoints.Voice.SynthesizeSpeechRequest": {
+            /** @description Текст для синтеза речи. */
             text?: string | null;
+            /** @description Идентификатор диктора (speaker_id профиля). */
             speaker_id?: string | null;
             engine?: components["schemas"]["Voice.Domain.VoiceEngineType"];
             alignment_engine?: components["schemas"]["Voice.Domain.AlignmentEngineType"];
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Скорость речи (0.2–4.0).
+             */
             speed?: number | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Высота тона (0.5–2.0).
+             */
             pitch?: number | null;
+            /** @description Путь к референсному аудио. */
             reference_audio_path?: string | null;
             filters?: components["schemas"]["Voice.Domain.ValueObjects.AudioFilterSpec"];
-            /** Format: double */
+            /**
+             * Format: double
+             * @description CFG-масштаб диффузии (1.0–10.0).
+             */
             guidance_scale?: number | null;
             /** Format: double */
             guidanceScale?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Число шагов диффузии (8–128).
+             */
             num_steps?: number | null;
             /** Format: int32 */
             numSteps?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Число шагов диффузии.
+             */
             steps?: number | null;
+            /** @description Применять шумоподавление. */
             denoise?: boolean | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, сек.
+             */
             duration?: number | null;
+            /** @description Предобрабатывать промпт перед синтезом. */
             preprocess_prompt?: boolean | null;
+            /** @description Постобрабатывать результат синтеза. */
             postprocess_output?: boolean | null;
             /** Format: double */
             readonly effectiveSpeed?: number;
@@ -4795,18 +5818,27 @@ export interface components {
             readonly effectivePostprocess?: boolean;
         };
         "Api.Endpoints.Voice.VoiceStatusResponse": {
+            /** @description Статус операции. */
             status?: string | null;
         };
         HealthResponse: {
+            /** @description Статус операции. */
             status?: string | null;
         };
         "Kernel.Contracts.ApiKeysDto": {
+            /** @description API-ключ ElevenLabs. */
             elevenlabs?: string | null;
+            /** @description API-ключ Anthropic. */
             anthropic?: string | null;
+            /** @description API-ключ OpenAI. */
             openai?: string | null;
+            /** @description API-ключ RouterAI. */
             routerai?: string | null;
+            /** @description API-ключ AITunnel. */
             aitunnel?: string | null;
+            /** @description API-ключ YouTube Data API. */
             youtube?: string | null;
+            /** @description API-ключ Pexels. */
             pexels?: string | null;
         };
         "Kernel.Contracts.AppColorsDto": {
@@ -4815,6 +5847,7 @@ export interface components {
             background?: string | null;
             surface?: string | null;
             accent?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
         };
         "Kernel.Contracts.AudioProcessingSettingsDto": {
@@ -4854,11 +5887,14 @@ export interface components {
             eq?: components["schemas"]["Kernel.Contracts.MusicEqSettingsDto"];
         };
         "Kernel.Contracts.CustomVoicePayloadDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             refAudioPath?: string | null;
             refText?: string | null;
             designPrompt?: string | null;
+            /** @description Теги. */
             tags?: string[] | null;
         };
         "Kernel.Contracts.FragmentTimingDto": {
@@ -4868,11 +5904,20 @@ export interface components {
             end?: number;
         };
         "Kernel.Contracts.MontageSettingsDto": {
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Кадров в секунду.
+             */
             fps?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number;
             animation_style?: string | null;
             typography?: string | null;
@@ -4892,7 +5937,10 @@ export interface components {
             items?: components["schemas"]["MediaContext.Contracts.MediaAssetDto"][] | null;
             /** Format: int32 */
             total_count?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Номер страницы (с 1).
+             */
             page?: number;
             /** Format: int32 */
             page_size?: number;
@@ -4902,7 +5950,10 @@ export interface components {
             items?: components["schemas"]["ProductionContext.Contracts.ProjectSummaryDto"][] | null;
             /** Format: int32 */
             total_count?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Номер страницы (с 1).
+             */
             page?: number;
             /** Format: int32 */
             page_size?: number;
@@ -4912,20 +5963,26 @@ export interface components {
             items?: components["schemas"]["Research.Contracts.ResearchRunSummaryDto"][] | null;
             /** Format: int32 */
             total_count?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Номер страницы (с 1).
+             */
             page?: number;
             /** Format: int32 */
             page_size?: number;
             readonly has_next_page?: boolean;
         };
         "Kernel.Contracts.ProjectDataDto": {
+            /** @description Идентификатор проекта. */
             project_id: string | null;
             slug: string | null;
+            /** @description Путь проекта внутри хранилища (обычно имя проекта). */
             project_path?: string | null;
             montage?: components["schemas"]["Kernel.Contracts.MontageSettingsDto"];
             scenes?: components["schemas"]["Kernel.Contracts.SceneDto"][] | null;
         };
         "Kernel.Contracts.ProjectDataPayloadDto": {
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             format?: string | null;
             resolution?: string | null;
@@ -4938,17 +5995,20 @@ export interface components {
             backendProjectId?: string | null;
             audioProcessing?: components["schemas"]["Kernel.Contracts.AudioProcessingSettingsDto"];
             backgroundMusic?: components["schemas"]["Kernel.Contracts.BackgroundMusicSettingsDto"];
-            renderQuality?: string | null;
             use3D?: boolean | null;
             autoBRollEnabled?: boolean | null;
         };
         "Kernel.Contracts.ProjectMetadataPayloadDto": {
+            /** @description Заголовок. */
             title?: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
+            /** @description Теги. */
             tags?: string[] | null;
             thumbnail?: string | null;
         };
         "Kernel.Contracts.ProjectMontagePayloadDto": {
+            /** @description Кадров в секунду. */
             fps?: string | null;
             animationStyle?: string | null;
             transitions?: string[] | null;
@@ -4956,22 +6016,30 @@ export interface components {
             typography?: components["schemas"]["Kernel.Contracts.TypographyPayloadDto"];
         };
         "Kernel.Contracts.SceneDto": {
+            /** @description Идентификатор сцены. */
             scene_id: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             timecode?: string | null;
             fragments?: components["schemas"]["Kernel.Contracts.SceneFragmentDto"][] | null;
         };
         "Kernel.Contracts.SceneFragmentDto": {
+            /** @description Идентификатор фрагмента. */
             fragment_id: string | null;
+            /** @description Визуальная ремарка фрагмента (например, B-roll/архетип). */
             visual_note?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
             timing?: components["schemas"]["Kernel.Contracts.FragmentTimingDto"];
+            /** @description ID аудио-ассета голоса. */
             voice_asset_id?: string | null;
             broll_asset_id?: string | null;
         };
         "Kernel.Contracts.SceneFragmentPayloadDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
             visualNote?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
             /** Format: double */
             startTime?: number | null;
@@ -4985,7 +6053,9 @@ export interface components {
             lastAudioTextNormalized?: string | null;
         };
         "Kernel.Contracts.ScenePayloadDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             timecode?: string | null;
             fragments?: components["schemas"]["Kernel.Contracts.SceneFragmentPayloadDto"][] | null;
@@ -5003,34 +6073,47 @@ export interface components {
             body?: string | null;
         };
         "MediaContext.Contracts.AutoBrollCommand": {
+            /** @description Путь проекта внутри хранилища (обычно имя проекта). */
             project_path?: string | null;
             format?: string | null;
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
             api_keys?: components["schemas"]["Kernel.Contracts.ApiKeysDto"];
             fragments?: components["schemas"]["MediaContext.Contracts.AutoBrollFragmentItem"][] | null;
         };
         "MediaContext.Contracts.AutoBrollFragmentItem": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Визуальная ремарка фрагмента (например, B-roll/архетип). */
             visual_note?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
             /** Format: double */
             start_time?: number | null;
             /** Format: double */
             end_time?: number | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, сек.
+             */
             duration?: number | null;
         };
         "MediaContext.Contracts.AutoBrollMatchResult": {
+            /** @description Идентификатор фрагмента. */
             fragment_id?: string | null;
             matched?: boolean;
+            /** @description Имя файла. */
             filename?: string | null;
         };
         "MediaContext.Contracts.AutoBrollResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             results?: components["schemas"]["MediaContext.Contracts.AutoBrollMatchResult"][] | null;
         };
         "MediaContext.Contracts.MediaAssetDto": {
+            /** @description Уникальный идентификатор. */
             id: string | null;
+            /** @description Заголовок. */
             title: string | null;
             type?: components["schemas"]["MediaContext.Domain.MediaType"];
             source?: components["schemas"]["MediaContext.Domain.AssetSource"];
@@ -5038,26 +6121,47 @@ export interface components {
             extension: string | null;
             /** Format: int64 */
             file_size_bytes?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number | null;
             aspect_ratio?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Кадров в секунду.
+             */
             fps?: number | null;
             is_normalized?: boolean;
             normalized_storage_path?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
         };
         "MediaContext.Contracts.MusicTrackDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             genre?: string | null;
+            /** @description Настроение трека. */
             mood?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
             file_path?: string | null;
             /** Format: int32 */
@@ -5067,13 +6171,25 @@ export interface components {
             asset_id?: string | null;
             original_path?: string | null;
             normalized_path?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Кадров в секунду.
+             */
             fps?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number | null;
         };
         "MediaContext.Contracts.ProcessBrollCommand": {
@@ -5082,7 +6198,10 @@ export interface components {
             filenamePrefix?: string | null;
             targetFormat?: string | null;
             targetResolution?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Кадров в секунду.
+             */
             fps?: number;
             fitMode?: string | null;
             /** Format: double */
@@ -5092,25 +6211,45 @@ export interface components {
             extractAudio?: boolean;
         };
         "MediaContext.Contracts.ProcessBrollResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Имя файла. */
             filename?: string | null;
             path?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, сек.
+             */
             duration?: number;
             extracted_audio_path?: string | null;
         };
         "MediaContext.Contracts.StockVideoDto": {
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Уникальный идентификатор.
+             */
             id?: number;
+            /** @description Заголовок. */
             title?: string | null;
+            /** @description URL ресурса. */
             url?: string | null;
             image_preview?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
+            /** @description Прямая ссылка на скачивание. */
             download_url?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number;
         };
         /** @enum {string} */
@@ -5118,61 +6257,75 @@ export interface components {
         /** @enum {string} */
         "MediaContext.Domain.MediaType": "Video" | "Audio" | "Image";
         "MotionContext.Contracts.GenerateSceneCodeRequest": {
+            /** @description Идентификатор проекта. */
             project_id?: string | null;
+            /** @description Идентификатор сцены. */
             scene_id?: string | null;
+            /** @description Описание кадра/сцены для генерации кода. */
             visual_description?: string | null;
+            /** @description Текст озвучки фрагмента. */
             voice_text?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Кадров в секунду.
+             */
             fps?: number | null;
             montage_settings?: components["schemas"]["Kernel.Contracts.MontageSettingsDto"];
+            /** @description Разрешённые пакеты/возможности сцены. */
             capabilities?: string[] | null;
-        };
-        "MotionContext.Contracts.RenderJobDto": {
-            id?: string | null;
-            scene_code_id?: string | null;
-            /** Format: int32 */
-            revision_number?: number;
-            status?: components["schemas"]["MotionContext.Domain.RenderJobStatus"];
-            /** Format: int32 */
-            rendered_frames?: number;
-            /** Format: int32 */
-            total_frames?: number;
-            /** Format: double */
-            percentage?: number;
-            /** Format: double */
-            fps?: number;
-            output_path?: string | null;
-            error_message?: string | null;
-            /** Format: date-time */
-            started_at?: string | null;
-            /** Format: date-time */
-            completed_at?: string | null;
         };
         "MotionContext.Contracts.RollbackSceneCodeRequest": {
             /** Format: int32 */
             target_revision?: number;
         };
         "MotionContext.Contracts.SceneCodeDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Идентификатор проекта. */
             project_id?: string | null;
+            /** @description Идентификатор сцены. */
             scene_id?: string | null;
             /** Format: int32 */
             current_revision?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Ширина, пиксели.
+             */
             width?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Высота, пиксели.
+             */
             height?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Кадров в секунду.
+             */
             fps?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Длительность, кадры.
+             */
             duration_in_frames?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
             required_capabilities?: string[] | null;
             revisions?: components["schemas"]["MotionContext.Contracts.SceneRevisionDto"][] | null;
@@ -5183,20 +6336,17 @@ export interface components {
             revision_number?: number;
             source_hash?: string | null;
             origin?: components["schemas"]["MotionContext.Domain.RevisionOrigin"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
             source_code?: string | null;
         };
-        "MotionContext.Contracts.StartRenderRequest": {
-            /** Format: int32 */
-            revision_number?: number | null;
-            montage_settings?: components["schemas"]["Kernel.Contracts.MontageSettingsDto"];
-        };
         "MotionContext.Contracts.UpdateSceneCodeManualRequest": {
+            /** @description Исходный TSX-код сцены. */
             code?: string | null;
         };
-        /** @enum {string} */
-        "MotionContext.Domain.RenderJobStatus": "Queued" | "Rendering" | "Muxing" | "Done" | "Failed" | "Cancelled";
         /** @enum {string} */
         "MotionContext.Domain.RevisionOrigin": "AiGenerated" | "UserEdited" | "Rollback";
         "ProductionContext.Application.Services.DraftLintResponse": {
@@ -5212,22 +6362,26 @@ export interface components {
             computedDurationSeconds?: number;
         };
         "ProductionContext.Application.Services.ScenarioRewriteSuggestion": {
+            /** @description Визуальная ремарка фрагмента (например, B-roll/архетип). */
             visual_note?: string | null;
             spoken_text?: string | null;
         };
         "ProductionContext.Contracts.BuildProjectRequest": {
+            /** @description Идентификатор диктора (speaker_id профиля). */
             speaker_id?: string | null;
+            /** @description ID аудио-ассета фоновой музыки. */
             bgm_asset_id?: string | null;
             force_rerender?: boolean;
         };
         "ProductionContext.Contracts.BuildStatusDto": {
+            /** @description Идентификатор проекта. */
             project_id?: string | null;
             status?: components["schemas"]["ProductionContext.Domain.ProjectStatus"];
             current_step?: components["schemas"]["ProductionContext.Domain.PipelineStep"];
             error_message?: string | null;
-            final_video_path?: string | null;
         };
         "ProductionContext.Contracts.CreateProjectRequest": {
+            /** @description Заголовок. */
             title?: string | null;
             slug?: string | null;
             montage?: components["schemas"]["Kernel.Contracts.MontageSettingsDto"];
@@ -5236,7 +6390,9 @@ export interface components {
             markdown_content?: string | null;
         };
         "ProductionContext.Contracts.ProjectDetailsDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             slug?: string | null;
             relative_path?: string | null;
@@ -5245,18 +6401,23 @@ export interface components {
             montage?: components["schemas"]["Kernel.Contracts.MontageSettingsDto"];
             /** Format: double */
             total_duration_seconds?: number;
-            final_video_path?: string | null;
-            /** Format: int64 */
-            final_file_size_bytes?: number | null;
             error_message?: string | null;
             scenes?: components["schemas"]["ProductionContext.Contracts.SceneDetailsDto"][] | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата последнего обновления.
+             */
             updated_at?: string;
         };
         "ProductionContext.Contracts.ProjectSummaryDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             slug?: string | null;
             status?: components["schemas"]["ProductionContext.Domain.ProjectStatus"];
@@ -5265,56 +6426,81 @@ export interface components {
             scenes_count?: number;
             /** Format: double */
             total_duration_seconds?: number;
-            final_video_path?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата последнего обновления.
+             */
             updated_at?: string;
         };
         "ProductionContext.Contracts.SceneDetailsDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Идентификатор сцены. */
             scene_id?: string | null;
             /** Format: int32 */
             index?: number;
+            /** @description Заголовок. */
             title?: string | null;
+            /** @description Визуальная ремарка фрагмента (например, B-roll/архетип). */
             visual_note?: string | null;
             /** Format: double */
             start_seconds?: number;
             /** Format: double */
             end_seconds?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
             scene_code_id?: string | null;
-            rendered_video_asset_id?: string | null;
             fragments?: components["schemas"]["ProductionContext.Contracts.SceneFragmentDetailsDto"][] | null;
         };
         "ProductionContext.Contracts.SceneFragmentDetailsDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Идентификатор фрагмента. */
             fragment_id?: string | null;
             /** Format: int32 */
             index?: number;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
+            /** @description Визуальная ремарка фрагмента (например, B-roll/архетип). */
             visual_note?: string | null;
             /** Format: double */
             start_seconds?: number;
             /** Format: double */
             end_seconds?: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
+            /** @description ID аудио-ассета голоса. */
             voice_asset_id?: string | null;
             broll_asset_id?: string | null;
         };
         "ProductionContext.Contracts.UpdateSceneRequest": {
+            /** @description Заголовок. */
             title?: string | null;
+            /** @description Визуальная ремарка фрагмента (например, B-roll/архетип). */
             visual_note?: string | null;
         };
         /** @enum {string} */
-        "ProductionContext.Domain.PipelineStep": "Drafting" | "ScenarioParsing" | "VoiceGeneration" | "TimingSynchronization" | "MotionCodeGeneration" | "SceneRendering" | "AudioMuxing" | "FinalAssembly" | "Completed" | "Failed";
+        "ProductionContext.Domain.PipelineStep": "Drafting" | "ScenarioParsing" | "VoiceGeneration" | "TimingSynchronization" | "MotionCodeGeneration" | "Completed" | "Failed";
         /** @enum {string} */
         "ProductionContext.Domain.ProjectStatus": "Draft" | "Configured" | "Processing" | "Ready" | "Failed" | "Cancelled";
         "ProductionContext.Domain.ScenarioEngine.AstFrontmatter": {
+            /** @description Заголовок. */
             title?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Кадров в секунду.
+             */
             fps?: number;
             aspect_ratio?: string | null;
             colors?: {
@@ -5323,6 +6509,7 @@ export interface components {
         };
         "ProductionContext.Domain.ScenarioEngine.AstNode": Record<string, never>;
         "ProductionContext.Domain.ScenarioEngine.AstScene": {
+            /** @description Заголовок. */
             title?: string | null;
             declared_timecode?: string | null;
             nodes?: components["schemas"]["ProductionContext.Domain.ScenarioEngine.AstNode"][] | null;
@@ -5337,10 +6524,13 @@ export interface components {
             fragmentId?: string | null;
             sceneId?: string | null;
             severity?: components["schemas"]["ProductionContext.Domain.Services.IssueSeverity"];
+            /** @description Исходный TSX-код сцены. */
             code?: string | null;
+            /** @description Текстовое сообщение. */
             message?: string | null;
         };
         "Research.Contracts.EarlySignalDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
             topic?: string | null;
             keywords?: string[] | null;
@@ -5357,6 +6547,7 @@ export interface components {
             growth_pct?: string | null;
         };
         "Research.Contracts.OpportunityDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
             angle_title?: string | null;
             hook_hypothesis?: string | null;
@@ -5369,22 +6560,29 @@ export interface components {
             reference_video_ids?: string[] | null;
         };
         "Research.Contracts.ResearchRunDetailsDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
             topic_query?: string | null;
+            /** @description Ниша/тематика канала. */
             niche?: string | null;
             status?: components["schemas"]["Research.Domain.ResearchStatus"];
             error_message?: string | null;
             candidates?: components["schemas"]["Research.Contracts.VideoCandidateDto"][] | null;
             signals?: components["schemas"]["Research.Contracts.EarlySignalDto"][] | null;
             opportunities?: components["schemas"]["Research.Contracts.OpportunityDto"][] | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
             /** Format: date-time */
             completed_at?: string | null;
         };
         "Research.Contracts.ResearchRunSummaryDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
             topic_query?: string | null;
+            /** @description Ниша/тематика канала. */
             niche?: string | null;
             status?: components["schemas"]["Research.Domain.ResearchStatus"];
             /** Format: int32 */
@@ -5393,19 +6591,26 @@ export interface components {
             signals_count?: number;
             /** Format: int32 */
             opportunities_count?: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата создания.
+             */
             created_at?: string;
             /** Format: date-time */
             completed_at?: string | null;
         };
         "Research.Contracts.StartResearchRequest": {
+            /** @description Поисковый запрос. */
             query?: string | null;
+            /** @description Ниша/тематика канала. */
             niche?: string | null;
             /** Format: int32 */
             max_candidates?: number;
         };
         "Research.Contracts.VideoCandidateDto": {
+            /** @description Идентификатор YouTube-видео. */
             video_id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             channel_title?: string | null;
             /** Format: int64 */
@@ -5414,7 +6619,10 @@ export interface components {
             views?: number;
             /** Format: date-time */
             published_at?: string;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number;
             /** Format: double */
             vph?: number;
@@ -5425,7 +6633,9 @@ export interface components {
             thumbnail_url?: string | null;
         };
         "Research.Domain.Ports.AdHocExportData": {
+            /** @description Поисковый запрос. */
             query?: string | null;
+            /** @description Ниша/тематика канала. */
             niche?: string | null;
             videos?: components["schemas"]["Research.Domain.Ports.AdHocVideoExportDto"][] | null;
             signals?: components["schemas"]["Research.Domain.Ports.AdHocSignalExportDto"][] | null;
@@ -5443,6 +6653,7 @@ export interface components {
             topic?: string | null;
             /** Format: double */
             opportunity_score?: number;
+            /** @description Статус операции. */
             status?: string | null;
             actionable_angle?: string | null;
             demand_source?: string | null;
@@ -5460,7 +6671,9 @@ export interface components {
             source_url?: string | null;
         };
         "Research.Domain.Ports.AdHocVideoExportDto": {
+            /** @description Идентификатор YouTube-видео. */
             video_id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
             channel?: string | null;
             /** Format: int64 */
@@ -5471,6 +6684,7 @@ export interface components {
             ratio?: number;
             /** Format: double */
             vph?: number;
+            /** @description URL ресурса. */
             url?: string | null;
             published_at?: string | null;
             /** Format: int32 */
@@ -5483,6 +6697,7 @@ export interface components {
             commentId?: string | null;
             authorName?: string | null;
             authorChannelId?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
             /** Format: int32 */
             likeCount?: number;
@@ -5498,8 +6713,11 @@ export interface components {
             intensity?: number;
         };
         "Research.Domain.Ports.VideoCandidateMetaDto": {
+            /** @description Идентификатор YouTube-видео. */
             video_id?: string | null;
+            /** @description Заголовок. */
             title?: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
             channel_title?: string | null;
             channel_id?: string | null;
@@ -5507,6 +6725,7 @@ export interface components {
             subscriber_count?: number | null;
             /** Format: int64 */
             view_count?: number | null;
+            /** @description Длительность, сек. */
             duration?: string | null;
             upload_date?: string | null;
             /** Format: date-time */
@@ -5520,10 +6739,12 @@ export interface components {
             startSeconds?: number;
             /** Format: int32 */
             endSeconds?: number;
+            /** @description Заголовок. */
             title?: string | null;
             thumbnailUrl?: string | null;
         };
         "Research.Domain.Ports.VideoDeepDiveDto": {
+            /** @description Идентификатор YouTube-видео. */
             video_id?: string | null;
             metadata?: components["schemas"]["Research.Domain.Ports.VideoCandidateMetaDto"];
             heatmap?: components["schemas"]["Research.Domain.Ports.HeatmapPointDto"][] | null;
@@ -5541,27 +6762,48 @@ export interface components {
             total_estimated_tokens?: number;
         };
         "Skills.Contracts.SkillDto": {
+            /** @description Уникальный идентификатор. */
             id: string | null;
+            /** @description Человекочитаемое имя. */
             name: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
             stage?: components["schemas"]["Skills.Domain.SkillStage"];
+            /** @description Содержимое скила (промпт). */
             content: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Приоритет применения (чем больше, тем выше).
+             */
             priority?: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Версия.
+             */
             version?: number;
+            /** @description Является ли запись системной по умолчанию. */
             is_default?: boolean;
+            /** @description Включён ли скил. */
             is_enabled?: boolean;
+            /** @description Теги. */
             tags?: string[] | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Оценка числа токенов.
+             */
             estimated_tokens?: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата последнего обновления.
+             */
             updated_at?: string;
         };
         /** @enum {string} */
         "Skills.Domain.SkillStage": "scene_generation" | "hook_analysis" | "script_drafting" | "visual_analysis" | "trend_research" | "broll_matching";
         "SystemContext.Contracts.AiModelDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             category?: components["schemas"]["SystemContext.Domain.ModelCategory"];
             target_directory?: string | null;
@@ -5571,11 +6813,14 @@ export interface components {
             downloaded_size_mb?: number;
             status?: components["schemas"]["SystemContext.Domain.ModelDownloadStatus"];
             error_message?: string | null;
+            /** @description Версия. */
             version?: string | null;
             is_required?: boolean;
         };
         "SystemContext.Contracts.ModelCatalogEntryDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             provider?: string | null;
             mode?: string | null;
@@ -5584,6 +6829,7 @@ export interface components {
             status_details?: string | null;
         };
         "SystemContext.Contracts.PullModelRequest": {
+            /** @description Движок: LocalTts, CloudOpenAi, CloudMiniMax. */
             engine?: string | null;
         };
         "SystemContext.Contracts.SystemHardwareInfoDto": {
@@ -5617,16 +6863,23 @@ export interface components {
             category?: string | null;
             /** Format: int32 */
             event_id?: number;
+            /** @description Текстовое сообщение. */
             message?: string | null;
             exception?: string | null;
         };
         "SystemContext.Contracts.SystemSettingDto": {
+            /** @description Ключ настройки. */
             key?: string | null;
+            /** @description Новое значение настройки. */
             value?: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
             data_type?: string | null;
             is_readonly?: boolean;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Дата последнего обновления.
+             */
             updated_at?: string;
         };
         /** @enum {string} */
@@ -5636,19 +6889,24 @@ export interface components {
         /** @enum {string} */
         "SystemContext.Domain.ModelTaskRole": "ScenarioDrafting" | "SceneCodeGeneration" | "BRollMatching" | "TtsVoice" | "SttAlignment";
         "Voice.Contracts.AlignSpeechItemDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
         };
         "Voice.Contracts.AlignSpeechRequest": {
+            /** @description Путь к аудиофайлу. */
             audio_path?: string | null;
             fragments?: components["schemas"]["Voice.Contracts.AlignSpeechItemDto"][] | null;
         };
         "Voice.Contracts.AlignSpeechResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             fragments_timings?: components["schemas"]["Voice.Contracts.FragmentTimingResultDto"][] | null;
             fallback?: boolean;
         };
         "Voice.Contracts.BatchUploadScenesResponse": {
+            /** @description Статус операции. */
             status?: string | null;
             matches?: components["schemas"]["Voice.Contracts.SceneAudioMatchDto"][] | null;
             unmatched_files?: string[] | null;
@@ -5660,13 +6918,18 @@ export interface components {
             total_duration_seconds?: number;
         };
         "Voice.Contracts.ConcatAudioRequest": {
+            /** @description Список путей к аудиофайлам. */
             audio_paths?: string[] | null;
+            /** @description Путь к выходному файлу. */
             output_path?: string | null;
         };
         "Voice.Contracts.CreateDesignedSpeakerRequest": {
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             engine?: components["schemas"]["Voice.Domain.VoiceEngineType"];
+            /** @description Текст промпта для LLM. */
             prompt?: string | null;
+            /** @description ID локального движка-воркера (например, omni_voice_v1). */
             local_engine_id?: string | null;
         };
         "Voice.Contracts.DuckedAudioResultDto": {
@@ -5674,6 +6937,7 @@ export interface components {
             media_asset_id?: string | null;
         };
         "Voice.Contracts.FragmentTimingResultDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
             /** Format: double */
             startTime?: number;
@@ -5681,85 +6945,135 @@ export interface components {
             endTime?: number;
         };
         "Voice.Contracts.GeneratePreviewRequest": {
+            /** @description Текст для синтеза речи. */
             text?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Скорость речи (0.2–4.0).
+             */
             speed?: number;
         };
         "Voice.Contracts.ProcessAudioDspRequest": {
+            /** @description Путь к аудиофайлу. */
             audio_path?: string | null;
+            /** @description Действие DSP: lavasr, mastering, silence. */
             action?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Порог тишины в дБ.
+             */
             threshold_db?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Минимальная длительность паузы, мс.
+             */
             min_silence_ms?: number | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Максимальная длительность паузы, мс.
+             */
             max_silence_ms?: number | null;
         };
         "Voice.Contracts.ProcessAudioDspResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Путь к обработанному аудио. */
             processed_audio_path?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Новая длительность после обработки, сек.
+             */
             new_duration_sec?: number;
         };
         "Voice.Contracts.SceneAudioMatchDto": {
+            /** @description Идентификатор сцены. */
             scene_id?: string | null;
             absolute_path?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, сек.
+             */
             duration?: number;
         };
         "Voice.Contracts.SpeakerProfileDto": {
+            /** @description Уникальный идентификатор. */
             id: string | null;
+            /** @description Идентификатор диктора (speaker_id профиля). */
             speaker_id: string | null;
+            /** @description Человекочитаемое имя. */
             name: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
             source_type?: string | null;
             engine?: components["schemas"]["Voice.Domain.VoiceEngineType"];
+            /** @description Язык (например, ru). */
             language: string | null;
             gender?: string | null;
+            /** @description Является ли запись системной по умолчанию. */
             is_default?: boolean;
             is_active?: boolean;
             preview_audio_path?: string | null;
         };
         "Voice.Contracts.TranscribeAudioRequest": {
+            /** @description Путь к аудиофайлу. */
             audio_path?: string | null;
         };
         "Voice.Contracts.TranscribeAudioResponse": {
+            /** @description Статус операции. */
             status?: string | null;
+            /** @description Текст для синтеза речи. */
             text?: string | null;
         };
         "Voice.Contracts.UpdateSpeakerRequest": {
+            /** @description Человекочитаемое имя. */
             name?: string | null;
         };
         "Voice.Contracts.VoiceEngineInfoDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             mode?: string | null;
+            /** @description Разрешённые пакеты/возможности сцены. */
             capabilities?: string[] | null;
             supports_clone?: boolean;
             supports_design?: boolean;
             supports_synthesis?: boolean;
             is_available?: boolean;
             status_message?: string | null;
+            /** @description Текстовое описание. */
             description?: string | null;
         };
         "Voice.Contracts.VoiceJobDto": {
+            /** @description Уникальный идентификатор. */
             id: string | null;
+            /** @description Текст для синтеза речи. */
             text: string | null;
             status?: components["schemas"]["Voice.Domain.TtsJobStatus"];
             engine?: components["schemas"]["Voice.Domain.VoiceEngineType"];
+            /** @description Идентификатор диктора (speaker_id профиля). */
             speaker_id: string | null;
+            /** @description Путь к аудиофайлу. */
             audio_path?: string | null;
             media_asset_id?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Длительность, секунды.
+             */
             duration_seconds?: number | null;
+            /** @description Движок выравнивания: Whisper, NativeTts, Passthrough. */
             alignment_engine?: string | null;
             words?: components["schemas"]["Voice.Domain.ValueObjects.TimedWord"][] | null;
+            /** @description Текст ошибки. */
             error?: string | null;
         };
         "Voice.Contracts.VoiceSpeakerDto": {
+            /** @description Уникальный идентификатор. */
             id?: string | null;
+            /** @description Человекочитаемое имя. */
             name?: string | null;
             engine?: components["schemas"]["Voice.Domain.VoiceEngineType"];
+            /** @description Язык (например, ru). */
             language?: string | null;
             gender?: string | null;
         };

@@ -14,7 +14,6 @@ public class Scene : BaseEntity<string>
     public double StartSeconds { get; private set; }
     public double EndSeconds { get; private set; }
     public string? SceneCodeId { get; private set; }
-    public string? RenderedVideoAssetId { get; private set; }
 
     private readonly List<SceneFragment> _fragments = [];
     public IReadOnlyList<SceneFragment> Fragments => _fragments.AsReadOnly();
@@ -120,16 +119,6 @@ public class Scene : BaseEntity<string>
             throw new ValidationException("scene_code_id", "Идентификатор кода сцены обязателен.");
         }
         SceneCodeId = sceneCodeId.Trim();
-        UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
-    public void AttachRenderedVideo(string mediaAssetId)
-    {
-        if (string.IsNullOrWhiteSpace(mediaAssetId))
-        {
-            throw new ValidationException("rendered_video_asset_id", "Идентификатор видео-ассета сцены обязателен.");
-        }
-        RenderedVideoAssetId = mediaAssetId.Trim();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

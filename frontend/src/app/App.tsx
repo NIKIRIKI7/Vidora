@@ -102,17 +102,31 @@ export const App = () => {
   const { notification } = useNotificationStore()
   const activeProject = projects.find(p => p.name === activeProjectId)
 
-  useEffect(() => {
-    // Подтягиваем свежие скилы из SQLite при старте интерфейса (единый источник для генерации промптов)
-    useSkillsStore.getState().fetchSkills().catch((err) => { console.error('App.fetchSkills:', err) })
-  }, [])
-
   const { data: health, isLoading: isBooting } = $api.useQuery(
     'get',
     '/api/health',
     {},
-    { refetchInterval: query => (query.state.data ? false : 1000), retry: true },
+    {retry: true },
   )
+
+  useEffect(() => {
+    // Скилы грузим только после того, как бэкенд ответил на /api/health.
+    // Иначе при холодном старте (backend ещё собирается/не поднялся) запрос падает,
+    // скиллы остаются пустыми до перезагрузки страницы.
+    if (!health) return
+    let cancelled = false
+    const load = async (attempt = 0) => {
+      await useSkillsStore.getState().fetchSkills(true)
+      if (cancelled) return
+      const { error } = useSkillsStore.getState()
+      if (error) {
+        if (attempt < 3) setTimeout(() => { void load(attempt + 1) }, 1000 * (attempt + 1))
+        else console.error('App.fetchSkills:', error)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [health])
 
   if (isBooting || !health) {
     return <BootScreen />

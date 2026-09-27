@@ -4,15 +4,4 @@ export interface FragmentTiming {
   endTime: number
 }
 
-export interface RenderPayload {
-  task_id?: string
-  progress: number
-  status: 'rendering' | 'done' | 'error'
-  target_id?: string
-  target?: string
-  output_path?: string
-  error?: string
-  error_details?: string
-}
-
-export type CenterViewMode = 'player' | 'code' | 'split' | 'markdown'
+export type CenterViewMode = 'code' | 'markdown'

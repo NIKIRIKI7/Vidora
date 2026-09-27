@@ -270,8 +270,6 @@ export interface PromptTemplates {
   scenario: string
 }
 
-export type RenderQuality = 'low' | 'medium' | 'high'
-
 export interface ProjectSettings {
   name: string
   format: VideoFormat
@@ -286,7 +284,6 @@ export interface ProjectSettings {
   backendProjectId?: string
   audioProcessing: AudioProcessingSettings
   backgroundMusic?: BackgroundMusicSettings
-  renderQuality?: RenderQuality
   use3D?: boolean
   autoBRollEnabled?: boolean
 }

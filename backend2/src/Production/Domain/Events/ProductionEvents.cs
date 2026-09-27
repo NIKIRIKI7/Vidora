@@ -22,9 +22,7 @@ public sealed record PipelineStepChangedEvent(
 
 public sealed record ProjectExportedEvent(
     string AggregateId,
-    string OutputFilePath,
-    double DurationSeconds,
-    long FileSizeBytes) : DomainEvent(AggregateId);
+    double DurationSeconds) : DomainEvent(AggregateId);
 
 public sealed record ProjectBuildFailedEvent(
     string AggregateId,

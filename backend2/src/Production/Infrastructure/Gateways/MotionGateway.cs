@@ -39,35 +39,4 @@ public sealed class MotionGateway : IMotionGateway
         return dto.Id;
     }
 
-    public async Task<string> RenderSceneVideoAsync(
-        string sceneCodeId,
-        IProgress<double>? progress = null,
-        CancellationToken ct = default)
-    {
-        var startRequest = new StartRenderRequest(null, null);
-        var job = await _motionModule.StartRenderAsync(sceneCodeId, startRequest, ct);
-
-        using var pollCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, pollCts.Token);
-
-        while (!linked.Token.IsCancellationRequested)
-        {
-            var status = await _motionModule.GetRenderStatusAsync(job.Id, linked.Token);
-            progress?.Report(status.Percentage);
-
-            if (status.Status == MotionContext.Domain.RenderJobStatus.Done)
-            {
-                return status.OutputPath ?? throw new InvalidOperationException("Рендер завершен без выходного пути.");
-            }
-
-            if (status.Status == MotionContext.Domain.RenderJobStatus.Failed)
-            {
-                throw new InvalidOperationException($"Сбой рендеринга сцены: {status.ErrorMessage}");
-            }
-
-            await Task.Delay(1000, linked.Token);
-        }
-
-        throw new TimeoutException("Превышен таймаут рендеринга Remotion-сцены.");
-    }
 }

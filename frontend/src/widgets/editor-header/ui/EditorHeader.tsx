@@ -6,7 +6,6 @@ interface Props {
   project: ProjectSettings
   projects: ProjectSettings[]
   isAutoPipelineRunning: boolean
-  isRendering: boolean
   pipelineStep: string
   uiPreferences: { showSceneSidebar: boolean; showInspector: boolean; showTimeline: boolean }
   onToggleUi: (key: 'showSceneSidebar' | 'showInspector' | 'showTimeline') => void
@@ -23,7 +22,6 @@ export const EditorHeader = ({
   project,
   projects,
   isAutoPipelineRunning,
-  isRendering,
   pipelineStep,
   uiPreferences,
   onToggleUi,
@@ -109,7 +107,7 @@ export const EditorHeader = ({
           <span className="hidden xl:inline">Журнал</span>
         </Button>
         <GradientButton
-          disabled={isAutoPipelineRunning || isRendering}
+          disabled={isAutoPipelineRunning}
           onClick={onFullAutoPipeline}
           icon={<Zap size={16} fill="currentColor" />}
         >

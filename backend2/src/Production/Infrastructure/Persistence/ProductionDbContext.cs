@@ -49,9 +49,6 @@ public class ProductionDbContext : SqliteDbContextBase
                 .HasColumnType("TEXT")
                 .IsRequired();
 
-            b.Property(p => p.FinalVideoPath).HasMaxLength(512);
-            b.Property(p => p.FinalDurationSeconds);
-            b.Property(p => p.FinalFileSizeBytes);
             b.Property(p => p.ErrorMessage).HasMaxLength(2048);
 
             b.Property(p => p.CreatedAt).IsRequired();
@@ -92,7 +89,6 @@ public class ProductionDbContext : SqliteDbContextBase
             b.Property(s => s.StartSeconds).IsRequired();
             b.Property(s => s.EndSeconds).IsRequired();
             b.Property(s => s.SceneCodeId).HasMaxLength(64);
-            b.Property(s => s.RenderedVideoAssetId).HasMaxLength(64);
 
             b.Property(s => s.CreatedAt).IsRequired();
             b.Property(s => s.UpdatedAt).IsRequired();

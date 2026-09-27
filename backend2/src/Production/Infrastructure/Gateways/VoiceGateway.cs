@@ -27,13 +27,4 @@ public sealed class VoiceGateway : IVoiceGateway
             DurationSeconds: result.DurationSeconds ?? 1.5);
     }
 
-    public async Task<string> ApplyDuckingAsync(
-        string voiceAssetId,
-        string bgmAssetId,
-        CancellationToken ct = default)
-    {
-        var cmd = ApplyAudioDuckingCommand.ForAssets(voiceAssetId, bgmAssetId);
-        var result = await _voiceModule.ApplyDuckingAsync(cmd, ct);
-        return result.MasterAudioPath;
-    }
 }

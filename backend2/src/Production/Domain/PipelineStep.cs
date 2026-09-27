@@ -10,9 +10,6 @@ public enum PipelineStep
     VoiceGeneration,
     TimingSynchronization,
     MotionCodeGeneration,
-    SceneRendering,
-    AudioMuxing,
-    FinalAssembly,
     Completed,
     Failed
 }

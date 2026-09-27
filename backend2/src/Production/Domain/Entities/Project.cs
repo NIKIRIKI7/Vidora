@@ -17,9 +17,6 @@ public class Project : BaseEntity<ProjectId>
     public PipelineStep CurrentStep { get; private set; }
     public MontageSettingsDto MontageSettings { get; private set; } = new();
 
-    public string? FinalVideoPath { get; private set; }
-    public double? FinalDurationSeconds { get; private set; }
-    public long? FinalFileSizeBytes { get; private set; }
     public string? ErrorMessage { get; private set; }
 
     private readonly List<Scene> _scenes = [];
@@ -134,20 +131,12 @@ public class Project : BaseEntity<ProjectId>
         AddDomainEvent(new PipelineStepChangedEvent(Id.Value, step));
     }
 
-    public void MarkCompleted(string finalVideoPath, double durationSeconds, long fileSizeBytes)
+    public void MarkCompleted()
     {
-        if (string.IsNullOrWhiteSpace(finalVideoPath))
-        {
-            throw new ValidationException("final_video_path", "Путь к финальному видеофайлу обязателен.");
-        }
-
-        FinalVideoPath = finalVideoPath.Trim();
-        FinalDurationSeconds = Math.Round(durationSeconds, 2);
-        FinalFileSizeBytes = fileSizeBytes;
         ErrorMessage = null;
         MarkStep(PipelineStep.Completed);
 
-        AddDomainEvent(new ProjectExportedEvent(Id.Value, FinalVideoPath, FinalDurationSeconds.Value, fileSizeBytes));
+        AddDomainEvent(new ProjectExportedEvent(Id.Value, TotalDurationSeconds));
     }
 
     public void MarkFailed(PipelineStep failedStep, string errorMessage)

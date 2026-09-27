@@ -145,8 +145,7 @@ public sealed class ProductionModule : IProductionModule
             ProjectId: project.Id.Value,
             Status: ProjectStatus.Processing,
             CurrentStep: PipelineStep.VoiceGeneration,
-            ErrorMessage: null,
-            FinalVideoPath: null);
+            ErrorMessage: null);
     }
 
     public async Task CancelBuildAsync(string projectId, CancellationToken ct = default)
@@ -186,8 +185,7 @@ public sealed class ProductionModule : IProductionModule
             ProjectId: project.Id.Value,
             Status: project.Status,
             CurrentStep: project.CurrentStep,
-            ErrorMessage: project.ErrorMessage,
-            FinalVideoPath: project.FinalVideoPath);
+            ErrorMessage: project.ErrorMessage);
     }
 
     public async Task<ProjectDataDto> ExportProjectBridgeSnapshotAsync(string projectId, CancellationToken ct = default)
@@ -237,7 +235,6 @@ public sealed class ProductionModule : IProductionModule
         CurrentStep: p.CurrentStep,
         ScenesCount: p.Scenes.Count,
         TotalDurationSeconds: p.TotalDurationSeconds,
-        FinalVideoPath: p.FinalVideoPath,
         CreatedAt: p.CreatedAt,
         UpdatedAt: p.UpdatedAt);
 
@@ -250,8 +247,6 @@ public sealed class ProductionModule : IProductionModule
         CurrentStep: p.CurrentStep,
         Montage: p.MontageSettings,
         TotalDurationSeconds: p.TotalDurationSeconds,
-        FinalVideoPath: p.FinalVideoPath,
-        FinalFileSizeBytes: p.FinalFileSizeBytes,
         ErrorMessage: p.ErrorMessage,
         Scenes: p.Scenes.Select(s => new SceneDetailsDto(
             Id: s.Id,
@@ -263,7 +258,6 @@ public sealed class ProductionModule : IProductionModule
             EndSeconds: s.EndSeconds,
             DurationSeconds: s.DurationSeconds,
             SceneCodeId: s.SceneCodeId,
-            RenderedVideoAssetId: s.RenderedVideoAssetId,
             Fragments: s.Fragments.Select(f => new SceneFragmentDetailsDto(
                 Id: f.Id,
                 FragmentId: f.FragmentId.Value,

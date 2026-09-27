@@ -18,15 +18,17 @@ public sealed class EfResearchRunRepository : IResearchRunRepository
             .Include(r => r.Opportunities)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
-    public async Task<IReadOnlyList<ResearchRun>> GetAllAsync(int skip = 0, int take = 20, CancellationToken ct = default) =>
-        await _context.ResearchRuns
+    // ponytail: SQLite не умеет ORDER BY по DateTimeOffset — сортируем на клиенте.
+    public async Task<IReadOnlyList<ResearchRun>> GetAllAsync(int skip = 0, int take = 20, CancellationToken ct = default)
+    {
+        var runs = await _context.ResearchRuns
             .Include(r => r.Candidates)
             .Include(r => r.Signals)
             .Include(r => r.Opportunities)
-            .OrderByDescending(r => r.CreatedAt)
-            .Skip(skip)
-            .Take(take)
             .ToListAsync(ct);
+
+        return runs.OrderByDescending(r => r.CreatedAt).Skip(skip).Take(take).ToList();
+    }
 
     public Task<int> CountAsync(CancellationToken ct = default) =>
         _context.ResearchRuns.CountAsync(ct);

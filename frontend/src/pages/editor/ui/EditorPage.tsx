@@ -170,7 +170,6 @@ export const EditorPage = ({
         project={project}
         projects={projects}
         isAutoPipelineRunning={model.isAutoPipelineRunning}
-        isRendering={model.isRendering}
         pipelineStep={model.pipelineStep}
         uiPreferences={uiPreferences}
         onToggleUi={(key) => setUiPreferences({ [key]: !uiPreferences[key] })}
@@ -213,31 +212,19 @@ export const EditorPage = ({
           )}
 
           <CenterCanvas
-            centerView={model.centerView}
-            previewFormat={model.previewFormat}
+            centerView={model.centerView as 'code' | 'markdown'}
             onChangeView={model.setCenterView}
-            onPreviewFormatChange={model.setPreviewFormat}
-            playingTargetId={model.playingTargetId}
-            renderedVideos={model.renderedVideos}
-            audioLoaded={model.audioLoaded}
             activeScene={model.activeScene}
             project={project}
-            videoRef={model.videoRef}
-            audioRef={model.audioRef}
             onUpdateCode={model.handleUpdateCode}
             onCodeHistory={model.handleCodeHistory}
-            isRendering={model.isRendering}
             isAutoPipelineRunning={model.isAutoPipelineRunning}
             pipelineStep={model.pipelineStep}
-            renderProgress={model.renderProgress}
             onCancelAll={model.handleCancelAll}
-            onCaptureFrame={model.handleCaptureFrame}
             showTimeline={uiPreferences.showTimeline}
             timeline={
               <Timeline
                 fragments={model.activeScene?.fragments || []}
-                videoRef={model.videoRef}
-                audioRef={model.audioRef}
                 onUpdateBounds={model.handleUpdateFragmentBounds}
                 onSplitFragment={model.handleSplitFragment}
                 onDeleteFragment={model.handleDeleteFragment}
@@ -268,8 +255,6 @@ export const EditorPage = ({
                 isGeneratingAudio={model.isGeneratingAudio}
                 isSyncing={model.isSyncing}
                 isGeneratingCode={model.isGeneratingCode}
-                isRendering={model.isRendering}
-                renderProgress={model.renderProgress}
                 onChangeVoiceModel={model.setVoiceModel}
                 onChangeUseWhisper={model.setUseWhisper}
                 onChangeAutoOffloadVram={model.setAutoOffloadVram}
@@ -293,8 +278,6 @@ export const EditorPage = ({
                 onRunSync={() => model.runSyncAllScenes()}
                 onToggleIgnoreTsx={model.toggleIgnoreTsx}
                 onRunCodeGen={() => model.runCodeGen()}
-                onRunProjectRender={model.runProjectRender}
-                onRunRender={() => model.runRender()}
                 onExportProject={model.handleExportProject}
                 onShowNotification={model.showNotification}
                 onUpdateFragmentBRoll={model.handleUpdateFragmentBRoll}

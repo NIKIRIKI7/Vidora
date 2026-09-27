@@ -10,7 +10,6 @@ public class MotionDbContext : SqliteDbContextBase
 {
     public DbSet<SceneCode> SceneCodes => Set<SceneCode>();
     public DbSet<SceneRevision> SceneRevisions => Set<SceneRevision>();
-    public DbSet<RenderJob> RenderJobs => Set<RenderJob>();
 
     public MotionDbContext(DbContextOptions<MotionDbContext> options, IEventBus? eventBus = null)
         : base(options, eventBus) { }
@@ -83,46 +82,6 @@ public class MotionDbContext : SqliteDbContextBase
             b.Property(r => r.UpdatedAt).IsRequired();
 
             b.HasIndex(r => new { r.SceneCodeId, r.RevisionNumber }).IsUnique();
-        });
-
-        modelBuilder.Entity<RenderJob>(b =>
-        {
-            b.ToTable("motion_render_jobs");
-            b.HasKey(j => j.Id);
-            b.Ignore(j => j.DomainEvents);
-
-            b.Property(j => j.Id)
-                .HasConversion(id => id.Value, str => new RenderJobId(str))
-                .HasMaxLength(RenderJobId.MaxLength)
-                .IsRequired();
-
-            b.Property(j => j.SceneCodeId)
-                .HasConversion(id => id.Value, str => new SceneCodeId(str))
-                .HasMaxLength(SceneCodeId.MaxLength)
-                .IsRequired();
-
-            b.Property(j => j.TargetRevisionNumber)
-                .HasConversion(rn => rn.Value, val => new RevisionNumber(val))
-                .IsRequired();
-
-            b.Property(j => j.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
-
-            b.ComplexProperty(j => j.Progress, pp =>
-            {
-                pp.Property(p => p.RenderedFrames).HasColumnName("rendered_frames").IsRequired();
-                pp.Property(p => p.TotalFrames).HasColumnName("total_frames").IsRequired();
-                pp.Property(p => p.CurrentFps).HasColumnName("current_fps").IsRequired();
-            });
-
-            b.Property(j => j.OutputPath).HasMaxLength(512);
-            b.Property(j => j.ErrorMessage).HasMaxLength(2048);
-            b.Property(j => j.StartedAt);
-            b.Property(j => j.CompletedAt);
-            b.Property(j => j.CreatedAt).IsRequired();
-            b.Property(j => j.UpdatedAt).IsRequired();
-
-            b.HasIndex(j => j.Status);
-            b.HasIndex(j => j.SceneCodeId);
         });
     }
 }

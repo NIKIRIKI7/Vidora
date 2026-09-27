@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { SceneFragment, BackgroundMusicSettings } from '@entities/project'
-import { Button, IconButton } from '@shared/ui'
-import { Play, Pause, ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split, Volume2, VolumeX, Video, Plus, Settings } from 'lucide-react'
+import { IconButton } from '@shared/ui'
+import { ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split, Volume2, VolumeX, Video, Plus, Settings } from 'lucide-react'
 
 type TimelineTool = 'select' | 'razor'
 
 interface TimelineProps {
   fragments: SceneFragment[]
-  videoRef: React.RefObject<HTMLVideoElement | null>
-  audioRef?: React.RefObject<HTMLAudioElement | null>
   onUpdateBounds: (fragId: string, edge: 'start' | 'end', newTime: number, ripple?: boolean) => void
   onSplitFragment?: (fragId: string, splitTime: number) => void
   onDeleteFragment?: (fragId: string) => void
@@ -63,8 +61,6 @@ const computeFragments = (frags: SceneFragment[]) => {
 
 export const Timeline = ({
   fragments,
-  videoRef,
-  audioRef,
   onUpdateBounds,
   onSplitFragment,
   onDeleteFragment,
@@ -78,24 +74,18 @@ export const Timeline = ({
 }: TimelineProps) => {
   const [zoom, setZoom] = useState(100)
   const [currentTime, setCurrentTime] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [activeTool, setActiveTool] = useState<TimelineTool>('select')
   const [isAudioLinked, setIsAudioLinked] = useState(true)
   const [isSnapEnabled, setIsSnapEnabled] = useState(true)
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
   const [dragFragments, setDragFragments] = useState<SceneFragment[] | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
-  const [isScrubbing, setIsScrubbing] = useState(false)
   const [containerWidth, setContainerWidth] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const timelineTracksRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<SceneFragment[] | null>(null)
-  const lastTickRef = useRef(0)
 
   const computedFragments = useMemo(() => computeFragments(dragFragments ?? fragments), [dragFragments, fragments])
-  // Длительность контента мемоизирована отдельно от плейхеда: `currentTime` меняется каждый
-  // кадр, и раньше он тянул за собой пересоздание rAF-эффекта. Теперь эффект переподписывается
-  // только при смене самого контента.
   const contentDuration = useMemo(() => Math.max(10, ...computedFragments.map((f) => f.computedEnd)), [computedFragments])
   const duration = Math.max(contentDuration, currentTime + 2)
   const hasAnyAudio = useMemo(() => fragments.some((f) => Boolean(f.audioFileName || f.lastAudioHash)), [fragments])
@@ -108,53 +98,9 @@ export const Timeline = ({
     return () => ro.disconnect()
   }, [])
 
-  useEffect(() => {
-    let raf: number
-    const loop = (now: number) => {
-      if (!isScrubbing) {
-        const v = videoRef.current
-        const a = audioRef?.current
-        const media = (v && v.src) ? v : (a && a.src) ? a : null
-        if (media) {
-          setCurrentTime(prev => Math.abs(prev - media.currentTime) > 0.01 ? media.currentTime : prev)
-          setIsPlaying(prev => prev !== !media.paused ? !media.paused : prev)
-        } else if (isPlaying) {
-          const deltaSec = (now - lastTickRef.current) / 1000
-          lastTickRef.current = now
-          setCurrentTime(prev => {
-            const next = prev + deltaSec
-            if (next >= contentDuration) { setIsPlaying(false); return 0 }
-            return next
-          })
-        } else {
-          lastTickRef.current = now
-        }
-      }
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [videoRef, audioRef, isScrubbing, isPlaying, contentDuration])
-
-  const togglePlay = useCallback(() => {
-    const v = videoRef.current
-    const a = audioRef?.current
-    const media = (v && v.src) ? v : (a && a.src) ? a : null
-    if (media) {
-      if (media.paused) media.play().catch(() => {})
-      else media.pause()
-    } else {
-      lastTickRef.current = performance.now()
-      setIsPlaying(prev => !prev)
-    }
-  }, [videoRef, audioRef])
-
   const seekTo = useCallback((newTime: number) => {
-    const clampedTime = Math.max(0, Math.min(newTime, duration))
-    if (videoRef.current) videoRef.current.currentTime = clampedTime
-    if (audioRef?.current) audioRef.current.currentTime = clampedTime
-    setCurrentTime(clampedTime)
-  }, [videoRef, audioRef, duration])
+    setCurrentTime(Math.max(0, Math.min(newTime, duration)))
+  }, [duration])
 
   const snapTime = useCallback((time: number, thresholdSec = 0.15): number => {
     if (!isSnapEnabled) return time
@@ -172,7 +118,6 @@ export const Timeline = ({
     if ((e.target as HTMLElement).closest('.timeline-frag')) return
     const rect = timelineTracksRef.current?.getBoundingClientRect()
     if (!rect) return
-    setIsScrubbing(true)
     seekTo(snapTime(Math.max(0, (e.clientX - rect.left) / zoom)))
     const handleMouseMove = (moveEvent: MouseEvent) => {
       seekTo(snapTime(Math.max(0, (moveEvent.clientX - rect.left) / zoom)))
@@ -180,7 +125,6 @@ export const Timeline = ({
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
-      setIsScrubbing(false)
     }
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
@@ -253,7 +197,6 @@ export const Timeline = ({
       const { currentTime, computedFragments, selectedFragmentId } = ctx.current
       if (e.code === 'KeyC') setActiveTool((t) => (t === 'razor' ? 'select' : 'razor'))
       else if (e.code === 'KeyV') setActiveTool('select')
-      else if (e.code === 'Space') { e.preventDefault(); togglePlay() }
       else if (e.code === 'KeyS' || (e.ctrlKey && e.code === 'KeyK')) {
         e.preventDefault()
         const frag = computedFragments.find((f) => currentTime > f.computedStart + 0.1 && currentTime < f.computedEnd - 0.1)
@@ -271,7 +214,7 @@ export const Timeline = ({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [togglePlay, onSplitFragment, onDeleteFragment, onDuplicateFragment])
+  }, [onSplitFragment, onDeleteFragment, onDuplicateFragment])
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -297,9 +240,6 @@ export const Timeline = ({
     <div className="w-full h-full flex flex-col bg-surface-container/90 backdrop-blur-xl select-none border-t border-outline-variant/40">
       <div className="h-10 border-b border-outline-variant/40 flex items-center px-4 justify-between bg-surface-container-lowest/70 shrink-0">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" className="p-1 w-8 h-8 rounded-full hover:bg-primary/20" onClick={togglePlay} title="Воспроизведение (Space)">
-            {isPlaying ? <Pause size={18} className="text-primary" /> : <Play size={18} className="text-primary fill-primary" />}
-          </Button>
           <span className="font-mono text-xs text-primary font-bold tracking-widest bg-surface-container-lowest/40 px-2 py-1 rounded border border-primary/20">{formatTime(currentTime)}</span>
         </div>
         <div className="flex items-center gap-1 bg-surface-container-lowest border border-outline-variant/40 p-0.5 rounded-lg">
@@ -358,13 +298,9 @@ export const Timeline = ({
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" className="p-1 w-7 h-7" onClick={() => setZoom((z) => Math.max(30, z - 20))}>
-            <ZoomOut size={15} />
-          </Button>
+          <IconButton icon={ZoomOut} size="sm" accent="neutral" onClick={() => setZoom((z) => Math.max(30, z - 20))} title="Уменьшить масштаб" />
           <span className="text-xxs text-on-surface-variant font-mono w-10 text-center">{zoom}px/s</span>
-          <Button variant="ghost" className="p-1 w-7 h-7" onClick={() => setZoom((z) => Math.min(300, z + 20))}>
-            <ZoomIn size={15} />
-          </Button>
+          <IconButton icon={ZoomIn} size="sm" accent="neutral" onClick={() => setZoom((z) => Math.min(300, z + 20))} title="Увеличить масштаб" />
         </div>
       </div>
       <div className="flex-1 flex overflow-hidden">

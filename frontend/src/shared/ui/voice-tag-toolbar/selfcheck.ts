@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // Само-проверка чистой логики инсертера тегов:
 //   node frontend/src/shared/ui/voice-tag-toolbar/selfcheck.ts
 import assert from 'node:assert/strict'

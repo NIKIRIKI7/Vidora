@@ -12,7 +12,6 @@ public sealed record ProjectSummaryDto(
     [property: JsonPropertyName("current_step")] PipelineStep CurrentStep,
     [property: JsonPropertyName("scenes_count")] int ScenesCount,
     [property: JsonPropertyName("total_duration_seconds")] double TotalDurationSeconds,
-    [property: JsonPropertyName("final_video_path")] string? FinalVideoPath,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
     [property: JsonPropertyName("updated_at")] DateTimeOffset UpdatedAt);
 
@@ -38,7 +37,6 @@ public sealed record SceneDetailsDto(
     [property: JsonPropertyName("end_seconds")] double EndSeconds,
     [property: JsonPropertyName("duration_seconds")] double DurationSeconds,
     [property: JsonPropertyName("scene_code_id")] string? SceneCodeId,
-    [property: JsonPropertyName("rendered_video_asset_id")] string? RenderedVideoAssetId,
     [property: JsonPropertyName("fragments")] IReadOnlyList<SceneFragmentDetailsDto> Fragments);
 
 public sealed record ProjectDetailsDto(
@@ -50,8 +48,6 @@ public sealed record ProjectDetailsDto(
     [property: JsonPropertyName("current_step")] PipelineStep CurrentStep,
     [property: JsonPropertyName("montage")] MontageSettingsDto Montage,
     [property: JsonPropertyName("total_duration_seconds")] double TotalDurationSeconds,
-    [property: JsonPropertyName("final_video_path")] string? FinalVideoPath,
-    [property: JsonPropertyName("final_file_size_bytes")] long? FinalFileSizeBytes,
     [property: JsonPropertyName("error_message")] string? ErrorMessage,
     [property: JsonPropertyName("scenes")] IReadOnlyList<SceneDetailsDto> Scenes,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
@@ -78,5 +74,4 @@ public sealed record BuildStatusDto(
     [property: JsonPropertyName("project_id")] string ProjectId,
     [property: JsonPropertyName("status")] ProjectStatus Status,
     [property: JsonPropertyName("current_step")] PipelineStep CurrentStep,
-    [property: JsonPropertyName("error_message")] string? ErrorMessage,
-    [property: JsonPropertyName("final_video_path")] string? FinalVideoPath);
+    [property: JsonPropertyName("error_message")] string? ErrorMessage);

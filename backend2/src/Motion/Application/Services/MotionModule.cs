@@ -2,7 +2,6 @@ using Kernel.Contracts;
 using Kernel.Exceptions;
 using Kernel.Ports;
 using Microsoft.Extensions.Logging;
-using MotionContext.Application.Commands;
 using MotionContext.Contracts;
 using MotionContext.Domain;
 using MotionContext.Domain.Entities;
@@ -14,9 +13,6 @@ namespace MotionContext.Application.Services;
 public sealed class MotionModule : IMotionModule
 {
     private readonly ISceneCodeRepository _sceneCodeRepository;
-    private readonly IRenderJobRepository _renderJobRepository;
-    private readonly IRenderJobQueue _renderJobQueue;
-    private readonly IRenderTracker _renderTracker;
     private readonly IScenePromptComposer _promptComposer;
     private readonly ILlmCodeExtractor _codeExtractor;
     private readonly ILlmClient _llmClient;
@@ -25,9 +21,6 @@ public sealed class MotionModule : IMotionModule
 
     public MotionModule(
         ISceneCodeRepository sceneCodeRepository,
-        IRenderJobRepository renderJobRepository,
-        IRenderJobQueue renderJobQueue,
-        IRenderTracker renderTracker,
         IScenePromptComposer promptComposer,
         ILlmCodeExtractor codeExtractor,
         ILlmClient llmClient,
@@ -35,9 +28,6 @@ public sealed class MotionModule : IMotionModule
         ILogger<MotionModule> logger)
     {
         _sceneCodeRepository = sceneCodeRepository;
-        _renderJobRepository = renderJobRepository;
-        _renderJobQueue = renderJobQueue;
-        _renderTracker = renderTracker;
         _promptComposer = promptComposer;
         _codeExtractor = codeExtractor;
         _llmClient = llmClient;
@@ -203,72 +193,6 @@ public sealed class MotionModule : IMotionModule
         return MapToDto(aggregate);
     }
 
-    public async Task<RenderJobDto> StartRenderAsync(string sceneCodeId, StartRenderRequest request, CancellationToken ct = default)
-    {
-        var id = ParseSceneCodeId(sceneCodeId);
-        var sceneCode = await _sceneCodeRepository.GetByIdAsync(id, ct)
-            ?? throw new ResourceNotFoundException("SceneCode", sceneCodeId);
-
-        var targetRevNumber = request.RevisionNumber.HasValue
-            ? new RevisionNumber(request.RevisionNumber.Value)
-            : sceneCode.CurrentRevisionNumber;
-
-        var revision = sceneCode.FindRevision(targetRevNumber)
-            ?? throw new ResourceNotFoundException("SceneRevision", targetRevNumber.Value);
-
-        var job = RenderJob.Enqueue(sceneCode.Id, targetRevNumber, sceneCode.Composition.DurationInFrames);
-        await _renderJobRepository.AddAsync(job, ct);
-        await _renderJobRepository.SaveChangesAsync(ct);
-
-        await _renderJobQueue.EnqueueAsync(job.Id, ct);
-
-        _logger.LogInformation("[MotionModule] Задача рендера {JobId} поставлена в канал очереди", job.Id.Value);
-        return MapRenderDto(job);
-    }
-
-    public async Task<RenderJobDto> GetRenderStatusAsync(string renderJobId, CancellationToken ct = default)
-    {
-        if (!RenderJobId.TryParse(renderJobId, out var id))
-            throw new ResourceNotFoundException("RenderJob", renderJobId);
-
-        var job = await _renderJobRepository.GetByIdAsync(id, ct)
-            ?? throw new ResourceNotFoundException("RenderJob", renderJobId);
-
-        if (job.Status == RenderJobStatus.Rendering && _renderTracker.TryGet(job.Id.Value, out var liveProgress))
-        {
-            return new RenderJobDto(
-                job.Id.Value,
-                job.SceneCodeId.Value,
-                job.TargetRevisionNumber.Value,
-                job.Status,
-                liveProgress.RenderedFrames,
-                liveProgress.TotalFrames,
-                liveProgress.Percentage,
-                liveProgress.CurrentFps,
-                job.OutputPath,
-                job.ErrorMessage,
-                job.StartedAt,
-                job.CompletedAt);
-        }
-
-        return MapRenderDto(job);
-    }
-
-    public async Task CancelRenderAsync(string renderJobId, CancellationToken ct = default)
-    {
-        if (!RenderJobId.TryParse(renderJobId, out var id))
-            throw new ResourceNotFoundException("RenderJob", renderJobId);
-
-        var job = await _renderJobRepository.GetByIdAsync(id, ct)
-            ?? throw new ResourceNotFoundException("RenderJob", renderJobId);
-
-        job.Cancel();
-        _renderTracker.Remove(job.Id.Value);
-
-        await _renderJobRepository.UpdateAsync(job, ct);
-        await _renderJobRepository.SaveChangesAsync(ct);
-    }
-
     public Task<IReadOnlyList<string>> GetAvailableCapabilitiesAsync(CancellationToken ct = default)
     {
         var list = _capabilityRegistry.GetAll().Select(c => c.Id).ToList();
@@ -296,17 +220,4 @@ public sealed class MotionModule : IMotionModule
         s.Revisions.Select(r => new SceneRevisionDto(r.RevisionNumber.Value, r.SourceHash, r.Origin, r.CreatedAt)).ToList(),
         s.GetCurrentRevision().SourceCode.Value);
 
-    private static RenderJobDto MapRenderDto(RenderJob j) => new(
-        j.Id.Value,
-        j.SceneCodeId.Value,
-        j.TargetRevisionNumber.Value,
-        j.Status,
-        j.Progress.RenderedFrames,
-        j.Progress.TotalFrames,
-        j.Progress.Percentage,
-        j.Progress.CurrentFps,
-        j.OutputPath,
-        j.ErrorMessage,
-        j.StartedAt,
-        j.CompletedAt);
 }

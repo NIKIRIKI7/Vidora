@@ -17,14 +17,10 @@ export {
   pad,
   parseTcString,
   concatSceneAudio,
-  generateDefaultSceneTsx,
   isAudioDirty,
   extractCleanVoiceText,
   getSceneTeleprompterScript,
   getProjectTeleprompterScript,
-  getWhisperSyncedDuration,
-  getSceneDurationFromTimecode,
-  getVisualNoteDuration,
 } from './lib/helpers'
 export type { TeleprompterOptions } from './lib/helpers'
 export {

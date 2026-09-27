@@ -17,8 +17,6 @@ interface Props {
   isGeneratingAudio: boolean
   isSyncing: boolean
   isGeneratingCode: boolean
-  isRendering: boolean
-  renderProgress: number
   onChangeVoiceModel: (m: string) => void
   onChangeUseWhisper: (val: boolean) => void
   onChangeAutoOffloadVram: (val: boolean) => void
@@ -42,8 +40,6 @@ interface Props {
   onRunSync: () => void
   onToggleIgnoreTsx: (sceneId: string) => void
   onRunCodeGen: () => void
-  onRunProjectRender: () => void
-  onRunRender: () => void
   onExportProject: () => void
   onShowNotification: (msg: string, type?: 'success'|'error'|'info') => void
   onUpdateFragmentBRoll: (fragId: string, filename: string) => void
@@ -65,13 +61,13 @@ const TABS: { id: InspectorTab; label: string }[] = [
 export const PipelineInspector = React.memo((props: Props) => {
   const {
     project, activeScene, voiceModel, useWhisper, autoOffloadVram,
-    isGeneratingAudio, isSyncing, isGeneratingCode, isRendering, renderProgress,
+    isGeneratingAudio, isSyncing, isGeneratingCode,
     onChangeVoiceModel, onChangeUseWhisper, onChangeAutoOffloadVram,
     onAddFragment, onDeleteFragment, onFragmentTextChange, onFragDragStart, onFragDrop,
     onOpenVoicebox, onOpenAiSettings, onOpenCustomAudioModal, onOpenBRollModal, onAutoMatchBRoll,
     onRunVoiceGen, onRunVoiceGenFragment, onResetAllSync, onResetAudio,
     onProcessAudio, onProcessAdvancedSilence, onUnloadVram, onRunSync, onToggleIgnoreTsx,
-    onRunCodeGen, onRunProjectRender, onRunRender, onExportProject, onShowNotification,
+    onRunCodeGen, onExportProject, onShowNotification,
     onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio,
     onUpdateProjectSettings, onOpenMusicSettings, onOpenMusicLibrary,
   } = props
@@ -168,15 +164,7 @@ export const PipelineInspector = React.memo((props: Props) => {
           />
         )}
         {activeTab === 'export' && (
-          <ExportTab
-            project={project}
-            isRendering={isRendering}
-            renderProgress={renderProgress}
-            onRunProjectRender={onRunProjectRender}
-            onRunRender={onRunRender}
-            onExportProject={onExportProject}
-            onUpdateProjectSettings={onUpdateProjectSettings}
-          />
+          <ExportTab onExportProject={onExportProject} />
         )}
       </div>
     </aside>

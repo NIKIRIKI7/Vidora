@@ -9,11 +9,6 @@ public interface IVoiceGateway
         string speakerId,
         double speed = 1.0,
         CancellationToken ct = default);
-
-    Task<string> ApplyDuckingAsync(
-        string voiceAssetId,
-        string bgmAssetId,
-        CancellationToken ct = default);
 }
 
 public interface IMotionGateway
@@ -28,15 +23,4 @@ public interface IMotionGateway
         int height,
         int fps,
         CancellationToken ct = default);
-
-    Task<string> RenderSceneVideoAsync(
-        string sceneCodeId,
-        IProgress<double>? progress = null,
-        CancellationToken ct = default);
-}
-
-public interface IMediaGateway
-{
-    Task<string> ResolveAssetFilePathAsync(string assetId, CancellationToken ct = default);
-    Task<string> RegisterVideoAssetAsync(string title, string filePath, CancellationToken ct = default);
 }

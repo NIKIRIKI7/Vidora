@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import type { ProjectSettings, Scene, SceneFragment, VideoFormat } from '@entities/project'
+import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeProjectToMarkdown } from '@entities/project'
 import { generateRemotionPrompt } from '@features/editor-utils'
 import { useHotkeys } from '@shared/lib/useHotkeys'
@@ -20,8 +20,7 @@ interface Props {
 
 export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
-  const [centerView, setCenterView] = useState<CenterViewMode>('player')
-  const [previewFormat, setPreviewFormat] = useState<VideoFormat | null>(null)
+  const [centerView, setCenterView] = useState<CenterViewMode>('code')
   const [voiceModel, setVoiceModel] = useState('')
   const [speed, setSpeed] = useState(1)
   const [numSteps, setNumSteps] = useState(64)
@@ -31,7 +30,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [preprocessPrompt, setPreprocessPrompt] = useState(true)
   const [postprocessOutput, setPostprocessOutput] = useState(true)
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false)
-  const [playWithAudio, setPlayWithAudio] = useState(true)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [useWhisper, setUseWhisper] = useState(true)
   const [autoOffloadVram, setAutoOffloadVram] = useState(true)
@@ -41,8 +39,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [bRollScope, setBRollScope] = useState<'fragment' | 'scene' | 'project'>('fragment')
   const [bRollTargetFragId, setBRollTargetFragId] = useState<string | null>(null)
 
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentTaskIdRef = useRef<string | null>(null)
 
@@ -113,10 +109,8 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     activeScene,
     llmEngine,
     apiKeys: activeApiKeys,
-    audioLoaded: audio.audioLoaded,
     showNotification,
     abortControllerRef,
-    currentTaskIdRef,
   })
 
   const scenesManager = useSceneManagement({
@@ -152,14 +146,11 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     activeApiKeys,
     onUpdateProjectSync: handleUpdateProjectSync,
     showNotification,
-    videoRef,
     abortControllerRef,
     currentTaskIdRef,
     runVoiceGenAllScenes: audio.runVoiceGenAllScenes,
     runSyncAllScenes: audio.runSyncAllScenes,
     runCodeGen: render.runCodeGen,
-    runProjectRender: render.runProjectRender,
-    cancelRender: render.cancelRender,
   })
 
   const handleOpenBRollModal = (scope: 'fragment' | 'scene' | 'project', fragId?: string) => {
@@ -170,7 +161,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
 
   const handleSelectScene = (id: string) => {
     setActiveSceneId(id)
-    render.setPlayingTargetId(id)
     timelineOps.setSelectedFragmentId(null)
   }
 
@@ -246,8 +236,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     })
   }
 
-  useHotkeys('Space', false, () => setPlayWithAudio(p => !p))
-  useHotkeys('Enter', true, () => render.runRender())
   useHotkeys('KeyS', true, () => render.handleExportProject())
   useHotkeys('KeyZ', true, () => undo())
   useHotkeys('KeyY', true, () => redo())
@@ -291,7 +279,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     activeSceneId,
     activeScene,
     centerView,
-    previewFormat,
     voiceModel,
     speed,
     numSteps,
@@ -301,12 +288,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     preprocessPrompt,
     postprocessOutput,
     isAiSettingsOpen,
-    playWithAudio,
     isSettingsOpen,
     useWhisper,
     autoOffloadVram,
-    videoRef,
-    audioRef,
     ttsEngine,
     llmEngine,
     brollEngine,
@@ -318,7 +302,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     handleOpenBRollModal,
     setActiveSceneId: handleSelectScene,
     setCenterView,
-    setPreviewFormat,
     setVoiceModel,
     setSpeed,
     setNumSteps,
@@ -328,7 +311,6 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     setPreprocessPrompt,
     setPostprocessOutput,
     setIsAiSettingsOpen,
-    setPlayWithAudio,
     setIsSettingsOpen,
     setUseWhisper,
     setAutoOffloadVram,

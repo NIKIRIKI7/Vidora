@@ -1,8 +1,5 @@
-using Kernel.Platform.Config;
-using Kernel.Platform.FileSystem;
 using Kernel.Platform.WebSockets;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using ProductionContext.Domain;
 using ProductionContext.Domain.Entities;
 using ProductionContext.Domain.Ports;
@@ -15,32 +12,20 @@ public sealed class ProductionPipelineProcessManager : IProductionPipelineOrches
     private readonly IProjectRepository _projectRepository;
     private readonly IVoiceGateway _voiceGateway;
     private readonly IMotionGateway _motionGateway;
-    private readonly IMediaGateway _mediaGateway;
-    private readonly IVideoStitcher _videoStitcher;
-    private readonly IPathResolver _pathResolver;
     private readonly IWebSocketGateway _webSocketGateway;
-    private readonly AppStorageConfig _storageConfig;
     private readonly ILogger<ProductionPipelineProcessManager> _logger;
 
     public ProductionPipelineProcessManager(
         IProjectRepository projectRepository,
         IVoiceGateway voiceGateway,
         IMotionGateway motionGateway,
-        IMediaGateway mediaGateway,
-        IVideoStitcher videoStitcher,
-        IPathResolver pathResolver,
         IWebSocketGateway webSocketGateway,
-        IOptions<AppStorageConfig> storageConfig,
         ILogger<ProductionPipelineProcessManager> logger)
     {
         _projectRepository = projectRepository;
         _voiceGateway = voiceGateway;
         _motionGateway = motionGateway;
-        _mediaGateway = mediaGateway;
-        _videoStitcher = videoStitcher;
-        _pathResolver = pathResolver;
         _webSocketGateway = webSocketGateway;
-        _storageConfig = storageConfig.Value;
         _logger = logger;
     }
 
@@ -66,10 +51,6 @@ public sealed class ProductionPipelineProcessManager : IProductionPipelineOrches
         }
 
         _logger.LogInformation("[Pipeline] Запуск сборки проекта: {Id} ({Title})", project.Id.Value, project.Title);
-        var baseDir = Path.Combine(_storageConfig.DataStorageDir, project.RelativePath);
-        var safeProjectDir = _pathResolver.ResolveSafePath(baseDir);
-        var outputDir = Path.Combine(safeProjectDir, "output");
-        Directory.CreateDirectory(outputDir);
 
         try
         {
@@ -115,94 +96,15 @@ public sealed class ProductionPipelineProcessManager : IProductionPipelineOrches
             }
             await SaveProjectAsync(project, ct);
 
-            // ШАГ 4: Рендеринг видеосцен
-            await TransitionStepAsync(project, PipelineStep.SceneRendering, ct);
-            var renderedScenes = new List<StitchVideoItem>();
-
-            for (int i = 0; i < project.Scenes.Count; i++)
-            {
-                var scene = project.Scenes[i];
-                string videoPath;
-
-                if (!string.IsNullOrWhiteSpace(scene.RenderedVideoAssetId) && !forceRerender)
-                {
-                    videoPath = await _mediaGateway.ResolveAssetFilePathAsync(scene.RenderedVideoAssetId, ct);
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(scene.SceneCodeId))
-                    {
-                        throw new InvalidOperationException($"У сцены {scene.SceneId.Value} отсутствует SceneCodeId.");
-                    }
-
-                    int sceneIndex = i + 1;
-                    var progressHandler = new Progress<double>(pct =>
-                    {
-                        _ = _webSocketGateway.BroadcastAsync("PRODUCTION_PROGRESS", new
-                        {
-                            project_id = project.Id.Value,
-                            step = PipelineStep.SceneRendering.ToString(),
-                            current_scene = sceneIndex,
-                            total_scenes = project.Scenes.Count,
-                            scene_id = scene.SceneId.Value,
-                            percentage = pct
-                        }, CancellationToken.None);
-                    });
-
-                    videoPath = await _motionGateway.RenderSceneVideoAsync(scene.SceneCodeId, progressHandler, ct);
-                    var assetId = await _mediaGateway.RegisterVideoAssetAsync($"Render_{scene.Id}", videoPath, ct);
-                    scene.AttachRenderedVideo(assetId);
-                }
-
-                renderedScenes.Add(new StitchVideoItem(videoPath, scene.DurationSeconds));
-            }
+            project.MarkCompleted();
             await SaveProjectAsync(project, ct);
 
-            // ШАГ 5: Сведение аудио и дакинг BGM
-            await TransitionStepAsync(project, PipelineStep.AudioMuxing, ct);
-            string? duckedAudioPath = null;
-            if (!string.IsNullOrWhiteSpace(bgmAssetId))
-            {
-                var firstVoiceAsset = project.Scenes.SelectMany(s => s.Fragments)
-                    .Select(f => f.VoiceAssetId)
-                    .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
-
-                if (!string.IsNullOrWhiteSpace(firstVoiceAsset))
-                {
-                    duckedAudioPath = await _voiceGateway.ApplyDuckingAsync(firstVoiceAsset, bgmAssetId, ct);
-                }
-            }
-
-            // ШАГ 6: Финальная склейка
-            await TransitionStepAsync(project, PipelineStep.FinalAssembly, ct);
-            var stitchedVideoPath = Path.Combine(outputDir, "stitched_visual.mp4");
-            var finalMasterPath = Path.Combine(outputDir, "master_output.mp4");
-
-            await _videoStitcher.ConcatenateScenesAsync(renderedScenes, stitchedVideoPath, ct);
-
-            if (!string.IsNullOrWhiteSpace(duckedAudioPath) && File.Exists(duckedAudioPath))
-            {
-                await _videoStitcher.MuxMasterAudioAsync(stitchedVideoPath, duckedAudioPath, finalMasterPath, ct);
-            }
-            else
-            {
-                if (File.Exists(finalMasterPath)) File.Delete(finalMasterPath);
-                File.Copy(stitchedVideoPath, finalMasterPath, overwrite: true);
-            }
-
-            var fileInfo = new FileInfo(finalMasterPath);
-            project.MarkCompleted(finalMasterPath, project.TotalDurationSeconds, fileInfo.Length);
-            await SaveProjectAsync(project, ct);
-
-            _logger.LogInformation("[Pipeline] Сборка проекта {ProjectId} завершена: {Path} ({SizeMb:F2} MB)",
-                project.Id.Value, finalMasterPath, (double)fileInfo.Length / (1024 * 1024));
+            _logger.LogInformation("[Pipeline] Сборка проекта {ProjectId} успешно завершена", project.Id.Value);
 
             await _webSocketGateway.BroadcastAsync("PRODUCTION_COMPLETED", new
             {
                 project_id = project.Id.Value,
-                output_path = finalMasterPath,
-                duration_seconds = project.FinalDurationSeconds,
-                file_size_bytes = project.FinalFileSizeBytes
+                duration_seconds = project.TotalDurationSeconds
             }, CancellationToken.None);
         }
         catch (OperationCanceledException)

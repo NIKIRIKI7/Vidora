@@ -125,7 +125,6 @@ public sealed record ProjectDataPayloadDto
     [JsonPropertyName("backendProjectId")] public string? BackendProjectId { get; init; }
     [JsonPropertyName("audioProcessing")] public AudioProcessingSettingsDto? AudioProcessing { get; init; }
     [JsonPropertyName("backgroundMusic")] public BackgroundMusicSettingsDto? BackgroundMusic { get; init; }
-    [JsonPropertyName("renderQuality")] public string? RenderQuality { get; init; }
     [JsonPropertyName("use3D")] public bool? Use3D { get; init; }
     [JsonPropertyName("autoBRollEnabled")] public bool? AutoBRollEnabled { get; init; }
 }

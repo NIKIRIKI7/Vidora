@@ -7,7 +7,6 @@ using ProductionContext.Application.Services;
 using ProductionContext.Contracts;
 using ProductionContext.Domain.Ports;
 using ProductionContext.Domain.Services;
-using ProductionContext.Infrastructure.Export;
 using ProductionContext.Infrastructure.Gateways;
 using ProductionContext.Infrastructure.Parsing;
 using ProductionContext.Infrastructure.Persistence;
@@ -35,7 +34,6 @@ public static class ProductionServiceExtensions
         services.AddSingleton<ScenarioAstParser>();
         services.AddSingleton<IScenarioParser>(sp => sp.GetRequiredService<ScenarioAstParser>());
         services.AddSingleton<IScenarioAstService>(sp => sp.GetRequiredService<ScenarioAstParser>());
-        services.AddSingleton<IVideoStitcher, FfmpegVideoStitcher>();
 
         // Scenario Engine: режиссёрский линтер — stateless, работает мгновенно (Правый блок)
         services.AddSingleton<ScenarioLinter>();
@@ -49,7 +47,6 @@ public static class ProductionServiceExtensions
         services.AddScoped<ITrendingTopicProvider, ResearchGateway>();
         services.AddScoped<IVoiceGateway, VoiceGateway>();
         services.AddScoped<IMotionGateway, MotionGateway>();
-        services.AddScoped<IMediaGateway, MediaGateway>();
 
         services.AddScoped<IProductionPipelineOrchestrator, ProductionPipelineProcessManager>();
         services.AddScoped<IProductionModule, ProductionModule>();

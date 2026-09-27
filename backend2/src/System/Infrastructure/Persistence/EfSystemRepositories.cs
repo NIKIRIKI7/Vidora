@@ -72,6 +72,10 @@ public sealed class EfSystemMaintenanceRepository : ISystemMaintenanceRepository
         await _context.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyList<SystemMaintenanceLog>> GetRecentLogsAsync(int limit = 50, CancellationToken ct = default) =>
-        await _context.MaintenanceLogs.OrderByDescending(l => l.CreatedAt).Take(limit).ToListAsync(ct);
+    // ponytail: SQLite не умеет ORDER BY по DateTimeOffset — сортируем на клиенте.
+    public async Task<IReadOnlyList<SystemMaintenanceLog>> GetRecentLogsAsync(int limit = 50, CancellationToken ct = default)
+    {
+        var logs = await _context.MaintenanceLogs.ToListAsync(ct);
+        return logs.OrderByDescending(l => l.CreatedAt).Take(limit).ToList();
+    }
 }

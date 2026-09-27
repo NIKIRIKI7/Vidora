@@ -8,6 +8,7 @@ import {
   Trash2,
   Volume2,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { SearchInput, Button, IconButton, SegmentedControl } from '@shared/ui'
 import { useDashboardStore } from '../model/useDashboardStore'
 
@@ -30,6 +31,14 @@ export const ProjectsMatrix: React.FC = () => {
   const duplicateProject = useDashboardStore((s) => s.duplicateProject)
 
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  // Сторы идентифицируют проект по name, а не по id. Плюс openProject только выставляет
+  // активный проект, но сам не навигирует — переходим в редактор здесь.
+  const handleOpenProject = (name: string) => {
+    openProject(name)
+    navigate('/editor')
+  }
 
   const filtered = projects.filter((p) => {
     const matchesFormat = formatFilter === 'all' || p.format === formatFilter
@@ -102,7 +111,7 @@ export const ProjectsMatrix: React.FC = () => {
               className="group relative rounded-3xl bg-surface-container-low/70 hover:bg-surface-container-low border border-outline-variant/80 hover:border-outline-variant shadow-xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:-translate-y-1"
             >
               <div
-                onClick={() => openProject(proj.id)}
+                onClick={() => handleOpenProject(proj.name)}
                 className="cursor-pointer h-32 bg-gradient-to-tr from-surface-container-lowest via-surface-container-low to-surface-container-lowest p-4 flex flex-col justify-between relative overflow-hidden"
               >
                 <div className="flex items-center justify-between z-10">
@@ -132,7 +141,7 @@ export const ProjectsMatrix: React.FC = () => {
               </div>
 
               <div className="p-4 bg-surface-container-low/90 border-t border-outline-variant/80 flex items-center justify-between">
-                <div className="cursor-pointer space-y-0.5 flex-1 pr-2" onClick={() => openProject(proj.id)}>
+                <div className="cursor-pointer space-y-0.5 flex-1 pr-2" onClick={() => handleOpenProject(proj.name)}>
                   <h3 className="font-bold text-sm text-on-surface group-hover:text-secondary transition-colors truncate">
                     {proj.name}
                   </h3>
@@ -155,7 +164,7 @@ export const ProjectsMatrix: React.FC = () => {
                         icon={FolderOpen}
                         onClick={() => {
                           setActiveMenuId(null)
-                          openProject(proj.id)
+                          handleOpenProject(proj.name)
                         }}
                         className="w-full justify-start px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                       >
@@ -166,7 +175,7 @@ export const ProjectsMatrix: React.FC = () => {
                         icon={Layers}
                         onClick={() => {
                           setActiveMenuId(null)
-                          duplicateProject(proj.id)
+                          duplicateProject(proj.name)
                         }}
                         className="w-full justify-start px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                       >
@@ -177,7 +186,7 @@ export const ProjectsMatrix: React.FC = () => {
                         icon={Trash2}
                         onClick={() => {
                           setActiveMenuId(null)
-                          deleteProject(proj.id)
+                          deleteProject(proj.name)
                         }}
                         className="w-full justify-start px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                       >

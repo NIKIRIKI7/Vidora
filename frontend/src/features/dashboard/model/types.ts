@@ -1,10 +1,3 @@
-export interface HardwareInfo {
-  vram_gb: number
-  ram_gb: number
-  device: string
-  gpu_type: 'cuda' | 'cpu'
-}
-
 export interface ProjectItem {
   id: string
   name: string

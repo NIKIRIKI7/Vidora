@@ -18,69 +18,6 @@ namespace MotionContext.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.2");
 
-            modelBuilder.Entity("MotionContext.Domain.Entities.RenderJob", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(2048)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("OutputPath")
-                        .HasMaxLength(512)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SceneCodeId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("TargetRevisionNumber")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.ComplexProperty<Dictionary<string, object>>("Progress", "MotionContext.Domain.Entities.RenderJob.Progress#RenderProgressInfo", b1 =>
-                        {
-                            b1.Property<double>("CurrentFps")
-                                .HasColumnType("REAL")
-                                .HasColumnName("current_fps");
-
-                            b1.Property<int>("RenderedFrames")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("rendered_frames");
-
-                            b1.Property<int>("TotalFrames")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("total_frames");
-                        });
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SceneCodeId");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("motion_render_jobs", (string)null);
-                });
-
             modelBuilder.Entity("MotionContext.Domain.Entities.SceneCode", b =>
                 {
                     b.Property<string>("Id")

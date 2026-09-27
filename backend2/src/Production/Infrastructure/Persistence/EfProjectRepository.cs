@@ -26,19 +26,25 @@ public sealed class EfProjectRepository : IProjectRepository
             .ThenInclude(s => s.Fragments)
             .FirstOrDefaultAsync(p => p.Slug == new ProjectSlug(slug), ct);
 
-    public async Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken ct = default) =>
-        await _context.Projects
+    // ponytail: SQLite не умеет ORDER BY по DateTimeOffset, поэтому сортировку делаем на клиенте
+    // (локальная БД, объёмы небольшие). Иначе EF бросает NotSupportedException на уровне SQL.
+    public async Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken ct = default)
+    {
+        var projects = await _context.Projects
             .Include(p => p.Scenes)
-            .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<Project>> GetPagedAsync(int skip, int take, CancellationToken ct = default) =>
-        await _context.Projects
+        return projects.OrderByDescending(p => p.CreatedAt).ToList();
+    }
+
+    public async Task<IReadOnlyList<Project>> GetPagedAsync(int skip, int take, CancellationToken ct = default)
+    {
+        var projects = await _context.Projects
             .Include(p => p.Scenes)
-            .OrderByDescending(p => p.CreatedAt)
-            .Skip(skip)
-            .Take(take)
             .ToListAsync(ct);
+
+        return projects.OrderByDescending(p => p.CreatedAt).Skip(skip).Take(take).ToList();
+    }
 
     public Task<int> CountAsync(CancellationToken ct = default) =>
         _context.Projects.CountAsync(ct);

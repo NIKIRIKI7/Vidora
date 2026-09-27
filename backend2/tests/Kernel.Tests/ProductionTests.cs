@@ -297,16 +297,7 @@ public class ProductionTests
         var repo = new EfProjectRepository(db);
         var voiceGateway = new Mock<IVoiceGateway>();
         var motionGateway = new Mock<IMotionGateway>();
-        var mediaGateway = new Mock<IMediaGateway>();
-        var videoStitcher = new Mock<IVideoStitcher>();
-        var pathResolver = new Mock<IPathResolver>();
         var ws = new Mock<IWebSocketGateway>();
-
-        var tempDir = Path.Combine(Path.GetTempPath(), "production_test_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-
-        pathResolver.Setup(p => p.ResolveSafePath(It.IsAny<string>(), It.IsAny<string?>()))
-            .Returns<string, string?>((path, _) => Path.GetFullPath(path));
 
         voiceGateway.Setup(v => v.SynthesizeFragmentAudioAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VoiceSynthesisResult("voice.wav", "asset-voice-1", 2.0));
@@ -314,34 +305,11 @@ public class ProductionTests
         motionGateway.Setup(m => m.GenerateSceneCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("sc-1");
 
-        var dummySceneVideo = Path.Combine(tempDir, "scene_1.mp4");
-        await File.WriteAllTextAsync(dummySceneVideo, "dummy-video-content");
-
-        motionGateway.Setup(m => m.RenderSceneVideoAsync(It.IsAny<string>(), It.IsAny<IProgress<double>?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(dummySceneVideo);
-
-        mediaGateway.Setup(m => m.RegisterVideoAssetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("asset-video-1");
-
-        var dummyMasterVideo = Path.Combine(tempDir, "master_output.mp4");
-        await File.WriteAllTextAsync(dummyMasterVideo, "dummy-master-mp4");
-
-        videoStitcher.Setup(v => v.ConcatenateScenesAsync(It.IsAny<IReadOnlyList<StitchVideoItem>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<StitchVideoItem>, string, CancellationToken>((items, outputPath, ct) =>
-            {
-                File.WriteAllText(outputPath, "dummy-stitched-video");
-                return Task.FromResult(outputPath);
-            });
-
         var orchestrator = new ProductionPipelineProcessManager(
             repo,
             voiceGateway.Object,
             motionGateway.Object,
-            mediaGateway.Object,
-            videoStitcher.Object,
-            pathResolver.Object,
             ws.Object,
-            Options.Create(new AppStorageConfig { DataStorageDir = tempDir }),
             NullLogger<ProductionPipelineProcessManager>.Instance);
 
         var project = Project.Create(ProjectId.New(), "Full Assembly");
@@ -357,6 +325,5 @@ public class ProductionTests
         Assert.NotNull(finishedProject);
         Assert.Equal(ProjectStatus.Ready, finishedProject.Status);
         Assert.Equal(PipelineStep.Completed, finishedProject.CurrentStep);
-        Assert.NotNull(finishedProject.FinalVideoPath);
     }
 }

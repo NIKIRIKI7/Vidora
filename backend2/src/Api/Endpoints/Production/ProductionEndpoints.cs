@@ -79,20 +79,6 @@ public static class ProductionEndpoints
         }).Produces<ProjectDataDto>();
 
         // --- Compatibility aliases for frontend ---
-        endpoints.MapPost("/api/v1/render/concat-video", async (
-            ConcatVideoCompatRequest request,
-            IVideoStitcher stitcher,
-            IPathResolver pathResolver,
-            CancellationToken ct) =>
-        {
-            var items = request.VideoPaths
-                .Select(v => new StitchVideoItem(pathResolver.ResolveSafePath(v), 5.0))
-                .ToList();
-
-            await stitcher.ConcatenateScenesAsync(items, request.OutputPath, ct);
-            return Results.Ok(new { status = "ok" });
-        }).Produces<ProductionStatusResponse>();
-
         endpoints.MapPost("/api/v1/render/export", async (
             ExportProjectCompatRequest request,
             CancellationToken ct) =>
@@ -121,14 +107,6 @@ public sealed record ProductionMessageResponse(
 
 public sealed record ProductionStatusResponse(
     [property: JsonPropertyName("status")] string Status);
-
-/// <summary>
-/// Тело запроса совместимости для /api/v1/render/concat-video.
-/// </summary>
-public sealed record ConcatVideoCompatRequest(
-    [property: JsonPropertyName("video_paths")] IReadOnlyList<string> VideoPaths,
-    [property: JsonPropertyName("output_path")] string OutputPath,
-    [property: JsonPropertyName("project_path")] string? ProjectPath = null);
 
 /// <summary>
 /// Тело запроса совместимости для /api/v1/render/export.

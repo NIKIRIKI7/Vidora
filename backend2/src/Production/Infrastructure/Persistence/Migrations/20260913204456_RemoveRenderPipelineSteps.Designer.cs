@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ProductionContext.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using ProductionContext.Infrastructure.Persistence;
 namespace ProductionContext.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ProductionDbContext))]
-    partial class ProductionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260913204456_RemoveRenderPipelineSteps")]
+    partial class RemoveRenderPipelineSteps
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.2");
@@ -33,6 +36,16 @@ namespace ProductionContext.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("FinalDurationSeconds")
+                        .HasColumnType("REAL");
+
+                    b.Property<long?>("FinalFileSizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FinalVideoPath")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("MontageSettings")
@@ -88,6 +101,10 @@ namespace ProductionContext.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ProjectId")
                         .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RenderedVideoAssetId")
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 

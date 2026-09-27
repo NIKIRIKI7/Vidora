@@ -10,9 +10,7 @@ using MotionContext.Domain.Ports;
 using MotionContext.Infrastructure.Capabilities;
 using MotionContext.Infrastructure.Parsing;
 using MotionContext.Infrastructure.Persistence;
-using MotionContext.Infrastructure.Remotion;
 using MotionContext.Infrastructure.Seeding;
-using MotionContext.Infrastructure.Workers;
 
 namespace MotionContext;
 
@@ -32,7 +30,6 @@ public static class MotionServiceExtensions
 
         // Persistence
         services.AddScoped<ISceneCodeRepository, EfSceneCodeRepository>();
-        services.AddScoped<IRenderJobRepository, EfRenderJobRepository>();
 
         // Domain & Application Services
         services.AddSingleton<IPackageCapabilityRegistry, PackageCapabilityRegistry>();
@@ -40,26 +37,11 @@ public static class MotionServiceExtensions
         services.AddScoped<IScenePromptComposer, ScenePromptComposer>();
         services.AddScoped<ILlmCodeExtractor, LlmCodeExtractor>();
 
-        // Reactive Render Queue (Channel-based, no polling)
-        services.AddSingleton<IRenderJobQueue, ChannelRenderJobQueue>();
-        services.AddSingleton<IRenderTracker, RenderTracker>();
-
-        // Remotion Environment & Templating
-        services.AddSingleton<IWorkspaceLinker, WorkspaceLinker>();
-        services.AddSingleton<IRemotionTemplateRenderer, RemotionTemplateRenderer>();
-        services.AddSingleton<INodeEnvironmentResolver, NodeEnvironmentResolver>();
-        services.AddSingleton<IRemotionWorkspaceManager, RemotionWorkspaceManager>();
-        services.AddSingleton<IRemotionRunner, RemotionRunner>();
-
         // LLM Port (registered in Integrations via AddIntegrationServices)
 
         // Entry point facade
         services.AddScoped<IMotionModule, MotionModule>();
         services.AddScoped<IDatabaseMigrationParticipant, MotionMigrationParticipant>();
-
-        // Background Hosted Services
-        // services.AddHostedService<MotionDatabaseHostedService>(); // migrated to CLI: dotnet run -- --migrate
-        services.AddHostedService<RenderQueueHostedService>();
 
         return services;
     }

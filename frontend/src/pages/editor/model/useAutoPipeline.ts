@@ -1,7 +1,7 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState, type RefObject } from 'react'
 import type { ProjectSettings, Scene, SceneFragment, ApiKeys } from '@entities/project'
-import { getProjectPath, sanitizeFilename } from '@entities/project'
+import { getProjectPath } from '@entities/project'
 import { serializeSceneToMarkdown, getActivePrompt, useSettingsStore } from '@entities/project'
 
 interface UseAutoPipelineProps {
@@ -12,14 +12,11 @@ interface UseAutoPipelineProps {
   activeApiKeys: ApiKeys
   onUpdateProjectSync: (project: ProjectSettings) => void
   showNotification: (msg: string, type?: 'success' | 'error' | 'info') => void
-  videoRef: RefObject<HTMLVideoElement | null>
   abortControllerRef: RefObject<AbortController | null>
   currentTaskIdRef: RefObject<string | null>
   runVoiceGenAllScenes: (scenes?: Scene[]) => Promise<{ scenes: Scene[]; activeAudio: string | null }>
   runSyncAllScenes: (scenes?: Scene[]) => Promise<Scene[]>
   runCodeGen: (targetScene?: Scene) => Promise<string | null>
-  runProjectRender: () => Promise<void>
-  cancelRender: () => void
 }
 
 export const useAutoPipeline = ({
@@ -30,14 +27,10 @@ export const useAutoPipeline = ({
   activeApiKeys,
   onUpdateProjectSync,
   showNotification,
-  videoRef,
   abortControllerRef,
-  currentTaskIdRef,
   runVoiceGenAllScenes,
   runSyncAllScenes,
   runCodeGen,
-  runProjectRender,
-  cancelRender,
 }: UseAutoPipelineProps) => {
   const [isAutoPipelineRunning, setIsAutoPipelineRunning] = useState(false)
   const [pipelineStep, setPipelineStep] = useState<string>('')
@@ -139,12 +132,10 @@ export const useAutoPipeline = ({
     }
 
     const currentActiveScene = syncedScenes.find(s => s.id === activeSceneId) || activeScene
-    setPipelineStep('4/5 Remotion TSX...')
+    setPipelineStep('4/4 Remotion TSX...')
     await runCodeGen(currentActiveScene)
     if (abortControllerRef.current?.signal.aborted) return
 
-    setPipelineStep('5/5 Рендер MP4...')
-    await runProjectRender()
     setIsAutoPipelineRunning(false)
     setPipelineStep('')
   }
@@ -153,17 +144,8 @@ export const useAutoPipeline = ({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    cancelRender()
     setIsAutoPipelineRunning(false)
     setPipelineStep('')
-    if (currentTaskIdRef.current) {
-      try {
-        const { error } = await fetchClient.POST('/api/v1/render/cancel/{jobId}', { params: { path: { jobId: currentTaskIdRef.current } } })
-        if (error) throw new Error(apiErrorMessage(error))
-      } catch (err) {
-        console.error('Ошибка отмены рендера:', err)
-      }
-    }
     showNotification('Все процессы отменены', 'info')
   }
 
@@ -180,52 +162,6 @@ export const useAutoPipeline = ({
     showNotification('Промпт для ИИ скопирован в буфер!', 'success')
   }
 
-  const handleCaptureFrame = async () => {
-    if (!videoRef.current) {
-      showNotification('Видео еще не отрендерено', 'error')
-      return
-    }
-    try {
-      const canvas = document.createElement('canvas')
-      canvas.width = videoRef.current.videoWidth || 1920
-      canvas.height = videoRef.current.videoHeight || 1080
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-      canvas.toBlob(async blob => {
-        if (!blob) {
-          showNotification('Ошибка создания изображения', 'error')
-          return
-        }
-        showNotification('Скачивание превью...', 'info')
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `Thumbnail_${sanitizeFilename(project.name)}.jpg`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
-
-        const fd = new FormData()
-        fd.append('file', blob, 'thumbnail.jpg')
-        fd.append('project_path', getProjectPath(project))
-        fd.append('folder', 'packaging')
-        try {
-          const { data, error } = await fetchClient.POST('/api/v1/media/upload', { body: fd as never })
-          if (error || data === undefined) throw new Error(apiErrorMessage(error))
-          if (data.status === 'ok') {
-            onUpdateProjectSync({ ...project, metadata: { ...project.metadata, thumbnail: data.path ?? undefined } })
-          }
-        } catch (err) {
-          console.error('Ошибка сохранения превью на бэкенд:', err)
-        }
-      }, 'image/jpeg', 0.9)
-    } catch {
-      showNotification('Не удалось захватить кадр', 'error')
-    }
-  }
-
   return {
     isAutoPipelineRunning,
     pipelineStep,
@@ -233,6 +169,5 @@ export const useAutoPipeline = ({
     handleAutoMatchBRoll,
     handleCancelAll,
     handleCopyFixPacingPrompt,
-    handleCaptureFrame,
   }
 }
