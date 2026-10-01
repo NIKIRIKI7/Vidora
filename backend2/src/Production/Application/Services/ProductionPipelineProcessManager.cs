@@ -54,6 +54,9 @@ public sealed class ProductionPipelineProcessManager : IProductionPipelineOrches
 
         try
         {
+            project.MarkBuildStarted();
+            await SaveProjectAsync(project, ct);
+
             // ШАГ 1: Озвучка фрагментов
             await TransitionStepAsync(project, PipelineStep.VoiceGeneration, ct);
             foreach (var scene in project.Scenes)
@@ -64,6 +67,16 @@ public sealed class ProductionPipelineProcessManager : IProductionPipelineOrches
                     if (!string.IsNullOrWhiteSpace(frag.VoiceAssetId) && !forceRerender) continue;
 
                     var voiceResult = await _voiceGateway.SynthesizeFragmentAudioAsync(frag.Text, speakerId, 1.0, ct);
+
+                    // Фоновая музыка приходит из BuildProjectRequest и раньше просто
+                    // игнорировалась. Сводим её с озвучкой сразу, чтобы в сцену
+                    // попал уже готовый микс, а не «голос, а музыка добавится потом».
+                    if (!string.IsNullOrWhiteSpace(bgmAssetId))
+                    {
+                        voiceResult = await _voiceGateway.ApplyDuckingAsync(
+                            voiceResult.MediaAssetId, bgmAssetId, voiceResult.DurationSeconds, ct);
+                    }
+
                     frag.AssignVoiceAsset(voiceResult.MediaAssetId, voiceResult.DurationSeconds);
                 }
             }
@@ -95,6 +108,24 @@ public sealed class ProductionPipelineProcessManager : IProductionPipelineOrches
                 scene.LinkSceneCode(codeId);
             }
             await SaveProjectAsync(project, ct);
+
+            // ШАГ 4: Валидация артефактов сборки
+            await TransitionStepAsync(project, PipelineStep.Validation, ct);
+            var issues = project.CollectBuildIssues();
+            if (issues.Count > 0)
+            {
+                var reason = string.Join(" ", issues);
+                _logger.LogError("[Pipeline] Валидация не пройдена для {Id}: {Issues}", project.Id.Value, reason);
+                project.MarkFailed(PipelineStep.Validation, reason);
+                await SaveProjectAsync(project, ct);
+                await _webSocketGateway.BroadcastAsync("PRODUCTION_FAILED", new
+                {
+                    project_id = project.Id.Value,
+                    step = PipelineStep.Validation.ToString(),
+                    error = reason
+                }, CancellationToken.None);
+                return;
+            }
 
             project.MarkCompleted();
             await SaveProjectAsync(project, ct);

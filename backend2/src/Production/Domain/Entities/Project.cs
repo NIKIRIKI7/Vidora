@@ -118,6 +118,39 @@ public class Project : BaseEntity<ProjectId>
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>Открывает сборку: до этого момента в шине не было сигнала о старте.</summary>
+    public void MarkBuildStarted()
+    {
+        AddDomainEvent(new ProjectBuildStartedEvent(Id.Value, _scenes.Count));
+    }
+
+    /// <summary>
+    /// Проверки перед MarkCompleted: озвучка нужна каждому фрагменту с речью,
+    /// а TSX-код — каждой сцене. Пустой результат означает готовность ролика.
+    /// </summary>
+    public IReadOnlyList<string> CollectBuildIssues()
+    {
+        var issues = new List<string>();
+
+        foreach (var scene in _scenes)
+        {
+            foreach (var frag in scene.Fragments)
+            {
+                if (!string.IsNullOrWhiteSpace(frag.Text) && string.IsNullOrWhiteSpace(frag.VoiceAssetId))
+                {
+                    issues.Add($"Сцена «{scene.Title}», фрагмент {frag.Index + 1}: не создана озвучка.");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(scene.SceneCodeId))
+            {
+                issues.Add($"Сцена «{scene.Title}»: не сгенерирован TSX-код.");
+            }
+        }
+
+        return issues;
+    }
+
     public void MarkStep(PipelineStep step)
     {
         CurrentStep = step;
@@ -137,6 +170,7 @@ public class Project : BaseEntity<ProjectId>
         MarkStep(PipelineStep.Completed);
 
         AddDomainEvent(new ProjectExportedEvent(Id.Value, TotalDurationSeconds));
+        AddDomainEvent(new ProjectBuildCompletedEvent(Id.Value, _scenes.Count, TotalDurationSeconds));
     }
 
     public void MarkFailed(PipelineStep failedStep, string errorMessage)

@@ -12,6 +12,7 @@ using ProductionContext.Application.Services;
 using ProductionContext.Contracts;
 using ProductionContext.Domain;
 using ProductionContext.Domain.Entities;
+using ProductionContext.Domain.Events;
 using ProductionContext.Domain.Ports;
 using ProductionContext.Domain.ScenarioEngine;
 using ProductionContext.Domain.Services;
@@ -325,5 +326,224 @@ public class ProductionTests
         Assert.NotNull(finishedProject);
         Assert.Equal(ProjectStatus.Ready, finishedProject.Status);
         Assert.Equal(PipelineStep.Completed, finishedProject.CurrentStep);
+    }
+
+    [Fact]
+    public void Project_CollectBuildIssues_ShouldFlagMissingVoiceAndSceneCode()
+    {
+        var project = Project.Create(ProjectId.New(), "Incomplete Build");
+        var scene = project.AddScene("s1", "Hook", "");
+        scene.AddFragment("Речь без озвучки", "Visual");
+
+        var issues = project.CollectBuildIssues();
+
+        Assert.Equal(2, issues.Count);
+        Assert.Contains(issues, i => i.Contains("озвучка"));
+        Assert.Contains(issues, i => i.Contains("TSX"));
+    }
+
+    [Fact]
+    public void Project_CollectBuildIssues_ShouldIgnoreFragmentsWithoutSpeech()
+    {
+        var project = Project.Create(ProjectId.New(), "Broll Only");
+        var scene = project.AddScene("s1", "Перебивка", "");
+        scene.AddFragment(string.Empty, "B-roll: clip.mp4");
+        scene.LinkSceneCode("sc-1");
+
+        Assert.Empty(project.CollectBuildIssues());
+    }
+
+    [Fact]
+    public void Project_CollectBuildIssues_ShouldPassWhenVoiceAndCodeExist()
+    {
+        var project = Project.Create(ProjectId.New(), "Ready Build");
+        var scene = project.AddScene("s1", "Hook", "");
+        scene.AddFragment("Речь", "Visual").AssignVoiceAsset("asset-voice-1", 2.0);
+        scene.LinkSceneCode("sc-1");
+
+        Assert.Empty(project.CollectBuildIssues());
+    }
+
+    [Fact]
+    public void Project_BuildLifecycle_ShouldRaiseStartedAndCompletedEvents()
+    {
+        var project = Project.Create(ProjectId.New(), "Evented Build");
+        var scene = project.AddScene("s1", "Hook", "");
+        scene.AddFragment("Речь", "Visual").AssignVoiceAsset("asset-voice-1", 2.0);
+        scene.LinkSceneCode("sc-1");
+
+        // Сцена узнаёт длительность из фрагментов только после пересчёта таймлайна.
+        project.RecalculateTimeline();
+        project.MarkBuildStarted();
+        project.MarkCompleted();
+
+        Assert.Contains(project.DomainEvents, e => e is ProjectBuildStartedEvent { SceneCount: 1 });
+        var completed = Assert.Single(project.DomainEvents.OfType<ProjectBuildCompletedEvent>());
+        Assert.Equal(2.0, completed.DurationSeconds, precision: 3);
+    }
+
+    [Fact]
+    public async Task ProcessManager_ShouldWalkEveryStepIncludingValidation()
+    {
+        var (db, sp) = CreateInMemoryDb();
+        await using var _ = db;
+        await using var __ = sp;
+        await db.Database.OpenConnectionAsync();
+        await db.Database.EnsureCreatedAsync();
+
+        var repo = new EfProjectRepository(db);
+        var voiceGateway = new Mock<IVoiceGateway>();
+        var motionGateway = new Mock<IMotionGateway>();
+        var ws = new Mock<IWebSocketGateway>();
+
+        voiceGateway.Setup(v => v.SynthesizeFragmentAudioAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VoiceSynthesisResult("voice.wav", "asset-voice-1", 2.0));
+        motionGateway.Setup(m => m.GenerateSceneCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("sc-1");
+
+        var orchestrator = new ProductionPipelineProcessManager(
+            repo, voiceGateway.Object, motionGateway.Object, ws.Object,
+            NullLogger<ProductionPipelineProcessManager>.Instance);
+
+        var project = Project.Create(ProjectId.New(), "Step Walk");
+        var scene = project.AddScene("sc-01", "Hook", "Visual");
+        scene.AddFragment("Spoken text", "Vis", 2.0);
+
+        await repo.AddAsync(project);
+        await repo.SaveChangesAsync();
+
+        await orchestrator.ExecuteAsync(project.Id, "alloy", null, false, CancellationToken.None);
+
+        // Voice + Timing + Motion + Validation
+        var stepBroadcasts = ws.Invocations
+            .Where(i => i.Method.Name == nameof(IWebSocketGateway.BroadcastAsync))
+            .Select(i => (string)i.Arguments[0])
+            .ToList();
+
+        Assert.Equal(4, stepBroadcasts.Count(s => s == "PRODUCTION_STEP_CHANGED"));
+        Assert.Contains("PRODUCTION_COMPLETED", stepBroadcasts);
+        Assert.DoesNotContain("PRODUCTION_FAILED", stepBroadcasts);
+    }
+
+    [Fact]
+    public async Task ProcessManager_WithBgm_ShouldRouteVoiceThroughDucking()
+    {
+        var (db, sp) = CreateInMemoryDb();
+        await using var _ = db;
+        await using var __ = sp;
+        await db.Database.OpenConnectionAsync();
+        await db.Database.EnsureCreatedAsync();
+
+        var repo = new EfProjectRepository(db);
+        var voiceGateway = new Mock<IVoiceGateway>();
+        var motionGateway = new Mock<IMotionGateway>();
+        var ws = new Mock<IWebSocketGateway>();
+
+        voiceGateway.Setup(v => v.SynthesizeFragmentAudioAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VoiceSynthesisResult("voice.wav", "asset-voice-1", 2.0));
+        voiceGateway.Setup(v => v.ApplyDuckingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VoiceSynthesisResult("mix.m4a", "asset-mixed-1", 2.0));
+        motionGateway.Setup(m => m.GenerateSceneCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("sc-1");
+
+        var orchestrator = new ProductionPipelineProcessManager(
+            repo, voiceGateway.Object, motionGateway.Object, ws.Object,
+            NullLogger<ProductionPipelineProcessManager>.Instance);
+
+        var project = Project.Create(ProjectId.New(), "Bgm Mix");
+        var scene = project.AddScene("sc-01", "Hook", "Visual");
+        scene.AddFragment("Spoken text", "Vis", 2.0);
+
+        await repo.AddAsync(project);
+        await repo.SaveChangesAsync();
+
+        await orchestrator.ExecuteAsync(project.Id, "alloy", "bgm-1", false, CancellationToken.None);
+
+        voiceGateway.Verify(
+            v => v.ApplyDuckingAsync("asset-voice-1", "bgm-1", 2.0, It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        // В сцену должен попасть уже сведённый ассет, а не «голос без музыки».
+        var finished = await repo.GetByIdAsync(project.Id);
+        Assert.Equal("asset-mixed-1", finished!.Scenes[0].Fragments[0].VoiceAssetId);
+    }
+
+    [Fact]
+    public async Task ProcessManager_WithoutBgm_ShouldNotInvokeDucking()
+    {
+        var (db, sp) = CreateInMemoryDb();
+        await using var _ = db;
+        await using var __ = sp;
+        await db.Database.OpenConnectionAsync();
+        await db.Database.EnsureCreatedAsync();
+
+        var repo = new EfProjectRepository(db);
+        var voiceGateway = new Mock<IVoiceGateway>();
+        var motionGateway = new Mock<IMotionGateway>();
+        var ws = new Mock<IWebSocketGateway>();
+
+        voiceGateway.Setup(v => v.SynthesizeFragmentAudioAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VoiceSynthesisResult("voice.wav", "asset-voice-1", 2.0));
+        motionGateway.Setup(m => m.GenerateSceneCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("sc-1");
+
+        var orchestrator = new ProductionPipelineProcessManager(
+            repo, voiceGateway.Object, motionGateway.Object, ws.Object,
+            NullLogger<ProductionPipelineProcessManager>.Instance);
+
+        var project = Project.Create(ProjectId.New(), "No Bgm");
+        var scene = project.AddScene("sc-01", "Hook", "Visual");
+        scene.AddFragment("Spoken text", "Vis", 2.0);
+
+        await repo.AddAsync(project);
+        await repo.SaveChangesAsync();
+
+        await orchestrator.ExecuteAsync(project.Id, "alloy", null, false, CancellationToken.None);
+
+        voiceGateway.Verify(
+            v => v.ApplyDuckingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        var finished = await repo.GetByIdAsync(project.Id);
+        Assert.Equal("asset-voice-1", finished!.Scenes[0].Fragments[0].VoiceAssetId);
+    }
+
+    [Fact]
+    public async Task ProcessManager_WhenMotionFails_ShouldFailProjectOnCurrentStep()
+    {
+        var (db, sp) = CreateInMemoryDb();
+        await using var _ = db;
+        await using var __ = sp;
+        await db.Database.OpenConnectionAsync();
+        await db.Database.EnsureCreatedAsync();
+
+        var repo = new EfProjectRepository(db);
+        var voiceGateway = new Mock<IVoiceGateway>();
+        var motionGateway = new Mock<IMotionGateway>();
+        var ws = new Mock<IWebSocketGateway>();
+
+        voiceGateway.Setup(v => v.SynthesizeFragmentAudioAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VoiceSynthesisResult("voice.wav", "asset-voice-1", 2.0));
+        motionGateway.Setup(m => m.GenerateSceneCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("motion gateway down"));
+
+        var orchestrator = new ProductionPipelineProcessManager(
+            repo, voiceGateway.Object, motionGateway.Object, ws.Object,
+            NullLogger<ProductionPipelineProcessManager>.Instance);
+
+        var project = Project.Create(ProjectId.New(), "Failing Build");
+        var scene = project.AddScene("sc-01", "Hook", "Visual");
+        scene.AddFragment("Spoken text", "Vis", 2.0);
+
+        await repo.AddAsync(project);
+        await repo.SaveChangesAsync();
+
+        await orchestrator.ExecuteAsync(project.Id, "alloy", null, false, CancellationToken.None);
+
+        var failed = await repo.GetByIdAsync(project.Id);
+        Assert.NotNull(failed);
+        Assert.Equal(ProjectStatus.Failed, failed.Status);
+        Assert.Equal(PipelineStep.MotionCodeGeneration, failed.CurrentStep);
+        Assert.Contains("motion gateway down", failed.ErrorMessage);
     }
 }

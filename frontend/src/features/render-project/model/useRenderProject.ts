@@ -1,8 +1,9 @@
 import React, { useCallback, useRef, useState } from 'react'
-import { Audio, Series } from 'remotion'
+import { Audio } from '@remotion/media'
+import { Series } from 'remotion'
 import type { ProjectSettings, Scene } from '@entities/project'
 import { getProjectPath, sanitizeFilename } from '@entities/project'
-import { remotionSuite, assetResolver } from '@shared/lib'
+import { remotionSuite, assetResolver, rewriteRemotionMediaImports } from '@shared/lib'
 import { useLastRenderStore } from './useLastRenderStore'
 import { buildAudioMix, type MusicTrack, type VoiceTrack } from './audioMix'
 
@@ -218,9 +219,12 @@ export const useRenderProject = ({ project, activeScene, showNotification }: Use
           }))
           document.title = `⏳ Компиляция ${i + 1}/${scenesToRender.length} — Vidora`
 
-          const compiled = await remotionSuite.compiler.compile(scene.remotionCode!, undefined, undefined, {
-            assetResolver,
-          })
+          const compiled = await remotionSuite.compiler.compile(
+            rewriteRemotionMediaImports(scene.remotionCode!),
+            undefined,
+            undefined,
+            { assetResolver }
+          )
           components.push(compiled.Component)
           durations.push(Math.max(1, Math.ceil(sceneDurationSeconds(scene) * fps)))
         }

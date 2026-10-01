@@ -31,6 +31,18 @@ export interface CustomAudioUploadParams {
   manualRefText?: string
 }
 
+// Дикторы с серверным профилем (design/clone) сами знают свой движок на бэкенде.
+// Если отправить им engine из каталога, они могут уехать в облако (CloudMiniMax) и «сломать» озвучку.
+const PINNED_SPEAKER_PREFIXES = ['des_', 'clone_']
+
+const isPinnedSpeaker = (speakerId?: string | null) =>
+  PINNED_SPEAKER_PREFIXES.some(prefix => (speakerId || '').toLowerCase().startsWith(prefix))
+
+const resolveEngineForPayload = (speakerId?: string | null, ttsEngine?: string | null) =>
+  isPinnedSpeaker(speakerId) ? undefined : resolveCleanVoiceEngine(speakerId, ttsEngine)
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
 const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSettings, opts: AudioOptions) => {
   // ponytail: наследуем эмоцию первой фразы сцены во все фрагменты без своего [emotion: x] — единый тон всего блока
   const sceneEmotion = scene.fragments[0]?.text.match(/\[emotion:\s*[a-z-]+\]/i)?.[0] || ''
@@ -41,7 +53,7 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
   return {
     fragment_id: frag.id, file_prefix: `Frag_${sanitizeFilename(scene.title)}`, text: fragText,
     speaker_id: speakerId,
-    engine: resolveCleanVoiceEngine(speakerId, ttsEngine),
+    engine: resolveEngineForPayload(speakerId, ttsEngine),
     speed, num_steps: numSteps, guidance_scale: guidanceScale, duration: opts.duration,
     denoise: opts.denoise, preprocess_prompt: opts.preprocessPrompt, postprocess_output: opts.postprocessOutput,
     project_path: getProjectPath(project), auto_offload_vram: opts.autoOffloadVram,
@@ -49,13 +61,20 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
 }
 
 export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId, voiceOpts, useWhisper, autoOffloadVram, showNotification, abortControllerRef }: {
-  project: ProjectSettings, onUpdateProject: (p: ProjectSettings) => void, activeScene?: Scene, activeSceneId?: string, voiceOpts: AudioOptions, useWhisper: boolean, autoOffloadVram: boolean, showNotification: (msg: string, type?: 'success'|'error'|'info') => void, abortControllerRef: React.MutableRefObject<AbortController | null>
+  project: ProjectSettings, onUpdateProject: (p: ProjectSettings) => void, activeScene?: Scene, activeSceneId?: string, voiceOpts: AudioOptions, useWhisper: boolean, autoOffloadVram: boolean, showNotification: (msg: string, type?: 'success'|'error'|'info', details?: string) => void, abortControllerRef: React.MutableRefObject<AbortController | null>
 }) => {
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [audioLoaded, setAudioLoaded] = useState<string | null>(null)
 
   const expectedPath = activeScene ? getAudioPathForScene(project, activeScene) : null;
+
+  // Уходим в HTTP только с готовым диктором и непустым текстом — иначе показываем понятную ошибку.
+  const ensureVoiceReady = (speakerId: string, text: string): boolean => {
+    if (!speakerId.trim()) { showNotification('Не выбран диктор для озвучки', 'error'); return false }
+    if (!text.trim()) { showNotification('Текст озвучки пуст', 'error'); return false }
+    return true
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -120,7 +139,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         }
       }
     } catch (e: unknown) {
-      if (!isRequestCanceled(e)) showNotification('Ошибка умной обработки', 'error')
+      if (!isRequestCanceled(e)) showNotification('Ошибка умной обработки', 'error', errorText(e))
     } finally {
       setIsGeneratingAudio(false)
     }
@@ -153,7 +172,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         }
       }
     } catch (e: unknown) {
-      if (!isRequestCanceled(e)) showNotification('Ошибка обработки аудио', 'error')
+      if (!isRequestCanceled(e)) showNotification('Ошибка обработки аудио', 'error', errorText(e))
     } finally {
       setIsGeneratingAudio(false)
     }
@@ -166,7 +185,9 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       const frag = scene?.fragments.find(f => f.id === fragId)
       if (!scene || !frag) return
 
-      const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body: getVoicePayload(frag, scene, project, voiceOpts) })
+      const payload = getVoicePayload(frag, scene, project, voiceOpts)
+      if (!ensureVoiceReady(payload.speaker_id, payload.text)) return
+      const { data, error } = await fetchClient.POST('/api/v1/audio/generate', { body: payload })
       if (error || data === undefined) throw new Error(apiErrorMessage(error))
       if (data.status === 'ok') {
         const projectPath = getProjectPath(project)
@@ -179,8 +200,8 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         onUpdateProject({ ...project, scenes: project.scenes.map(s => s.id === scene.id ? updatedScene : s) })
         showNotification('Фрагмент успешно переозвучен!', 'success')
       }
-    } catch {
-      showNotification('Ошибка переозвучки', 'error')
+    } catch (e: unknown) {
+      showNotification('Ошибка переозвучки', 'error', errorText(e))
     } finally {
       setIsGeneratingAudio(false)
     }
@@ -190,6 +211,8 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
     let targetScenes = Array.isArray(scenesToProcess) ? scenesToProcess : project.scenes
     if (project.audioMode === 'project') targetScenes = project.scenes
     if (!targetScenes.length) return { scenes: project.scenes, activeAudio: null }
+    if (!ensureVoiceReady(voiceOpts.voiceModel, targetScenes.flatMap(s => s.fragments.map(f => f.text)).join(' ')))
+      return { scenes: project.scenes, activeAudio: null }
 
     setIsGeneratingAudio(true)
     abortControllerRef.current = new AbortController()
@@ -301,7 +324,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       if (!abortControllerRef.current?.signal.aborted) showNotification(`Озвучка сгенерирована (${successCount}/${targetScenes.length})!`, 'success')
       return { scenes: updatedScenes, activeAudio: activeAudioPath }
     } catch (e: unknown) {
-      if (!isRequestCanceled(e)) showNotification('Сбой генерации голоса', 'error')
+      if (!isRequestCanceled(e)) showNotification('Сбой генерации голоса', 'error', errorText(e))
       return { scenes: project.scenes, activeAudio: null }
     } finally {
       setIsGeneratingAudio(false)
@@ -404,7 +427,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       if (!abortControllerRef.current?.signal.aborted) showNotification(`Синхронизация завершена (Whisper: ${wCount}, Fallback: ${fCount})`, fCount > 0 && wCount === 0 ? 'info' : 'success')
       return updatedScenes
     } catch (e: unknown) {
-      if (!isRequestCanceled(e)) showNotification('Сбой синхронизации', 'error')
+      if (!isRequestCanceled(e)) showNotification('Сбой синхронизации', 'error', errorText(e))
       return project.scenes
     } finally {
       setIsSyncing(false)
@@ -416,7 +439,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
       const { error } = await fetchClient.POST('/api/v1/audio/vram/unload')
       if (error) throw new Error(apiErrorMessage(error))
       showNotification('VRAM память видеокарты очищена!', 'success')
-    } catch { showNotification('Ошибка очистки VRAM', 'error') }
+    } catch (e: unknown) { showNotification('Ошибка очистки VRAM', 'error', errorText(e)) }
   }
 
   const handleResetAudio = () => {
@@ -461,8 +484,8 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         })
         showNotification('Аудио заменено. Тайминги пересчитаны!', 'success')
       }
-    } catch {
-      showNotification('Ошибка загрузки аудио', 'error')
+    } catch (e: unknown) {
+      showNotification('Ошибка загрузки аудио', 'error', errorText(e))
     }
   }
 
@@ -522,8 +545,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         )
         return
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
-        showNotification(`Ошибка: ${msg}`, 'error')
+        showNotification('Ошибка пакетной загрузки аудио', 'error', errorText(err))
       } finally {
         setIsGeneratingAudio(false)
       }
@@ -622,8 +644,7 @@ export const useAudio = ({ project, onUpdateProject, activeScene, activeSceneId,
         showNotification('Полный аудиофайл проекта успешно синхронизирован!', 'success')
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      showNotification(`Ошибка: ${msg}`, 'error')
+      showNotification('Ошибка загрузки аудио', 'error', errorText(err))
     } finally {
       setIsGeneratingAudio(false)
     }

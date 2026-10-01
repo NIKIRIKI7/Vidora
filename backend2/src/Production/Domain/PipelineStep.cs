@@ -10,6 +10,7 @@ public enum PipelineStep
     VoiceGeneration,
     TimingSynchronization,
     MotionCodeGeneration,
+    Validation,
     Completed,
     Failed
 }

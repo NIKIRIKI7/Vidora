@@ -77,10 +77,10 @@ const formatFragmentsForPrompt = (fragments: SceneFragment[], fps: number): stri
       const bRollSrc = resolveBRollVideoSrc(frag.bRollFileName)
       return `- Фрагмент ${i + 1} [ТИП: B-ROLL ВИДЕОРЯД]:
   Тайминг: ${startSec.toFixed(2)}с - ${endSec.toFixed(2)}с (Sequence from={${startFrame}} durationInFrames={${durationFrames}})
-  Видеофайл: <OffthreadVideo src={${bRollSrc}} />
+  Видеофайл: <Video src={${bRollSrc}} />
   Ремарка: ${frag.visualNote || 'Фоновое видео'}
   Суфлер: "${frag.text || ''}"
-  Правило: в этом интервале рендерите <OffthreadVideo src={${bRollSrc}} /> на весь кадр (object-cover), поверх - легкое затемнение и аккуратный субтитр. Сложную фоновую графику не добавлять.`
+  Правило: в этом интервале рендерите <Video src={${bRollSrc}} /> на весь кадр (object-cover), поверх - легкое затемнение и аккуратный субтитр. Сложную фоновую графику не добавлять.`
     }
 
     return `- Фрагмент ${i + 1} [ТИП: АНИМАЦИЯ / МОУШН-ДИЗАЙН]:
@@ -101,11 +101,11 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
 
 ## 🎞️ ПРАВИЛА РЕНДЕРА B-ROLL ВИДЕО:
 В этой сцене есть фрагменты с видеофайлом B-Roll. В их интервалах рендерится реальный видеоряд, а не 2D-графика.
-1. Импортируйте видео-компоненты: \`import { OffthreadVideo, staticFile } from 'remotion';\`.
+1. Импортируйте видео-компоненты: \`import { Video } from '@remotion/media';\` и \`import { staticFile } from 'remotion';\`. НИКОГДА не берите Audio/Video/OffthreadVideo из 'remotion' — в браузерном рендере это даёт ошибку Html5Audio/OffthreadVideo is not supported.
 2. Каждый фрагмент [ТИП: B-ROLL ВИДЕОРЯД] верстайте строго так (точные from/durationInFrames и имя файла указаны в блоке фрагмента):
    \`\`\`tsx
    <Sequence from={...} durationInFrames={...}>
-     <OffthreadVideo src={staticFile("assets/b-roll/ИМЯ_ФАЙЛА")} className="w-full h-full object-cover" />
+     <Video src={staticFile("assets/b-roll/ИМЯ_ФАЙЛА")} className="w-full h-full object-cover" />
      <AbsoluteFill className="bg-surface-container-lowest/30" />
      <AbsoluteFill className="flex items-end p-12">
        <p className="text-4xl font-black text-on-surface drop-shadow-md">ТЕКСТ СУФЛЕРА</p>
@@ -127,7 +127,7 @@ export const generateRemotionPrompt = (project: ProjectSettings, scene: Scene): 
   })
 
   const audioOffsetInstruction = scene.audioOffset && scene.audioOffset > 0
-    ? `\n\n> ВАЖНО ДЛЯ МОНТАЖА: В этой сцене вы должны использовать <Audio src={...} startFrom={Math.round(${scene.audioOffset} * fps)} /> потому что аудиофайл является общим для всего проекта, и эта сцена начинается на ${scene.audioOffset} секунде общего файла.`
+    ? `\n\n> ВАЖНО ДЛЯ МОНТАЖА: В этой сцене вы должны использовать <Audio src={...} trimBefore={Math.round(${scene.audioOffset} * fps)} /> (Audio импортируется только из '@remotion/media') потому что аудиофайл является общим для всего проекта, и эта сцена начинается на ${scene.audioOffset} секунде общего файла.`
     : '';
 
   return promptBody + bRollRules + audioOffsetInstruction + getSkillsContext('scene_generation');
@@ -141,7 +141,7 @@ export const generateFragmentPrompt = (project: ProjectSettings, scene: Scene, f
   const isBRoll = Boolean(fragment.bRollFileName)
   const bRollSrc = fragment.bRollFileName ? resolveBRollVideoSrc(fragment.bRollFileName) : ''
   const visualPrompt = isBRoll
-    ? `[B-ROLL ВИДЕОРЯД] Вставьте <OffthreadVideo src={${bRollSrc}} className="w-full h-full object-cover" /> на весь кадр, поверх - легкое затемнение и субтитры. Ремарка: ${fragment.visualNote}`
+    ? `[B-ROLL ВИДЕОРЯД] Вставьте <Video src={${bRollSrc}} className="w-full h-full object-cover" /> на весь кадр, поверх - легкое затемнение и субтитры. Ремарка: ${fragment.visualNote}`
     : `[ГРАФИКА] ${fragment.visualNote}`
 
   return replaceVars(project.promptOverrides?.fragment || getActivePrompt(globalPrompts.fragment), {

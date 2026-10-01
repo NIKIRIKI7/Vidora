@@ -9,6 +9,17 @@ public interface IVoiceGateway
         string speakerId,
         double speed = 1.0,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Сводит озвучку с фоновой музыкой через sidechain-дакинг. Длительность
+    /// передаётся из результата синтеза: дакинг сжимает только музыку, поэтому
+    /// таймкоды фрагмента не меняются.
+    /// </summary>
+    Task<VoiceSynthesisResult> ApplyDuckingAsync(
+        string voiceAssetId,
+        string bgmAssetId,
+        double voiceDurationSeconds,
+        CancellationToken ct = default);
 }
 
 public interface IMotionGateway

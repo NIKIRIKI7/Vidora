@@ -28,3 +28,12 @@ public sealed record ProjectBuildFailedEvent(
     string AggregateId,
     PipelineStep Step,
     string Reason) : DomainEvent(AggregateId);
+
+public sealed record ProjectBuildStartedEvent(
+    string AggregateId,
+    int SceneCount) : DomainEvent(AggregateId);
+
+public sealed record ProjectBuildCompletedEvent(
+    string AggregateId,
+    int SceneCount,
+    double DurationSeconds) : DomainEvent(AggregateId);

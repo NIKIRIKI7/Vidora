@@ -27,4 +27,18 @@ public sealed class VoiceGateway : IVoiceGateway
             DurationSeconds: result.DurationSeconds ?? 1.5);
     }
 
+    public async Task<VoiceSynthesisResult> ApplyDuckingAsync(
+        string voiceAssetId,
+        string bgmAssetId,
+        double voiceDurationSeconds,
+        CancellationToken ct = default)
+    {
+        var result = await _voiceModule.ApplyDuckingAsync(
+            ApplyAudioDuckingCommand.ForAssets(voiceAssetId, bgmAssetId), ct);
+
+        return new VoiceSynthesisResult(
+            AudioPath: result.MasterAudioPath,
+            MediaAssetId: result.MediaAssetId,
+            DurationSeconds: voiceDurationSeconds);
+    }
 }

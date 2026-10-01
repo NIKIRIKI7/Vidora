@@ -1,6 +1,6 @@
 import { toStaticFilePath } from '@entities/project'
 
-// Возвращает JSX-выражение для src у <OffthreadVideo>/<Img> в сгенерированном TSX:
+// Возвращает JSX-выражение для src у <Video>/<Img> в сгенерированном TSX:
 // URL -> прямая ссылка; абсолютный локальный путь -> staticFile("assets/b-roll/<имя>")
 // (бэкенд перед рендером копирует внешний файл в public/assets/b-roll);
 // relative -> staticFile().

@@ -4,9 +4,16 @@
     "name": "Remotion TSX Scene Core Standards",
     "description": "Строгие стандарты сборки React/Remotion компонентов: inline-layout, resolution-independent sizing, spring-физика, безопасные zone, шрифтовая иерархия",
     "stage": "scene_generation",
-    "content": "RULES FOR REMOTION SCENE GENERATION:\n\n1. Root Element: Absolute fullscreen container `<div style={{ position: 'absolute', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: montage.colors.background }}>` — НЕ через Tailwind.\n\n2. Timing & Frame Rate: Never hardcode frames! Always calculate from `useCurrentFrame()` and `useVideoConfig()`. For 30fps, 1s = 30 frames.\n\n3. Spring Physics: Use `spring({ fps, frame, config: { damping: 12, mass: 0.5, stiffness: 100 } })` for entering elements. Prefer `from: 0.92, to: 1` plus a separate opacity fade-in over `from: 0` (which causes a pop-in).\n\n4. Clamping: When interpolating transforms, ALWAYS set `{ extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }` to prevent element drift.\n\n5. Shorts Safe Area: Keep crucial text inside vertical margins [top: 15%, bottom: 20%] to avoid overlap with TikTok/YouTube UI buttons. Compute from `unit = Math.min(width, height)`.\n\n6. No External Fetch: Scenes must be strictly deterministic and renderable offline. All media must reference props or local IDs.\n\n7. Deterministic Timing: Anchor every visual event to the fragment's `from`/`durationInFrames`. Never reuse stale frame offsets across fragments.\n\n8. Type Safety: All component props must be typed. Use `React.FC<Props>` with explicit `Props` interface; no implicit `any`.\n\n9. Motion Priority: When a fragment carries a verbal cue, emphasize the cue's key phrase with scale/color punch; secondary info stays visually static.\n\n10. Unit Consistency: Keep coordinates and percentages relative to `useVideoConfig()` width/height; avoid magic pixel values.\n\n11. LAYOUT VIA INLINE STYLES ONLY: Positioning, sizing, transforms, centering and gradients — ВСЕГДА через `style={{...}}`. Tailwind-классы для layout (absolute, relative, fixed, sticky, top-*, left-*, right-*, bottom-*, inset-*, w-*, h-*, min-w-*, max-w-*, p-*, m-*, gap-*, flex, grid, items-*, justify-*, content-*, translate-*, scale-*, rotate-*, skew-*, blur-*, bg-gradient-*, bg-linear-*, bg-clip-text, w-full, h-full, object-cover) ЗАПРЕЩЕНЫ. Причина: `TailwindPlugin` только инжектит переданный `customCss` и не генерирует утилиты в рантайме; Vidora вызывает `createDefaultRemotionSuite()` без CSS, поэтому layout-классы молча игнорируются и сцена рассыпается в document flow. Tailwind допустим ТОЛЬКО как косметика (шрифт, цвет текста, тень) — и всегда с inline-дублём.\n\n12. RESOLUTION INDEPENDENCE: Все размеры вычисляй от `const { width, height } = useVideoConfig(); const unit = Math.min(width, height);`. Затем каждый размер — `unit * K`. Никаких `w-[600px]`, `h-40`, `bottom-24`. Иконки — `size={unit * 0.03}` через props, не через className.\n\n13. NO FIXED PX IN LAYOUT: Значения вида `top: 100`, `width: 600`, `blur(120px)` в layout запрещены. Только `unit * K`.\n\n14. WAVE/RIPPLE ANIMATIONS: Волна — отдельный компонент, живущий в окне `[startFrame, startFrame + life]`. Вне окна — `return null`. КАТЕГОРИЧЕСКИ запрещено `(frame + delay) % period`: `%` даёт скачок фазы и видимый pop на каждой перезагрузке периода. Несколько волн — параллельные инстансы с разными startFrame.\n\n15. BEAT/PULSE ANIMATIONS: Двухфазный пульс через `interpolate(phase, [0, 0.12, 0.32, 1], [0, 1, 0.15, 0])`, где `period = Math.round(fps / 2)` (округляй, иначе дробный период даёт скачок фазы). НЕ используй `Math.max(0, Math.sin(...))` — это односторонний горб, читается как судорога.\n\n16. SEQUENCE LAYOUT: Если дочерний компонент сам позиционируется абсолютно (`position: 'absolute'`), оборачивай его в `<Sequence layout=\"none\">`. По умолчанию `Sequence` создаёт собственный `AbsoluteFill` и ломает `top`/`bottom`-раскладку ребёнка. ВНУТРИ `Sequence` помни: `useCurrentFrame()` отсчитывает от `from`, а `useVideoConfig().durationInFrames` — длина композиции. Их нельзя сравнивать напрямую, иначе `fadeOut` не сработает никогда: передавай длительность сцены пропом или вычитай `from`.\n\n17. GRADIENT TEXT: `background: 'linear-gradient(...)'`, `WebkitBackgroundClip: 'text'`, `backgroundClip: 'text'`, `WebkitTextFillColor: 'transparent'`, `color: 'transparent'` — только inline через `style`. Tailwind `bg-clip-text text-transparent` в динамическом TSX не сработает.\n\n18. LUCIDE ICONS: `size`, `color`, `fill` — через props и `style`, не через классы. `className=\"text-amber-300 fill-white\"` может не примениться без TailwindPlugin. Центрирование иконки — inline-смещением (`top: 0, left: '50%', transform: 'translate(-50%, 0)'`).\n\nПеред отдачей проверь по чек-листу docs/template_code/_SCENE_STANDARDS.md: в layout нет Tailwind, все размеры — unit * K, spring от 0.92, пульс двухфазный, волны через startFrame, Sequence с layout=\"none\" для позиционированных детей. Референс-реализация: docs/template_code/Pulse.tsx.",
+    "content": "RULES FOR REMOTION SCENE GENERATION:\n\n1. Root Element: Absolute fullscreen container `<div style={{ position: 'absolute', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: montage.colors.background }}>` — НЕ через Tailwind.\n\n2. Timing & Frame Rate: Never hardcode frames! Always calculate from `useCurrentFrame()` and `useVideoConfig()`. For 30fps, 1s = 30 frames.\n\n3. Spring Physics: Use `spring({ fps, frame, config: { damping: 12, mass: 0.5, stiffness: 100 } })` for entering elements. Prefer `from: 0.92, to: 1` plus a separate opacity fade-in over `from: 0` (which causes a pop-in).\n\n4. Clamping: When interpolating transforms, ALWAYS set `{ extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }` to prevent element drift.\n\n5. Shorts Safe Area: Keep crucial text inside vertical margins [top: 15%, bottom: 20%] to avoid overlap with TikTok/YouTube UI buttons. Compute from `unit = Math.min(width, height)`.\n\n6. No External Fetch: Scenes must be strictly deterministic and renderable offline. All media must reference props or local IDs.\n\n7. Deterministic Timing: Anchor every visual event to the fragment's `from`/`durationInFrames`. Never reuse stale frame offsets across fragments.\n\n8. Type Safety: All component props must be typed. Use `React.FC<Props>` with explicit `Props` interface; no implicit `any`.\n\n9. Motion Priority: When a fragment carries a verbal cue, emphasize the cue's key phrase with scale/color punch; secondary info stays visually static.\n\n10. Unit Consistency: Keep coordinates and percentages relative to `useVideoConfig()` width/height; avoid magic pixel values.\n\n11. LAYOUT VIA INLINE STYLES ONLY: Positioning, sizing, transforms, centering and gradients — ВСЕГДА через `style={{...}}`. Tailwind-классы для layout (absolute, relative, fixed, sticky, top-*, left-*, right-*, bottom-*, inset-*, w-*, h-*, min-w-*, max-w-*, p-*, m-*, gap-*, flex, grid, items-*, justify-*, content-*, translate-*, scale-*, rotate-*, skew-*, blur-*, bg-gradient-*, bg-linear-*, bg-clip-text, w-full, h-full, object-cover) ЗАПРЕЩЕНЫ. Причина: `TailwindPlugin` только инжектит переданный `customCss` и не генерирует утилиты в рантайме; Vidora вызывает `createDefaultRemotionSuite()` без CSS, поэтому layout-классы молча игнорируются и сцена рассыпается в document flow. Tailwind допустим ТОЛЬКО как косметика (шрифт, цвет текста, тень) — и всегда с inline-дублём.\n\n12. RESOLUTION INDEPENDENCE: Все размеры вычисляй от `const { width, height } = useVideoConfig(); const unit = Math.min(width, height);`. Затем каждый размер — `unit * K`. Никаких `w-[600px]`, `h-40`, `bottom-24`. Иконки — `size={unit * 0.03}` через props, не через className.\n\n13. NO FIXED PX IN LAYOUT: Значения вида `top: 100`, `width: 600`, `blur(120px)` в layout запрещены. Только `unit * K`.\n\n14. WAVE/RIPPLE ANIMATIONS: Волна — отдельный компонент, живущий в окне `[startFrame, startFrame + life]`. Вне окна — `return null`. КАТЕГОРИЧЕСКИ запрещено `(frame + delay) % period`: `%` даёт скачок фазы и видимый pop на каждой перезагрузке периода. Несколько волн — параллельные инстансы с разными startFrame.\n\n15. BEAT/PULSE ANIMATIONS: Двухфазный пульс через `interpolate(phase, [0, 0.12, 0.32, 1], [0, 1, 0.15, 0])`, где `period = Math.round(fps / 2)` (округляй, иначе дробный период даёт скачок фазы). НЕ используй `Math.max(0, Math.sin(...))` — это односторонний горб, читается как судорога.\n\n16. SEQUENCE LAYOUT: Если дочерний компонент сам позиционируется абсолютно (`position: 'absolute'`), оборачивай его в `<Sequence layout=\"none\">`. По умолчанию `Sequence` создаёт собственный `AbsoluteFill` и ломает `top`/`bottom`-раскладку ребёнка. ВНУТРИ `Sequence` помни: `useCurrentFrame()` отсчитывает от `from`, а `useVideoConfig().durationInFrames` — длина композиции. Их нельзя сравнивать напрямую, иначе `fadeOut` не сработает никогда: передавай длительность сцены пропом или вычитай `from`.\n\n17. GRADIENT TEXT: `background: 'linear-gradient(...)'`, `WebkitBackgroundClip: 'text'`, `backgroundClip: 'text'`, `WebkitTextFillColor: 'transparent'`, `color: 'transparent'` — только inline через `style`. Tailwind `bg-clip-text text-transparent` в динамическом TSX не сработает.\n\n18. LUCIDE ICONS: `size`, `color`, `fill` — через props и `style`, не через классы. `className=\"text-amber-300 fill-white\"` может не примениться без TailwindPlugin. Центрирование иконки — inline-смещением (`top: 0, left: '50%', transform: 'translate(-50%, 0)'`).\n\nПеред отдачей проверь по чек-листу docs/template_code/_SCENE_STANDARDS.md: в layout нет Tailwind, все размеры — unit * K, spring от 0.92, пульс двухфазный, волны через startFrame, Sequence с layout=\"none\" для позиционированных детей. Референс-реализация: docs/template_code/Pulse.tsx.\n\n19. AUDIO & VIDEO MEDIA:\n    - NEVER import `Audio`, `Video`, `Html5Audio`, `Html5Video` or `OffthreadVideo` from `remotion` - the browser renderer throws \"Html5Audio/OffthreadVideo is not supported in @remotion/web-renderer\".\n    - ALWAYS import media components from `@remotion/media`: `import { Audio, Video } from '@remotion/media';`.\n    - `staticFile` still comes from `remotion`: `import { staticFile } from 'remotion';`.\n    - Use `trimBefore`/`trimAfter` (frames) instead of the deprecated `startFrom`/`endAt`.\n    - `volume` accepts a number or a per-frame function `(frame) => number`.",
     "priority": 100,
-    "tags": ["remotion", "react", "physics", "shorts", "layout", "inline-styles"]
+    "tags": [
+      "remotion",
+      "react",
+      "physics",
+      "shorts",
+      "layout",
+      "inline-styles"
+    ]
   },
   {
     "id": "skill-kinetic-typography",
@@ -15,7 +22,11 @@
     "stage": "scene_generation",
     "content": "KINETIC TYPOGRAPHY GUIDELINES:\n1. Reveal Style: Animate words with a staggered entry (delay = index * 3 frames).\n2. Contrast: Primary text must use `montage.colors.primary` or `#ffffff` with subtle dropshadow `drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]`.\n3. Key Term Highlighting: Key punchy words must receive `montage.colors.accent`.\n4. Scale Pop: Accompany text entry with a slight overshoot scale `interpolate(progress, [0, 0.7, 1], [0.8, 1.05, 1])`.\n5. Readability Floor: Never animate text below 80% of its base size; keep minimum on-screen time of 24 frames for the most complex lockup.\n6. Rhythm vs Voice: Break lines on clause boundaries, not mid-word; match line breaks to the fragment's sufler phrasing.",
     "priority": 90,
-    "tags": ["typography", "animation", "text"]
+    "tags": [
+      "typography",
+      "animation",
+      "text"
+    ]
   },
   {
     "id": "skill-visual-archetypes-5",
@@ -24,7 +35,11 @@
     "stage": "scene_generation",
     "content": "VISUAL ARCHETYPE SELECTION RULES:\nThe visual treatment of every fragment must be chosen from exactly one of five archetypes:\n1. PULL (Зум/Наезд): Camera or content zooms/pulls toward the subject. Best for emphasis, reveal, and dramatic weight. Use `scale` interpolation with `extrapolateRight: 'clamp'` and a slight ease-out.\n2. EXPLODE (Взрыв/Разлёт): Elements burst outward, or a chart/object splits into particles or segments. Best for big-picture statistics, breakthroughs, or 'wow' moments.\n3. CASCADE (Каскад/Поочерёдность): Staggered reveal of multiple items (lists, cards, comparison columns). Best for sequences, enumerations, and step-by-step logic.\n4. FLOW (Течение/Движение по пути): A path, line, or element travels along a trajectory (arrows, timelines, 'from A to B'). Best for processes, journeys, and cause-effect.\n5. PULSE (Пульс/Акцент-возврат): A beat-based emphasis, repeated accent, or heartbeat of a key metric. Best for reinforcement, rhythm, and countdown-like urgency.\nCHOICE POLICY:\n- Each fragment's `[VisualNote]` must name its archetype tag explicitly (e.g. `[VisualNote: PULL - лицо говорящего]`).\n- Do not mix two archetypes in one fragment; keep a single dominant motion language.\n- When in doubt, prefer CASCADE for enumeration and PULL for a single key idea.\n- The archetype must map 1:1 to a concrete Remotion primitive (Sequence + spring for PULL, array-map with stagger for CASCADE/EXPLODE, interpolate on `x`/`y` for FLOW, modular pulse on `frame % beat` for PULSE).",
     "priority": 95,
-    "tags": ["visual-archetypes", "design-system", "motion"]
+    "tags": [
+      "visual-archetypes",
+      "design-system",
+      "motion"
+    ]
   },
   {
     "id": "skill-hook-retention-psychology",
@@ -33,7 +48,11 @@
     "stage": "hook_analysis",
     "content": "HOOK ANALYSIS EVALUATION CRITERIA:\n1. Pattern Interrupt: Does the opening sentence challenge a common belief or highlight an anomaly within the first 1.5 seconds?\n2. Curiosity Gap: Establish an unresolved question that can only be answered by watching until the end.\n3. Visual Velocity: A new graphic element, punch-in zoom (1.15x), or b-roll cut must occur within frame 0 to frame 45.\n4. Audio Clarity: Immediate vocal delivery with zero introductory silence.\n5. Emotion Ladder: The hook should contain an explicit stake ('результат', 'цена', 'срок', 'секрет') that the viewer can map to their own outcome.\n6. Brevity Ceiling: The hook must not exceed 2 sentences / ~14 words; anything longer risks a drop-off in the first 3 seconds.",
     "priority": 100,
-    "tags": ["retention", "hook", "psychology"]
+    "tags": [
+      "retention",
+      "hook",
+      "psychology"
+    ]
   },
   {
     "id": "skill-shortform-pacing-structure",
@@ -42,16 +61,24 @@
     "stage": "script_drafting",
     "content": "SCRIPT PACING RULES:\n1. Scene Duration: No visual scene should exceed 3.2 seconds without a visual transformation.\n2. Fragment Density: Each scene fragment represents exactly one spoken thought (6-12 words).\n3. Visual Notes: Each fragment must specify a concrete visual action (`[VisualNote: Chart plunges downward in neon red]`) plus an archetype tag.\n4. Seamless Loop: The final sentence must syntactically or thematically lead directly into the opening hook sentence.\n5. Pacing Ladder: Between hook and payoff, alternate fast (1.5-2.5s) and breathing (2.5-3.2s) fragments to avoid fatigue.\n6. Cut Motivation: Every fragment boundary must be justified by EITHER a new spoken thought, a camera move, or a visual state change - never cut mid-idea by habit.",
     "priority": 100,
-    "tags": ["script", "pacing", "storytelling"]
+    "tags": [
+      "script",
+      "pacing",
+      "storytelling"
+    ]
   },
   {
     "id": "skill-broll-visual-integration",
     "name": "B-Roll Visual Integration & Overlay Rules",
-    "description": "Правила рендера B-Roll интервалов: <OffthreadVideo>, затемнение, субтитры и стыковка с графикой",
+    "description": "Правила рендера B-Roll интервалов: <Video> из @remotion/media, затемнение, субтитры и стыковка с графикой",
     "stage": "broll_matching",
-    "content": "B-ROLL VISUAL INTEGRATION RULES:\n1. Import: Always `import { OffthreadVideo, staticFile } from 'remotion';` when a scene contains a b-roll fragment.\n2. Layout: Render `<Sequence from={...} durationInFrames={...}>` containing `<OffthreadVideo src={...} className=\"w-full h-full object-cover\" />`, a light darkening `<AbsoluteFill className=\"bg-black/30\" />`, and a readable bottom-locked subtitle.\n3. Overlay Discipline: Never place complex programmatic 2D graphics over a b-roll interval - only the darkening layer and a clean subtitle; let the footage breathe.\n4. Timing Fidelity: Respect the fragment's exact `from`/`durationInFrames`; no overlap and no empty gaps between the video interval and neighbouring animation fragments.\n5. Offthread Render: Always use `OffthreadVideo` (never `Video`) so renders are deterministic and frame-accurate.\n6. Object Fit: Use `object-cover` and full-bleed; do not letterbox the footage.",
+    "content": "B-ROLL VISUAL INTEGRATION RULES:\n1. Import: Always `import { Video } from '@remotion/media';` and `import { staticFile } from 'remotion';` when a scene contains a b-roll fragment. NEVER import Audio, Video or OffthreadVideo from 'remotion' - the browser renderer throws \"Html5Audio/OffthreadVideo is not supported in @remotion/web-renderer\".\n2. Layout: Render `<Sequence from={...} durationInFrames={...}>` containing `<Video src={...} className=\"w-full h-full object-cover\" />`, a light darkening `<AbsoluteFill className=\"bg-black/30\" />`, and a readable bottom-locked subtitle.\n3. Overlay Discipline: Never place complex programmatic 2D graphics over a b-roll interval - only the darkening layer and a clean subtitle; let the footage breathe.\n4. Timing Fidelity: Respect the fragment's exact `from`/`durationInFrames`; no overlap and no empty gaps between the video interval and neighbouring animation fragments.\n5. Media Component: Always use `Video` from `@remotion/media` for b-roll (frame-accurate, supports `trimBefore`, `volume`, `muted`, `className`, `objectFit`).\n6. Object Fit: Use `object-cover` and full-bleed; do not letterbox the footage.\n7. Audio: If the footage carries its own audio while a voice-over is present, set `muted` on the `<Video>`.",
     "priority": 90,
-    "tags": ["b-roll", "video", "remotion"]
+    "tags": [
+      "b-roll",
+      "video",
+      "remotion"
+    ]
   },
   {
     "id": "skill-broll-matching-ai",
@@ -60,7 +87,11 @@
     "stage": "broll_matching",
     "content": "B-ROLL MATCHING HEURISTICS:\n1. Semantic Anchor: Extract the dominant noun/keyword of the fragment text and match it against the normalized filename tokens (strip numbers, extension, split on '-' and '_').\n2. Tag Priority: Prefer a video whose tags overlap with the fragment's archetype (PULL -> action/close-up footage; CASCADE -> array/process footage; FLOW -> paths/journeys).\n3. Recall over Precision: If no confident match, fall back to the highest-scoring fuzzy token overlap; do NOT leave a fragment without a video when a b-roll pool is provided.\n4. Dedup: Avoid reusing the same b-roll file for two consecutive fragments unless it is semantically required.\n5. Aspect Consistency: Match portrait-ish fragments to vertical footage; refuse landscape footage for a vertical subject only if a better alternative exists.\n6. Drift: When the selected footage's on-screen story contradicts the script, prefer the fragment's `[VisualNote]` intent over a literal filename match.",
     "priority": 95,
-    "tags": ["b-roll", "matching", "semantics"]
+    "tags": [
+      "b-roll",
+      "matching",
+      "semantics"
+    ]
   },
   {
     "id": "skill-trend-blue-ocean-mining",
@@ -69,6 +100,10 @@
     "stage": "trend_research",
     "content": "BLUE OCEAN OPPORTUNITY CRITERIA:\n1. Velocity Outlier: Channel videos with VPH (Views Per Hour) > 3x the channel median subscriber count.\n2. Comment Gap: Identify recurring questions in top comments containing phrases like 'How did you...', 'What about...', 'Can you explain...'.\n3. Competition Saturation: Discard topics where more than 5 channels with >1M subscribers posted videos in the past 14 days.\n4. Search Momentum: A topic ranks higher when its search demand is recent (past 30 days) and growing, not flat from long ago.\n5. Niche Arbitrage: Prefer topics where high-engagement content exists but production quality is uniformly low - the signal of an unattended lane.",
     "priority": 100,
-    "tags": ["research", "trends", "analytics"]
+    "tags": [
+      "research",
+      "trends",
+      "analytics"
+    ]
   }
 ]

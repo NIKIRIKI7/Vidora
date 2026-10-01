@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
 using Voice.Contracts;
 using Voice.Domain;
+using Voice.Domain.Entities;
 using Voice.Domain.Ports;
 using Voice.Domain.ValueObjects;
 
@@ -31,6 +32,8 @@ public static class VoiceEndpoints
 
         group.MapPost("/synthesize", async (SynthesizeSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateSynthesis(request);
+
             var command = new SynthesizeSpeechCommand(
                 Text: request.Text,
                 Engine: request.Engine,
@@ -53,6 +56,8 @@ public static class VoiceEndpoints
 
         group.MapPost("/batch", async (BatchSynthesizeRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateBatch(request);
+
             var items = request.Items.Select(i => new BatchItemSpec(
                 i.Text,
                 i.SpeakerId,
@@ -70,12 +75,18 @@ public static class VoiceEndpoints
 
         group.MapGet("/jobs/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
         {
+            RequireId(id, "Идентификатор задания обязателен.");
             var job = await voice.GetJobByIdAsync(id, ct);
             return Results.Ok(job);
         }).Produces<VoiceJobDto>();
 
         group.MapPost("/ducking", async (DuckingRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            if (string.IsNullOrWhiteSpace(request.VoiceAssetId))
+                throw new ValidationException("voice_asset_id", "Идентификатор голосовой дорожки обязателен.");
+            if (string.IsNullOrWhiteSpace(request.BgmAssetId))
+                throw new ValidationException("bgm_asset_id", "Идентификатор музыкальной дорожки обязателен.");
+
             var command = new ApplyAudioDuckingCommand(
                 request.VoiceAssetId,
                 request.BgmAssetId,
@@ -106,6 +117,7 @@ public static class VoiceEndpoints
 
         speakerGroup.MapGet("/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
         {
+            RequireId(id, "Идентификатор диктора обязателен.");
             var profile = await voice.GetSpeakerByIdAsync(id, ct);
             return profile is null ? Results.NotFound() : Results.Ok(profile);
         }).Produces<SpeakerProfileDto>();
@@ -122,6 +134,10 @@ public static class VoiceEndpoints
             IOptions<AppStorageConfig> storageConfig,
             CancellationToken ct) =>
         {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ValidationException("name", "Имя диктора обязательно.");
+            }
             if (referenceAudio is null || referenceAudio.Length == 0)
             {
                 throw new ValidationException("referenceAudio", "Аудиофайл референса обязателен.");
@@ -146,48 +162,66 @@ public static class VoiceEndpoints
 
         speakerGroup.MapPost("/design", async (CreateDesignedSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            if (string.IsNullOrWhiteSpace(request.Name))
+                throw new ValidationException("name", "Имя диктора обязательно.");
+            if (string.IsNullOrWhiteSpace(request.Prompt))
+                throw new ValidationException("prompt", "Описание тембра голоса обязательно.");
+
             var profile = await voice.CreateDesignedSpeakerAsync(request, ct);
             return Results.Created($"/api/v1/voice/speakers/profiles/{profile.Id}", profile);
         }).Produces<SpeakerProfileDto>(StatusCodes.Status201Created);
 
         speakerGroup.MapPut("/{id}", async (string id, UpdateSpeakerRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            RequireId(id, "Идентификатор диктора обязателен.");
+            if (string.IsNullOrWhiteSpace(request.Name))
+                throw new ValidationException("name", "Имя диктора обязательно.");
+
             var profile = await voice.UpdateSpeakerAsync(id, request, ct);
             return Results.Ok(profile);
         }).Produces<SpeakerProfileDto>();
 
         speakerGroup.MapDelete("/{id}", async (string id, IVoiceModule voice, CancellationToken ct) =>
         {
+            RequireId(id, "Идентификатор диктора обязателен.");
             await voice.DeleteSpeakerAsync(id, ct);
             return Results.NoContent();
         }).Produces(StatusCodes.Status204NoContent);
 
         speakerGroup.MapPost("/{id}/preview", async (string id, GeneratePreviewRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            RequireId(id, "Идентификатор диктора обязателен.");
+            if (string.IsNullOrWhiteSpace(request.Text))
+                throw new ValidationException("text", "Текст для предпросмотра обязателен.");
+
             var job = await voice.GenerateSpeakerPreviewAsync(id, request, ct);
             return Results.Ok(job);
         }).Produces<VoiceJobDto>();
 
         group.MapPost("/align", async (AlignSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateAlign(request);
             var result = await voice.AlignSpeechAsync(request, ct);
             return Results.Ok(result);
         }).Produces<AlignSpeechResponse>();
 
         group.MapPost("/transcribe", async (TranscribeAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateTranscribe(request);
             var text = await voice.TranscribeAudioAsync(request.AudioPath, ct);
             return Results.Ok(new TranscribeAudioResponse("ok", text));
         }).Produces<TranscribeAudioResponse>();
 
         group.MapPost("/process-dsp", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateDsp(request);
             var res = await voice.ProcessAudioDspAsync(request, ct);
             return Results.Ok(res);
         }).Produces<ProcessAudioDspResponse>();
 
         group.MapPost("/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateConcat(request);
             var outPath = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct);
             return Results.Ok(new { status = "ok", output_path = outPath });
         }).Produces<AudioConcatResponse>();
@@ -202,6 +236,8 @@ public static class VoiceEndpoints
         // --- Compatibility aliases for frontend ---
         endpoints.MapPost("/api/v1/audio/generate", async (SynthesizeSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
         {
+            ValidateSynthesis(request);
+
             var cmd = new SynthesizeSpeechCommand(
                 Text: request.Text,
                 Engine: request.Engine,
@@ -228,24 +264,34 @@ public static class VoiceEndpoints
         }).Produces<AudioGenerateResponse>();
 
         endpoints.MapPost("/api/v1/audio/sync", async (AlignSpeechRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(await voice.AlignSpeechAsync(request, ct)))
-            .Produces<AlignSpeechResponse>();
+        {
+            ValidateAlign(request);
+            return Results.Ok(await voice.AlignSpeechAsync(request, ct));
+        }).Produces<AlignSpeechResponse>();
 
         endpoints.MapPost("/api/v1/audio/process", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(await voice.ProcessAudioDspAsync(request, ct)))
-            .Produces<ProcessAudioDspResponse>();
+        {
+            ValidateDsp(request);
+            return Results.Ok(await voice.ProcessAudioDspAsync(request, ct));
+        }).Produces<ProcessAudioDspResponse>();
 
         endpoints.MapPost("/api/v1/audio/process/advanced-silence", async (ProcessAudioDspRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(await voice.ProcessAudioDspAsync(request with { Action = "silence" }, ct)))
-            .Produces<ProcessAudioDspResponse>();
+        {
+            ValidateDsp(request);
+            return Results.Ok(await voice.ProcessAudioDspAsync(request with { Action = "silence" }, ct));
+        }).Produces<ProcessAudioDspResponse>();
 
         endpoints.MapPost("/api/v1/audio/transcribe", async (TranscribeAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(new TranscribeAudioResponse("ok", await voice.TranscribeAudioAsync(request.AudioPath, ct))))
-            .Produces<TranscribeAudioResponse>();
+        {
+            ValidateTranscribe(request);
+            return Results.Ok(new TranscribeAudioResponse("ok", await voice.TranscribeAudioAsync(request.AudioPath, ct)));
+        }).Produces<TranscribeAudioResponse>();
 
         endpoints.MapPost("/api/v1/audio/concat", async (ConcatAudioRequest request, IVoiceModule voice, CancellationToken ct) =>
-            Results.Ok(new { status = "ok", output_path = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct) }))
-            .Produces<AudioConcatResponse>();
+        {
+            ValidateConcat(request);
+            return Results.Ok(new { status = "ok", output_path = await voice.ConcatenateAudioAsync(request.AudioPaths, request.OutputPath, ct) });
+        }).Produces<AudioConcatResponse>();
 
         endpoints.MapPost("/api/v1/audio/vram/unload", async (IVoiceModule voice, IGpuManager gpu, CancellationToken ct) =>
         {
@@ -263,10 +309,10 @@ public static class VoiceEndpoints
             IOptions<AppStorageConfig> storageConfig,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(request.VoicePath) || string.IsNullOrWhiteSpace(request.MusicPath))
-            {
-                return Results.BadRequest(new { status = "error", detail = "voicePath и musicPath обязательны." });
-            }
+            if (string.IsNullOrWhiteSpace(request.VoicePath))
+                throw new ValidationException("voicePath", "Голосовая дорожка обязательна.");
+            if (string.IsNullOrWhiteSpace(request.MusicPath))
+                throw new ValidationException("musicPath", "Музыкальная дорожка обязательна.");
 
             var tempDir = pathResolver.ResolveSafePath(Path.Combine(storageConfig.Value.DataStorageDir, "temp"));
             Directory.CreateDirectory(tempDir);
@@ -310,18 +356,14 @@ public static class VoiceEndpoints
             CancellationToken ct) =>
         {
             if (!request.HasFormContentType)
-            {
-                return Results.BadRequest(new { error = "Ожидался multipart/form-data запрос." });
-            }
+                throw new ValidationException("form", "Ожидался multipart/form-data запрос.");
 
             var form = await request.ReadFormAsync(ct);
             var projectPath = form["project_path"].ToString();
             var sceneIdsJson = form["scene_ids"].ToString();
 
             if (string.IsNullOrWhiteSpace(projectPath))
-            {
-                return Results.BadRequest(new { error = "Поле 'project_path' обязательно." });
-            }
+                throw new ValidationException("project_path", "Поле 'project_path' обязательно.");
 
             List<string> sceneIds;
             if (!string.IsNullOrWhiteSpace(sceneIdsJson))
@@ -354,12 +396,76 @@ public static class VoiceEndpoints
                 uploadFiles.Add(new UploadedAudioFile(file.FileName, file.OpenReadStream()));
             }
 
+            if (uploadFiles.Count == 0)
+                throw new ValidationException("files", "Не передано ни одного аудиофайла.");
+
             var cmd = new BatchUploadScenesCommand(projectPath, sceneIds, uploadFiles);
             var response = await voice.BatchUploadScenesAsync(cmd, ct);
             return Results.Ok(response);
         }).Produces<BatchUploadScenesResponse>().DisableAntiforgery();
 
         return endpoints;
+    }
+
+    private static void ValidateSynthesis(SynthesizeSpeechRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+            throw new ValidationException("text", "Текст для синтеза не может быть пустым.");
+        if (request.Text.Length > TtsJob.MaxTextLength)
+            throw new ValidationException("text", $"Длина текста ({request.Text.Length}) превышает предел {TtsJob.MaxTextLength} знаков.");
+        if (string.IsNullOrWhiteSpace(request.SpeakerId))
+            throw new ValidationException("speaker_id", "Идентификатор диктора обязателен.");
+    }
+
+    private static void ValidateBatch(BatchSynthesizeRequest request)
+    {
+        if (request.Items is null || request.Items.Count == 0)
+            throw new ValidationException("items", "Список заданий синтеза не может быть пустым.");
+
+        for (var i = 0; i < request.Items.Count; i++)
+        {
+            var item = request.Items[i];
+            if (string.IsNullOrWhiteSpace(item.Text))
+                throw new ValidationException("items", $"Пункт #{i + 1}: текст не может быть пустым.");
+            if (item.Text.Length > TtsJob.MaxTextLength)
+                throw new ValidationException("items", $"Пункт #{i + 1}: длина текста превышает предел {TtsJob.MaxTextLength} знаков.");
+            if (string.IsNullOrWhiteSpace(item.SpeakerId))
+                throw new ValidationException("items", $"Пункт #{i + 1}: идентификатор диктора обязателен.");
+        }
+    }
+
+    private static void ValidateAlign(AlignSpeechRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.AudioPath))
+            throw new ValidationException("audio_path", "Путь к аудиофайлу обязателен.");
+        if (request.Fragments is null || request.Fragments.Count == 0)
+            throw new ValidationException("fragments", "Список фрагментов не может быть пустым.");
+    }
+
+    private static void ValidateTranscribe(TranscribeAudioRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.AudioPath))
+            throw new ValidationException("audio_path", "Путь к аудиофайлу обязателен.");
+    }
+
+    private static void ValidateDsp(ProcessAudioDspRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.AudioPath))
+            throw new ValidationException("audio_path", "Путь к аудиофайлу обязателен.");
+    }
+
+    private static void ValidateConcat(ConcatAudioRequest request)
+    {
+        if (request.AudioPaths is null || request.AudioPaths.Count == 0)
+            throw new ValidationException("audio_paths", "Список аудиофайлов не может быть пустым.");
+        if (string.IsNullOrWhiteSpace(request.OutputPath))
+            throw new ValidationException("output_path", "Путь для сохранения результата обязателен.");
+    }
+
+    private static void RequireId(string id, string message)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ValidationException("id", message);
     }
 }
 
