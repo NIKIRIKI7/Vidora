@@ -1,14 +1,48 @@
 import { fetchClient, apiErrorMessage } from '@shared/api'
-import React from 'react'
+import React, { Component, type ReactNode } from 'react'
 import type { ProjectSettings, Scene } from '@entities/project'
 import { useScenarioEngineStore } from '@entities/project'
 import { Button, SegmentedControl, Spinner, TextArea } from '@shared/ui'
 import { Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { CodeHistorySelector } from './CodeHistorySelector'
+import { DefaultStandardLayout, Root } from '@web-react-player/ui'
+import { RemotionProvider } from '@web-react-player/remotion'
+import { remotionSuite, assetResolver } from '@shared/lib'
+
+class PlayerErrorBoundary extends Component<{ children: ReactNode; onReset: () => void }, { error: Error | null }> {
+  state = { error: null as Error | null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  render() {
+    if (this.state.error) {
+      const err = this.state.error
+      return (
+        <div className="absolute inset-0 bg-surface-container-lowest flex flex-col items-center justify-center p-6 text-center z-50 rounded-2xl border border-error/20">
+          <h3 className="text-error font-bold text-lg mb-2">Ошибка компиляции ИИ-кода</h3>
+          <p className="text-on-surface-variant text-sm mb-4 font-mono max-h-32 overflow-auto custom-scrollbar whitespace-pre-wrap">
+            {err.message || String(err)}
+          </p>
+          {'suggestion' in err && (err as Error & { suggestion?: string }).suggestion && (
+            <p className="text-warning text-xs mb-4 bg-warning/10 p-3 rounded-lg border border-warning/20">
+              💡 {(err as Error & { suggestion?: string }).suggestion}
+            </p>
+          )}
+          <Button variant="primary" onClick={() => { this.setState({ error: null }); this.props.onReset() }}>
+            Повторить сборку
+          </Button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface Props {
-  centerView: 'code' | 'markdown'
-  onChangeView: (view: 'code' | 'markdown') => void
+  centerView: 'player' | 'code' | 'markdown'
+  onChangeView: (view: 'player' | 'code' | 'markdown') => void
   activeScene: Scene | undefined
   project: ProjectSettings
   onUpdateCode: (code: string) => void
@@ -28,12 +62,10 @@ export const CenterCanvas = ({
 }: Props) => {
   const isBusy = isAutoPipelineRunning
 
-  // Тонкий клиент: Markdown-редактор связан со Шлюзом (AST-синк на бэкенде), а не с локальным парсером.
   const engineRawMarkdown = useScenarioEngineStore(s => s.rawMarkdown)
   const engineIsSyncing = useScenarioEngineStore(s => s.isSyncing)
   const engineUpdateMarkdown = useScenarioEngineStore(s => s.updateMarkdown)
 
-  // Ручные правки кода тоже уходят в историю версий на бэкенде
   const saveCodeRevision = () => {
     if (!activeScene?.remotionCode?.trim()) return
     fetchClient.POST('/api/v1/system/history', { body: { project_id: project.name, scene_id: activeScene.id, tsx_code: activeScene.remotionCode, prompt: 'Ручная правка' } }).then(({ data, error }) => {
@@ -70,16 +102,58 @@ export const CenterCanvas = ({
     </div>
   )
 
+  const renderPlayer = () => {
+    if (!activeScene?.remotionCode) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 text-on-surface-variant">
+          <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
+            <Ban size={40} className="text-primary/40" />
+          </div>
+          <p className="text-sm">Сначала сгенерируйте TSX код для предпросмотра</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center p-6 relative">
+        <div
+          className="w-full relative shadow-2xl rounded-2xl overflow-hidden bg-black ring-1 ring-outline-variant/40"
+          style={{
+            aspectRatio: project.format === '16:9' ? '16/9' : '9/16',
+            maxHeight: '100%',
+            maxWidth: project.format === '9:16' ? '45vh' : '100%',
+          }}
+        >
+          <Root style={{ width: '100%', height: '100%' }}>
+            <PlayerErrorBoundary onReset={() => {}}>
+              <RemotionProvider
+                source={{
+                  type: 'code',
+                  code: activeScene.remotionCode,
+                  assetResolver,
+                }}
+                pluginManager={remotionSuite.pluginManager}
+                compiler={remotionSuite.compiler}
+              />
+              <DefaultStandardLayout debug={false} />
+            </PlayerErrorBoundary>
+          </Root>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
       <div className="h-12 border-b border-outline-variant/20 flex items-center px-4 justify-between bg-surface-container-lowest/50 shrink-0">
         <SegmentedControl
           options={[
+            { value: 'player', label: '▶️ Превью' },
             { value: 'code', label: '💻 Код TSX' },
             { value: 'markdown', label: '📝 Raw Script' },
           ]}
           value={centerView}
-          onChange={(val) => onChangeView(val as 'code' | 'markdown')}
+          onChange={(val) => onChangeView(val as 'player' | 'code' | 'markdown')}
         />
       </div>
 
@@ -94,6 +168,8 @@ export const CenterCanvas = ({
               <Button variant="dashed" className="border-error/50 text-error hover:bg-error/10" onClick={onCancelAll}>Отменить процесс</Button>
             </div>
           </div>
+        ) : centerView === 'player' ? (
+          renderPlayer()
         ) : centerView === 'markdown' ? (
           <div className="relative w-full h-full p-6 flex justify-center overflow-y-auto custom-scrollbar">
             {engineIsSyncing && (

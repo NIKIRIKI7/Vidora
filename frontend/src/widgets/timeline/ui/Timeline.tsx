@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { SceneFragment, BackgroundMusicSettings } from '@entities/project'
 import { IconButton } from '@shared/ui'
 import { ZoomIn, ZoomOut, Scissors, MousePointer, Copy, Trash2, Unlink, Link, Magnet, Split, Volume2, VolumeX, Video, Plus, Settings } from 'lucide-react'
+import { usePlayerContext, usePlayerState } from '@web-react-player/ui'
 
 type TimelineTool = 'select' | 'razor'
 
@@ -73,7 +74,9 @@ export const Timeline = ({
   onOpenBRollModal,
 }: TimelineProps) => {
   const [zoom, setZoom] = useState(100)
-  const [currentTime, setCurrentTime] = useState(0)
+  const playerTime = usePlayerState(s => s.context.currentTime)
+  const currentTime = playerTime ?? 0
+  const playerContext = usePlayerContext()
   const [activeTool, setActiveTool] = useState<TimelineTool>('select')
   const [isAudioLinked, setIsAudioLinked] = useState(true)
   const [isSnapEnabled, setIsSnapEnabled] = useState(true)
@@ -99,8 +102,12 @@ export const Timeline = ({
   }, [])
 
   const seekTo = useCallback((newTime: number) => {
-    setCurrentTime(Math.max(0, Math.min(newTime, duration)))
-  }, [duration])
+    const t = Math.max(0, Math.min(newTime, duration))
+    if (playerContext) {
+      playerContext.send({ type: 'ACTION_TRIGGERED', action: { type: 'seek', value: t, timestamp: Date.now() } })
+      playerContext.send({ type: 'TIME_UPDATE', currentTime: t })
+    }
+  }, [duration, playerContext])
 
   const snapTime = useCallback((time: number, thresholdSec = 0.15): number => {
     if (!isSnapEnabled) return time
@@ -118,6 +125,7 @@ export const Timeline = ({
     if ((e.target as HTMLElement).closest('.timeline-frag')) return
     const rect = timelineTracksRef.current?.getBoundingClientRect()
     if (!rect) return
+    if (playerContext) playerContext.send({ type: 'PAUSE' })
     seekTo(snapTime(Math.max(0, (e.clientX - rect.left) / zoom)))
     const handleMouseMove = (moveEvent: MouseEvent) => {
       seekTo(snapTime(Math.max(0, (moveEvent.clientX - rect.left) / zoom)))

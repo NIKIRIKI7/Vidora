@@ -35,14 +35,26 @@ public sealed class PackageCapabilityRegistry : IPackageCapabilityRegistry
                 packageName: "tailwindcss",
                 allowedImports: [],
                 isVisualComponent: false,
-                promptGuideline: "Tailwind CSS is available. Use utility classes (flex, items-center, justify-center, font-bold, text-white, drop-shadow-md, bg-surface, text-accent). Do NOT write external css imports."),
+                promptGuideline:
+                    "Tailwind CSS available for COSMETIC enhancement ONLY (font-family, font-weight, letter-spacing, text color, shadows, border-radius, opacity). " +
+                    "CRITICAL LAYOUT MUST USE INLINE STYLES via style={{...}}. " +
+                    "Reason: TailwindPlugin only injects a supplied `customCss` string and does not generate utilities at runtime; Vidora calls createDefaultRemotionSuite() with no CSS, so layout utility classes are silently dropped and the scene collapses into document flow. " +
+                    "FORBIDDEN in layout context (will not apply and will break the scene): " +
+                    "absolute, relative, fixed, sticky, top-*, left-*, right-*, bottom-*, inset-*, " +
+                    "w-*, h-*, min-w-*, max-w-*, p-*, m-*, gap-*, flex, grid, items-*, justify-*, content-*, " +
+                    "translate-*, scale-*, rotate-*, skew-*, blur-*, bg-gradient-*, bg-linear-*, bg-clip-text, w-full, h-full, object-cover. " +
+                    "ALWAYS compute sizes from `const { width, height } = useVideoConfig(); const unit = Math.min(width, height);`, " +
+                    "then express every dimension as `unit * K` (icons: size={unit * 0.03}). " +
+                    "Never use arbitrary pixel literals like w-[600px] or style width: 600. " +
+                    "Do NOT import external CSS files. " +
+                    "See docs/template_code/_SCENE_STANDARDS.md for the full checklist."),
 
             new(
                 id: "lucide-react",
                 packageName: "lucide-react",
                 allowedImports: ["*"],
                 isVisualComponent: true,
-                promptGuideline: "Import icons as: `import { Check, Flame, Trophy, TrendingUp, AlertCircle, ArrowRight } from 'lucide-react'`. Pass size={48} and className."),
+                promptGuideline: "Import icons as: `import { Check, Flame, Trophy, TrendingUp, AlertCircle, ArrowRight } from 'lucide-react'`. Pass `size={unit * 0.03}` (resolution-relative, never a hardcoded 48) and set `color`/`fill` via props. Position and center icons with inline `style` (e.g. `style={{ position: 'absolute', top: 0, left: '50%', transform: 'translate(-50%, 0)' }}`), never with className utilities."),
 
             new(
                 id: "remotion-lottie",

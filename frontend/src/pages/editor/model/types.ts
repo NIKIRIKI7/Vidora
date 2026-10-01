@@ -4,4 +4,4 @@ export interface FragmentTiming {
   endTime: number
 }
 
-export type CenterViewMode = 'code' | 'markdown'
+export type CenterViewMode = 'player' | 'code' | 'markdown'

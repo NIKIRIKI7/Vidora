@@ -1,11 +1,8 @@
-import { fetchClient, apiErrorMessage } from '@shared/api'
 import { useState } from 'react'
-import { Modal, Button, OptionCard, FieldGroup, Slider, Switch, Spinner } from '@shared/ui'
-import { Play, Sliders, AudioLines, Zap, Check } from 'lucide-react'
+import { Modal, Button, OptionCard, FieldGroup, Slider, Switch } from '@shared/ui'
+import { SlidersHorizontal, AudioLines, Check } from 'lucide-react'
 import type { ProjectSettings, BackgroundMusicSettings } from '@entities/project'
 import { DUCKING_PRESETS, DEFAULT_BACKGROUND_MUSIC, type DuckingPresetKey } from '@shared/config'
-import { API } from '@shared/lib'
-import { getAudioPathForScene } from '@entities/project'
 
 interface Props {
   isOpen: boolean
@@ -18,8 +15,6 @@ interface Props {
 export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings, onOpenLibrary }: Props) => {
   const [settings, setSettings] = useState<BackgroundMusicSettings>(project.backgroundMusic || DEFAULT_BACKGROUND_MUSIC)
   const [isProMode, setIsProMode] = useState(settings.preset === 'custom')
-  const [isPreviewing, setIsPreviewing] = useState(false)
-  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null)
 
   const applyPreset = (presetKey: DuckingPresetKey) => {
     const p = DUCKING_PRESETS[presetKey]
@@ -38,44 +33,6 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
     }))
   }
 
-  const handleTestDrive = async () => {
-    const activeScene = project.scenes[0]
-    if (!activeScene || !settings.customTrackPath) return
-    setIsPreviewing(true)
-    setPreviewAudioUrl(null)
-
-    try {
-      const { data, error } = await fetchClient.POST('/api/v1/audio/preview-ducking', {
-        body: {
-          voicePath: getAudioPathForScene(project, activeScene),
-          musicPath: settings.customTrackPath,
-          projectPath: 'vidora_projects',
-          previewDuration: 10,
-          baseVolume: settings.baseVolume,
-          duckedVolume: settings.duckedVolume,
-          threshold: settings.threshold,
-          attackMs: settings.attackMs,
-          releaseMs: settings.releaseMs,
-          eq: {
-            enableLowCut: settings.eq.enableLowCut,
-            lowCutFreqHz: settings.eq.lowCutFreqHz,
-            enableMidCarve: settings.eq.enableMidCarve,
-            midCarveFreqHz: settings.eq.midCarveFreqHz,
-            midCarveGainDb: settings.eq.midCarveGainDb,
-          },
-        } as never
-      })
-      if (error || data === undefined) throw new Error(apiErrorMessage(error))
-      if (data.status === 'ok' && data.preview_url) {
-        setPreviewAudioUrl(`${API}/api/v1/render/media?path=${encodeURIComponent(data.preview_url)}`)
-      }
-    } catch (err) {
-      console.error('MusicSettingsModal.handleTestDrive:', err)
-    } finally {
-      setIsPreviewing(false)
-    }
-  }
-
   const handleSave = () => {
     onUpdateSettings(settings)
     onClose()
@@ -87,7 +44,7 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
         <div className="flex items-center justify-between p-4 bg-surface-container-lowest/60 rounded-xl border border-outline-variant/20">
           <div className="flex flex-col">
             <span className="text-sm font-bold text-on-surface">Включить фоновую музыку</span>
-            <span className="text-xs text-on-surface-variant">Автоматическое приглушение (Auto-Ducking) при голосе диктора</span>
+            <span className="text-xs text-on-surface-variant">Автоматическое приглушение (Auto-Ducking) в браузере (Remotion)</span>
           </div>
           <Switch checked={settings.enabled} onChange={(val) => setSettings({ ...settings, enabled: val })} />
         </div>
@@ -123,23 +80,10 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
           </div>
         </div>
 
-        <div className="p-4 bg-gradient-to-r from-primary/10 via-secondary/10 to-transparent rounded-xl border border-primary/20 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
-              <Zap size={15} className="text-secondary" /> Мгновенный тест-драйв микса (10с)
-            </span>
-            <Button variant="secondary" onClick={handleTestDrive} disabled={isPreviewing || !settings.enabled || !settings.customTrackPath} className="py-1 px-3 text-xs">
-              {isPreviewing ? <Spinner className="w-3.5 h-3.5 mr-1" /> : <Play size={13} className="mr-1" />}
-              Сгенерировать тест
-            </Button>
-          </div>
-          {previewAudioUrl && <audio src={previewAudioUrl} autoPlay controls className="w-full h-8 mt-1" />}
-        </div>
-
         <div className="flex items-center justify-between pt-2 border-t border-outline-variant/20">
           <Button
             variant="link"
-            icon={Sliders}
+            icon={SlidersHorizontal}
             onClick={() => {
               setIsProMode(!isProMode)
               if (!isProMode) setSettings((prev) => ({ ...prev, preset: 'custom' }))
@@ -168,6 +112,7 @@ export const MusicSettingsModal = ({ isOpen, onClose, project, onUpdateSettings,
                 <Slider min={150} max={2000} step={50} value={settings.releaseMs} onChange={(e) => setSettings({ ...settings, releaseMs: Number(e.target.value) })} />
               </FieldGroup>
             </div>
+
             <div className="pt-3 border-t border-outline-variant/20 flex flex-col gap-3">
               <span className="text-2xs font-mono uppercase text-on-surface-variant flex items-center gap-1">
                 <AudioLines size={13} className="text-primary" /> Частотная изоляция речи (Speech Pocket EQ)

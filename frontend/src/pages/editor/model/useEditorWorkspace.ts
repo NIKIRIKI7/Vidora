@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import type { ProjectSettings, Scene, SceneFragment } from '@entities/project'
 import { useNotificationStore, useProjectStore, useSettingsStore, parseMarkdownFull, serializeProjectToMarkdown } from '@entities/project'
 import { generateRemotionPrompt } from '@features/editor-utils'
+import { useRenderProject } from '@features/render-project'
 import { useHotkeys } from '@shared/lib/useHotkeys'
 import { hashCode } from '@entities/project'
 import { normalizeText, recalculateTimingsProportionally } from '@entities/project'
@@ -20,7 +21,7 @@ interface Props {
 
 export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [activeSceneId, setActiveSceneId] = useState(project.scenes[0]?.id)
-  const [centerView, setCenterView] = useState<CenterViewMode>('code')
+  const [centerView, setCenterView] = useState<CenterViewMode>('player')
   const [voiceModel, setVoiceModel] = useState('')
   const [speed, setSpeed] = useState(1)
   const [numSteps, setNumSteps] = useState(64)
@@ -38,6 +39,9 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
   const [isBRollModalOpen, setIsBRollModalOpen] = useState(false)
   const [bRollScope, setBRollScope] = useState<'fragment' | 'scene' | 'project'>('fragment')
   const [bRollTargetFragId, setBRollTargetFragId] = useState<string | null>(null)
+
+  // Render Modal state
+  const [isRenderModalOpen, setIsRenderModalOpen] = useState(false)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentTaskIdRef = useRef<string | null>(null)
@@ -111,6 +115,12 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     apiKeys: activeApiKeys,
     showNotification,
     abortControllerRef,
+  })
+
+  const renderProject = useRenderProject({
+    project,
+    activeScene,
+    showNotification,
   })
 
   const scenesManager = useSceneManagement({
@@ -300,6 +310,10 @@ export const useEditorWorkspace = ({ project, onUpdateProject }: Props) => {
     bRollTargetFragId,
     setIsBRollModalOpen,
     handleOpenBRollModal,
+    renderProject,
+    isRenderModalOpen,
+    openRenderModal: () => setIsRenderModalOpen(true),
+    closeRenderModal: () => setIsRenderModalOpen(false),
     setActiveSceneId: handleSelectScene,
     setCenterView,
     setVoiceModel,

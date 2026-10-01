@@ -1,6 +1,7 @@
 import type { ProjectSettings } from '@entities/project'
 import { GradientButton, Button, Dropdown, DropdownItem, PageHeader } from '@shared/ui'
-import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap, Terminal, Clapperboard } from 'lucide-react'
+import { DownloadLastRenderButton } from '@features/render-project'
+import { Folder, ChevronDown, Plus, LayoutGrid, SquareCheckBig, Square, Zap, Terminal, Clapperboard, Film } from 'lucide-react'
 
 interface Props {
   project: ProjectSettings
@@ -16,6 +17,8 @@ interface Props {
   onOpenGlobalSettings: () => void
   onOpenLogs: () => void
   onFullAutoPipeline: () => void
+  onOpenRenderModal: () => void
+  isRenderingProject: boolean
 }
 
 export const EditorHeader = ({
@@ -32,6 +35,8 @@ export const EditorHeader = ({
   onOpenGlobalSettings,
   onOpenLogs,
   onFullAutoPipeline,
+  onOpenRenderModal,
+  isRenderingProject,
 }: Props) => (
   <PageHeader
     title="Vidora"
@@ -97,6 +102,17 @@ export const EditorHeader = ({
     }
     rightContent={
       <>
+        <DownloadLastRenderButton variant="outline" compact />
+        <Button
+          variant="ghost"
+          onClick={onOpenRenderModal}
+          disabled={isRenderingProject}
+          title="Рендер (текущая сцена / выбранные / весь проект)"
+          className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+        >
+          <Film size={18} className="text-primary" />
+          <span className="hidden lg:inline">Рендер</span>
+        </Button>
         <Button
           variant="ghost"
           onClick={onOpenLogs}

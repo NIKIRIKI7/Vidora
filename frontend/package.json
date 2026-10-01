@@ -19,12 +19,16 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
+    "@web-react-player/core": "^1.0.2",
+    "@web-react-player/remotion": "^0.2.1",
+    "@web-react-player/ui": "^1.1.1",
     "lucide-react": "^1.31.0",
     "openapi-fetch": "^0.17.0",
     "openapi-react-query": "^0.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.3",
+    "remotion": "4.0.529",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

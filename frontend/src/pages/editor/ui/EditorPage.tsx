@@ -15,6 +15,8 @@ import { Timeline } from '@widgets/timeline'
 import { VoiceboxModal, CustomAudioModal } from '@features/voice-tagger'
 import { MusicSettingsModal, MusicLibraryModal } from '@features/audio-ducking'
 import { BRollModal } from '@features/manage-broll'
+import { RenderScopeModal, RenderProgressOverlay } from '@features/render-project'
+import { PlayerProvider } from '@web-react-player/ui'
 
 interface Props {
   project: ProjectSettings
@@ -165,6 +167,7 @@ export const EditorPage = ({
   }
 
   return (
+    <PlayerProvider>
     <div className="h-dvh w-full flex flex-col overflow-hidden bg-background">
       <EditorHeader
         project={project}
@@ -180,6 +183,8 @@ export const EditorPage = ({
         onOpenGlobalSettings={onOpenGlobalSettings}
         onOpenLogs={() => setIsLogsOpen(true)}
         onFullAutoPipeline={model.handleFullAutoPipeline}
+        onOpenRenderModal={model.openRenderModal}
+        isRenderingProject={model.renderProject.isRendering}
       />
 
       <main className="flex-1 flex overflow-hidden">
@@ -212,7 +217,7 @@ export const EditorPage = ({
           )}
 
           <CenterCanvas
-            centerView={model.centerView as 'code' | 'markdown'}
+            centerView={model.centerView}
             onChangeView={model.setCenterView}
             activeScene={model.activeScene}
             project={project}
@@ -287,6 +292,8 @@ export const EditorPage = ({
                 onUpdateProjectSettings={onUpdateProject}
                 onOpenMusicSettings={() => setIsMusicSettingsOpen(true)}
                 onOpenMusicLibrary={() => setIsMusicLibraryOpen(true)}
+                onOpenRenderModal={model.openRenderModal}
+                isRendering={model.renderProject.isRendering}
               />
               </div>
             </div>
@@ -539,6 +546,27 @@ export const EditorPage = ({
       />
 
       <LogsViewer isOpen={isLogsOpen} onClose={() => setIsLogsOpen(false)} />
+
+      <RenderScopeModal
+        isOpen={model.isRenderModalOpen}
+        onClose={model.closeRenderModal}
+        project={project}
+        activeScene={model.activeScene}
+        isRendering={model.renderProject.isRendering}
+        onRender={model.renderProject.run}
+      />
+
+      <RenderProgressOverlay
+        isRendering={model.renderProject.isRendering}
+        stage={model.renderProject.stage}
+        progress={model.renderProject.progress}
+        currentSceneIndex={model.renderProject.currentSceneIndex}
+        totalScenes={model.renderProject.totalScenes}
+        currentSceneTitle={model.renderProject.currentSceneTitle}
+        error={model.renderProject.error}
+        onCancel={model.renderProject.cancel}
+      />
     </div>
+    </PlayerProvider>
   )
 }

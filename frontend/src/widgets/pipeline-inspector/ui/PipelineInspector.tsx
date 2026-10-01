@@ -49,6 +49,8 @@ interface Props {
   onUpdateProjectSettings: (project: ProjectSettings) => void
   onOpenMusicSettings?: () => void
   onOpenMusicLibrary?: () => void
+  onOpenRenderModal: () => void
+  isRendering: boolean
 }
 
 const TABS: { id: InspectorTab; label: string }[] = [
@@ -70,6 +72,7 @@ export const PipelineInspector = React.memo((props: Props) => {
     onRunCodeGen, onExportProject, onShowNotification,
     onUpdateFragmentBRoll, onUnlinkFragmentBRoll, onNudgeTiming, onReplaceFragmentAudio,
     onUpdateProjectSettings, onOpenMusicSettings, onOpenMusicLibrary,
+    onOpenRenderModal, isRendering,
   } = props
 
   const [activeTab, setActiveTab] = useState<InspectorTab>(() => {
@@ -164,7 +167,11 @@ export const PipelineInspector = React.memo((props: Props) => {
           />
         )}
         {activeTab === 'export' && (
-          <ExportTab onExportProject={onExportProject} />
+          <ExportTab
+            onExportProject={onExportProject}
+            onOpenRenderModal={onOpenRenderModal}
+            isRendering={isRendering}
+          />
         )}
       </div>
     </aside>
