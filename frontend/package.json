@@ -11,6 +11,7 @@
     "lint:fsd": "steiger ./src",
     "api:generate": "openapi-typescript http://localhost:5116/swagger/v1/swagger.json -o ./src/shared/api/schema.d.ts",
     "preview": "vite preview",
+    "test": "node --experimental-strip-types --test \"tests/*.test.mjs\"",
     "backend:dev": "cd ../backend2 && dotnet run --launch-profile http",
     "backend:migrate": "cd ../backend2 && dotnet run -- --migrate",
     "backend:dev:py": "cd ../backend && .venv\\Scripts\\uvicorn app.main:app --host 127.0.0.1 --port 8355 --reload",

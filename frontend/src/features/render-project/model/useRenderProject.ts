@@ -1,9 +1,10 @@
 import React, { useCallback, useRef, useState } from 'react'
-import { Series } from 'remotion'
+import { Audio, Series } from 'remotion'
 import type { ProjectSettings, Scene } from '@entities/project'
-import { sanitizeFilename } from '@entities/project'
+import { getProjectPath, sanitizeFilename } from '@entities/project'
 import { remotionSuite, assetResolver } from '@shared/lib'
 import { useLastRenderStore } from './useLastRenderStore'
+import { buildAudioMix, type MusicTrack, type VoiceTrack } from './audioMix'
 
 export type RenderScope = 'current' | 'selected' | 'project'
 export type RenderStage = 'idle' | 'compiling' | 'rendering' | 'finalizing'
@@ -59,22 +60,48 @@ export const sceneDurationSeconds = (scene: Scene): number => {
  * Series.Sequence не только показывает сегмент в нужном окне, но и сдвигает
  * useCurrentFrame() для ребёнка — без этого сцена №2 стартовала бы с кадра 0
  * всей композиции и её анимации были бы «привязаны» к началу видео.
+ *
+ * Озвучка кладётся внутрь Sequence: её startFrom отсчитывается от начала сцены,
+ * а сам Sequence автоматически размонтирует трек на её длине — без этого в режиме
+ * audioMode 'project' соседние сцены играли бы перекрывающиеся куски общего файла.
+ * Музыка лежит снаружи Series: её громкость считается в абсолютных кадрах ролика.
  */
 const makeSeriesComposition = (
   components: React.ComponentType<Record<string, unknown>>[],
-  durations: number[]
+  durations: number[],
+  voiceTracks: VoiceTrack[][],
+  musicTrack: MusicTrack | null
 ): React.FC => {
   return function ProjectComposition() {
     return React.createElement(
-      Series,
+      React.Fragment,
       null,
-      ...components.map((C, i) =>
-        React.createElement(
-          Series.Sequence,
-          { key: i, durationInFrames: durations[i] },
-          React.createElement(C, {})
+      React.createElement(
+        Series,
+        null,
+        ...components.map((C, i) =>
+          React.createElement(
+            Series.Sequence,
+            { key: i, durationInFrames: durations[i] },
+            React.createElement(C, {}),
+            ...(voiceTracks[i] ?? []).map((track, j) =>
+              React.createElement(Audio, {
+                key: `voice_${i}_${j}`,
+                src: track.src,
+                trimBefore: track.trimBefore,
+              })
+            )
+          )
         )
-      )
+      ),
+      musicTrack
+        ? React.createElement(Audio, {
+            key: 'music',
+            src: musicTrack.src,
+            loop: musicTrack.loop,
+            volume: musicTrack.volumeAt,
+          })
+        : null
     )
   }
 }
@@ -198,7 +225,15 @@ export const useRenderProject = ({ project, activeScene, showNotification }: Use
           durations.push(Math.max(1, Math.ceil(sceneDurationSeconds(scene) * fps)))
         }
 
-        const ProjectComposition = makeSeriesComposition(components, durations)
+        const audioMix = buildAudioMix({
+          scenes: scenesToRender,
+          sceneFrames: durations,
+          fps,
+          backgroundMusic: project.backgroundMusic,
+          projectPath: getProjectPath(project),
+          resolve: assetResolver,
+        })
+        const ProjectComposition = makeSeriesComposition(components, durations, audioMix.voice, audioMix.music)
         const totalFrames = durations.reduce((a, b) => a + b, 0)
 
         setState((s) => ({ ...s, stage: 'rendering', progress: 0.15 }))

@@ -8,6 +8,7 @@ export {
   type RenderProjectState,
 } from './model/useRenderProject'
 export { useLastRenderStore } from './model/useLastRenderStore'
+export { buildAudioMix, mergeIntervals, type AudioMixPlan, type VoiceTrack, type MusicTrack } from './model/audioMix'
 export { RenderScopeModal } from './ui/RenderScopeModal'
 export { RenderProgressOverlay } from './ui/RenderProgressOverlay'
 export { DownloadLastRenderButton } from './ui/DownloadLastRenderButton'
