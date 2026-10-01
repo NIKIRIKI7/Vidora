@@ -39,7 +39,9 @@ public sealed class OpenAiSpeechProvider : ITtsEngineProvider
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("[OpenAiSpeechProvider] Отсутствует ключ integrations.openai.api_key в настройках.");
-            throw new ValidationException("openai_key", "API-ключ OpenAI не задан в system_settings.");
+            throw new ValidationException(
+                "openai_key",
+                "OpenAI API-ключ не задан. Добавьте его в «Глобальные настройки → AI Движки и API → OpenAI API Key», либо выберите другой движок (Local TTS или MiniMax).");
         }
 
         var safeDest = _pathResolver.ResolveSafePath(destinationPath);

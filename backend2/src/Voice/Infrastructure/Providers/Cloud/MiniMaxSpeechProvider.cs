@@ -39,7 +39,9 @@ public sealed class MiniMaxSpeechProvider : ITtsEngineProvider
         if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(groupId))
         {
             _logger.LogError("[MiniMaxProvider] Отсутствуют ключи MiniMax API в системных настройках.");
-            throw new ValidationException("minimax_key", "API-ключи MiniMax не сконфигурированы.");
+            throw new ValidationException(
+                "minimax_key",
+                "MiniMax API-ключ и Group ID не заданы. Добавьте их в «Глобальные настройки → AI Движки и API → MiniMax», либо выберите локальный TTS.");
         }
 
         var safeDest = _pathResolver.ResolveSafePath(destinationPath);

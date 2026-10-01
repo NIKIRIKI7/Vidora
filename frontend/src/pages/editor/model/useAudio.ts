@@ -31,8 +31,11 @@ export interface CustomAudioUploadParams {
   manualRefText?: string
 }
 
-// Дикторы с серверным профилем (design/clone) сами знают свой движок на бэкенде.
-// Если отправить им engine из каталога, они могут уехать в облако (CloudMiniMax) и «сломать» озвучку.
+/**
+ * Для Designed/Cloned-спикеров движок определён их профилем в voice.db.
+ * Если отправить им engine из каталога, можно случайно направить локальный голос
+ * в облако (CloudMiniMax) и «сломать» синтез. Бэкенд сам выберет движок из профиля.
+ */
 const PINNED_SPEAKER_PREFIXES = ['des_', 'clone_']
 
 const isPinnedSpeaker = (speakerId?: string | null) =>
@@ -53,6 +56,8 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
   return {
     fragment_id: frag.id, file_prefix: `Frag_${sanitizeFilename(scene.title)}`, text: fragText,
     speaker_id: speakerId,
+    // undefined, а не null: в схеме поле nullable не объявлено, а JSON.stringify
+    // выбрасывает undefined — ключ engine не попадёт в тело запроса вовсе.
     engine: resolveEngineForPayload(speakerId, ttsEngine),
     speed, num_steps: numSteps, guidance_scale: guidanceScale, duration: opts.duration,
     denoise: opts.denoise, preprocess_prompt: opts.preprocessPrompt, postprocess_output: opts.postprocessOutput,
