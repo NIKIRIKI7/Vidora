@@ -31,6 +31,20 @@ export interface CustomAudioUploadParams {
   manualRefText?: string
 }
 
+/**
+ * Для Designed/Cloned-спикеров движок определён их профилем в voice.db.
+ * Если его переопределить с фронта, можно случайно направить локальный голос
+ * в облако (или наоборот), и синтез упадёт. Бэкенд сам выберет правильный
+ * движок из профиля — пусть решает он.
+ */
+const shouldSendEngine = (speakerId: string | null | undefined): boolean => {
+  const s = (speakerId || '').toLowerCase()
+  if (!s) return true
+  if (s.startsWith('des_')) return false
+  if (s.startsWith('clone_')) return false
+  return true
+}
+
 const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSettings, opts: AudioOptions) => {
   // ponytail: наследуем эмоцию первой фразы сцены во все фрагменты без своего [emotion: x] — единый тон всего блока
   const sceneEmotion = scene.fragments[0]?.text.match(/\[emotion:\s*[a-z-]+\]/i)?.[0] || ''
@@ -41,7 +55,9 @@ const getVoicePayload = (frag: SceneFragment, scene: Scene, project: ProjectSett
   return {
     fragment_id: frag.id, file_prefix: `Frag_${sanitizeFilename(scene.title)}`, text: fragText,
     speaker_id: speakerId,
-    engine: resolveCleanVoiceEngine(speakerId, ttsEngine),
+    // undefined, а не null: в схеме поле nullable не объявлено, а JSON.stringify
+    // выбрасывает undefined — ключ engine не попадёт в тело запроса вовсе.
+    engine: shouldSendEngine(speakerId) ? resolveCleanVoiceEngine(speakerId, ttsEngine) : undefined,
     speed, num_steps: numSteps, guidance_scale: guidanceScale, duration: opts.duration,
     denoise: opts.denoise, preprocess_prompt: opts.preprocessPrompt, postprocess_output: opts.postprocessOutput,
     project_path: getProjectPath(project), auto_offload_vram: opts.autoOffloadVram,

@@ -215,6 +215,12 @@ public sealed class VoiceModule : IVoiceModule
     public async Task<VoiceJobDto> SynthesizeSpeechAsync(SynthesizeSpeechCommand cmd, CancellationToken ct = default)
     {
         var speaker = await _speakerRepo.GetBySpeakerIdAsync(new SpeakerId(cmd.SpeakerId), ct);
+        if (speaker is null)
+        {
+            _logger.LogWarning(
+                "[VoiceModule] Спикер '{SpeakerId}' не найден в voice.db — движок будет взят из cmd.Engine ({CmdEngine}) или LocalTts.",
+                cmd.SpeakerId, cmd.Engine?.ToString() ?? "null");
+        }
 
         var refAudio = cmd.ReferenceAudioPath;
         string? refText = null;
@@ -234,7 +240,28 @@ public sealed class VoiceModule : IVoiceModule
             }
         }
 
-        var engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.CloudOpenAi;
+        // Правила разрешения движка:
+        //  1. Designed/Cloned-спикеры жёстко привязаны к своему Engine — его выбрали
+        //     при создании (OmniVoice для design, MiniMax для cloud-clone, LocalTts
+        //     для локального клона). cmd.Engine в этом случае игнорируется — иначе
+        //     UI может случайно перенаправить локальный голос в облако, и синтез упадёт.
+        //  2. Для BuiltIn-спикеров (alloy, qingse, ...) — берём cmd.Engine, если он
+        //     задан, иначе Engine из профиля.
+        //  3. Fallback — LocalTts: он не требует API-ключей и всегда доступен, если
+        //     пользователь не сконфигурировал облако.
+        VoiceEngineType engine;
+        if (speaker is not null && speaker.SourceType != SpeakerSourceType.BuiltIn)
+        {
+            engine = speaker.Engine;
+            _logger.LogInformation(
+                "[VoiceModule] Спикер {SpeakerId} ({SourceType}) использует свой движок {Engine} (cmd.Engine={CmdEngine} проигнорирован).",
+                cmd.SpeakerId, speaker.SourceType, engine, cmd.Engine?.ToString() ?? "null");
+        }
+        else
+        {
+            engine = cmd.Engine ?? speaker?.Engine ?? VoiceEngineType.LocalTts;
+        }
+
         var spec = new VoiceSpec(
             engine, cmd.SpeakerId, cmd.AlignmentEngine, cmd.Speed, cmd.Pitch, refAudio,
             cmd.GuidanceScale, cmd.NumSteps, cmd.Denoise, cmd.Duration, cmd.PreprocessPrompt, cmd.PostprocessOutput, refText)
